@@ -15,7 +15,7 @@
       window.NOTETASK_BASE = base === "/todo/" ? "/todo" : "";
     })();
   </script>
-  <link rel="stylesheet" href="assets/styles.css?v=7" />
+  <link rel="stylesheet" href="assets/styles.css?v=8" />
 </head>
 <body>
   <div id="login" class="login-wrap">
@@ -60,7 +60,10 @@
         <form class="composer" id="task-form">
           <div class="composer row task-composer">
             <div class="task-composer-body">
-              <input type="text" id="task-title" placeholder="Новая задача или идея…" required />
+              <div class="task-title-wrap">
+                <div class="task-title-highlight" id="task-title-highlight" aria-hidden="true"></div>
+                <input type="text" id="task-title" class="task-title-input" placeholder="Новая задача или идея… p1 завтра #тема @inbox" required autocomplete="off" spellcheck="false" />
+              </div>
               <div class="task-chips" id="task-chips">
                 <div class="chip-popover">
                   <button type="button" class="chip-btn" id="chip-kind" aria-expanded="false" aria-controls="pop-kind">
@@ -175,6 +178,6 @@
     </main>
   </div>
 
-  <script src="assets/app.js?v=7"></script>
+  <script src="assets/app.js?v=8"></script>
 </body>
 </html>

@@ -127,6 +127,72 @@ button, input, select, textarea {
 .task-composer { align-items: stretch; }
 .task-composer-body { min-width: 0; }
 
+.task-title-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.task-title-highlight,
+.task-title-input {
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1.35;
+  padding: 11px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.task-title-highlight {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  white-space: pre;
+  overflow: hidden;
+  background: #fff;
+  color: var(--ink);
+}
+
+.task-title-input {
+  position: relative;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--ink);
+}
+.task-title-input::placeholder { color: var(--muted); -webkit-text-fill-color: var(--muted); }
+.task-title-input:focus { outline: 2px solid rgba(31, 107, 74, 0.35); outline-offset: 0; }
+
+.task-title-highlight .hl-date {
+  color: var(--accent);
+  background: rgba(31, 107, 74, 0.14);
+  border-radius: 4px;
+}
+.task-title-highlight .hl-priority {
+  color: #9b2c2c;
+  background: rgba(155, 44, 44, 0.12);
+  border-radius: 4px;
+  font-weight: 650;
+}
+.task-title-highlight .hl-project {
+  color: #2f5f9e;
+  background: rgba(47, 95, 158, 0.12);
+  border-radius: 4px;
+  font-weight: 650;
+}
+.task-title-highlight .hl-label {
+  color: #6b3fa0;
+  background: rgba(107, 63, 160, 0.12);
+  border-radius: 4px;
+  font-weight: 650;
+}
+.task-title-highlight .hl-kind {
+  color: var(--accent-2);
+  background: rgba(196, 92, 38, 0.12);
+  border-radius: 4px;
+  font-weight: 650;
+}
+
 .task-chips {
   display: flex;
   flex-wrap: wrap;

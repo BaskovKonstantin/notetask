@@ -8,6 +8,7 @@ const BASE = window.NOTETASK_BASE ?? (() => {
 const state = {
   view: "today",
   token: localStorage.getItem(TOKEN_KEY) || "",
+  projects: [],
 };
 
 const titles = {
@@ -89,6 +90,231 @@ function showApp() {
 }
 
 const kindLabels = { task: "Задача", idea: "Идея", plan: "План" };
+
+const RU_MONTHS = {
+  янв: 0, январ: 0, фев: 1, феврал: 1, мар: 2, март: 2, апр: 3, апрел: 3,
+  май: 4, мая: 4, июн: 5, июн: 5, июл: 6, июл: 6, авг: 7, август: 7,
+  сен: 8, сент: 8, окт: 9, октябр: 9, ноя: 10, нояб: 10, дек: 11, декабр: 11,
+};
+
+function addDays(base, days) {
+  const d = new Date(base);
+  d.setDate(d.getDate() + days);
+  return d;
+}
+
+function toIsoDate(d) {
+  return d.toISOString().slice(0, 10);
+}
+
+function parseDateToken(text) {
+  const lower = text.toLowerCase().trim();
+  const now = new Date();
+  if (/^(?:сегодня|today)$/.test(lower)) return toIsoDate(now);
+  if (/^(?:завтра|tomorrow)$/.test(lower)) return toIsoDate(addDays(now, 1));
+  if (/^послезавтра$/.test(lower)) return toIsoDate(addDays(now, 2));
+
+  const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+
+  const dmy = text.match(/^(\d{1,2})[./](\d{1,2})(?:[./](\d{2,4}))?$/);
+  if (dmy) {
+    const day = Number(dmy[1]);
+    const month = Number(dmy[2]) - 1;
+    let year = dmy[3] ? Number(dmy[3]) : now.getFullYear();
+    if (year < 100) year += 2000;
+    return toIsoDate(new Date(year, month, day));
+  }
+
+  const named = lower.match(/^(\d{1,2})\s+([a-zа-я]+)/);
+  if (named) {
+    const day = Number(named[1]);
+    const monthKey = Object.keys(RU_MONTHS).find((k) => named[2].startsWith(k));
+    if (monthKey) {
+      let year = now.getFullYear();
+      const candidate = new Date(year, RU_MONTHS[monthKey], day);
+      if (candidate < now) year += 1;
+      return toIsoDate(new Date(year, RU_MONTHS[monthKey], day));
+    }
+  }
+  return null;
+}
+
+function parsePriorityToken(text) {
+  const bang = text.match(/^!{1,4}$/);
+  if (bang) return 5 - bang[0].length;
+  const p = text.match(/^p\s*([1-4])$/i);
+  return p ? Number(p[1]) : null;
+}
+
+function parseKindToken(text) {
+  const lower = text.toLowerCase();
+  if (/^(?:идея|idea)$/.test(lower)) return "idea";
+  if (/^(?:план|plan)$/.test(lower)) return "plan";
+  return null;
+}
+
+function findProjectId(name) {
+  const q = name.toLowerCase();
+  const hit = state.projects.find((p) => p.name.toLowerCase() === q);
+  return hit?.id ?? null;
+}
+
+function collectTaskTokens(text) {
+  const patterns = [
+    {
+      type: "date",
+      re: /\b(?:сегодня|today|завтра|tomorrow|послезавтра)\b/gi,
+      meta: (m) => ({ due: parseDateToken(m[0]) }),
+    },
+    {
+      type: "date",
+      re: /\b\d{4}-\d{2}-\d{2}\b/g,
+      meta: (m) => ({ due: parseDateToken(m[0]) }),
+    },
+    {
+      type: "date",
+      re: /\b\d{1,2}[./]\d{1,2}(?:[./]\d{2,4})?\b/g,
+      meta: (m) => ({ due: parseDateToken(m[0]) }),
+    },
+    {
+      type: "date",
+      re: /\b\d{1,2}\s+(?:янв(?:[а-я]*?)?|фев(?:[а-я]*?)?|мар(?:[а-я]*?)?|апр(?:[а-я]*?)?|мая|май|июн(?:[а-я]*?)?|июл(?:[а-я]*?)?|авг(?:[а-я]*?)?|сен(?:[а-я]*?)?|окт(?:[а-я]*?)?|ноя(?:[а-я]*?)?|дек(?:[а-я]*?)?)\b/gi,
+      meta: (m) => ({ due: parseDateToken(m[0]) }),
+    },
+    {
+      type: "priority",
+      re: /!{1,4}\b/g,
+      meta: (m) => ({ priority: parsePriorityToken(m[0]) }),
+    },
+    {
+      type: "priority",
+      re: /\bp\s*[1-4]\b/gi,
+      meta: (m) => ({ priority: parsePriorityToken(m[0].replace(/\s+/g, "")) }),
+    },
+    {
+      type: "project",
+      re: /@([a-zA-Zа-яА-ЯёЁ0-9_-]+)/g,
+      meta: (m) => ({ projectName: m[1], projectId: findProjectId(m[1]) }),
+    },
+    {
+      type: "label",
+      re: /#([a-zA-Zа-яА-ЯёЁ0-9_-]+)/g,
+      meta: (m) => ({ label: m[1] }),
+    },
+    {
+      type: "kind",
+      re: /\b(?:идея|idea|план|plan)\b/gi,
+      meta: (m) => ({ kind: parseKindToken(m[0]) }),
+    },
+  ];
+
+  const found = [];
+  for (const rule of patterns) {
+    for (const match of text.matchAll(rule.re)) {
+      found.push({
+        type: rule.type,
+        start: match.index,
+        end: match.index + match[0].length,
+        text: match[0],
+        meta: rule.meta(match),
+      });
+    }
+  }
+
+  found.sort((a, b) => a.start - b.start || b.end - a.end);
+  const tokens = [];
+  let cursor = -1;
+  for (const token of found) {
+    if (token.start < cursor) continue;
+    tokens.push(token);
+    cursor = token.end;
+  }
+  return tokens;
+}
+
+function mergeTaskMeta(tokens) {
+  const meta = { labels: [] };
+  for (const token of tokens) {
+    const m = token.meta || {};
+    if (m.due) meta.due = m.due;
+    if (m.priority) meta.priority = m.priority;
+    if (m.kind) meta.kind = m.kind;
+    if (m.projectName) {
+      meta.projectName = m.projectName;
+      if (m.projectId) meta.projectId = m.projectId;
+    }
+    if (m.label) meta.labels.push(m.label);
+  }
+  return meta;
+}
+
+function cleanTitleFromTokens(text, tokens) {
+  let out = "";
+  let pos = 0;
+  for (const token of tokens) {
+    out += text.slice(pos, token.start);
+    pos = token.end;
+  }
+  out += text.slice(pos);
+  return out.replace(/\s+/g, " ").trim();
+}
+
+function buildTaskHighlightHtml(text, tokens) {
+  if (!text) return "";
+  let html = "";
+  let pos = 0;
+  for (const token of tokens) {
+    if (token.start > pos) html += escapeHtml(text.slice(pos, token.start));
+    html += `<span class="hl-${token.type}">${escapeHtml(text.slice(token.start, token.end))}</span>`;
+    pos = token.end;
+  }
+  if (pos < text.length) html += escapeHtml(text.slice(pos));
+  return html;
+}
+
+function parseTaskInput(text) {
+  const tokens = collectTaskTokens(text);
+  return {
+    tokens,
+    meta: mergeTaskMeta(tokens),
+    cleanTitle: cleanTitleFromTokens(text, tokens),
+  };
+}
+
+function applyParsedMeta(meta) {
+  if (meta.due) $("task-due").value = meta.due;
+  if (meta.priority) $("task-priority").value = String(meta.priority);
+  if (meta.kind) $("task-kind").value = meta.kind;
+  updateTaskChips();
+}
+
+function syncTaskTitleHighlight() {
+  const input = $("task-title");
+  const layer = $("task-title-highlight");
+  const text = input.value;
+  const parsed = parseTaskInput(text);
+  layer.innerHTML = buildTaskHighlightHtml(text, parsed.tokens) || "&nbsp;";
+  layer.scrollLeft = input.scrollLeft;
+  applyParsedMeta(parsed.meta);
+}
+
+function initTaskTitleHighlight() {
+  const input = $("task-title");
+  input.addEventListener("input", syncTaskTitleHighlight);
+  input.addEventListener("scroll", () => {
+    $("task-title-highlight").scrollLeft = input.scrollLeft;
+  });
+  syncTaskTitleHighlight();
+}
+
+async function loadProjectsCache() {
+  try {
+    state.projects = await api("/api/projects");
+  } catch {
+    state.projects = [];
+  }
+}
 
 function fmtShortDay(isoDate) {
   if (!isoDate) return "";
@@ -496,6 +722,7 @@ $("login-form").addEventListener("submit", async (e) => {
     state.token = data.token;
     localStorage.setItem(TOKEN_KEY, state.token);
     showApp();
+    await loadProjectsCache();
     setView("today");
   } catch {
     $("login-error").classList.remove("hidden");
@@ -520,21 +747,28 @@ $("backup-btn").onclick = async () => {
 
 $("task-form").addEventListener("submit", async (e) => {
   e.preventDefault();
-  const kind = $("task-kind").value;
-  let due = $("task-due").value || null;
+  const parsed = parseTaskInput($("task-title").value);
+  const kind = parsed.meta.kind || $("task-kind").value;
+  let due = parsed.meta.due || $("task-due").value || null;
   if (kind === "task" && !due && state.view === "today") due = todayIso();
   const remind = $("task-remind").value ? new Date($("task-remind").value).toISOString() : null;
+  const priority = parsed.meta.priority || Number($("task-priority").value);
+  const title = parsed.cleanTitle || $("task-title").value.trim();
+  const labelsNote = parsed.meta.labels?.length ? `Метки: ${parsed.meta.labels.join(", ")}` : "";
   await api("/api/tasks", {
     method: "POST",
     body: JSON.stringify({
-      title: $("task-title").value.trim(),
+      title,
+      notes: labelsNote,
       kind,
-      priority: Number($("task-priority").value),
+      priority,
       due_at: due,
       remind_at: remind,
+      project_id: parsed.meta.projectId || null,
     }),
   });
   $("task-title").value = "";
+  syncTaskTitleHighlight();
   updateTaskChips();
   if (kind === "idea" || kind === "plan") setView("someday");
   else if (!due) setView("inbox");
@@ -619,6 +853,7 @@ async function boot() {
   addWorkoutSetRow();
   $("wo-started").value = localInputValue();
   initTaskMetaChips();
+  initTaskTitleHighlight();
   if (!state.token) {
     showLogin();
     return;
@@ -627,6 +862,7 @@ async function boot() {
     await api("/api/health");
     // validate token via protected endpoint
     await api("/api/projects");
+    await loadProjectsCache();
     showApp();
     track("app_opened", "ui", null, { path: location.pathname });
     setView("today");
