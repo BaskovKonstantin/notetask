@@ -24,6 +24,7 @@ Personal tracker (not TreckBas):
 - **Ctrl+Space** → Today + task form (`#view-tasks`), focus input
 - Default view on open: **Today** (not Inbox)
 - **Разделы (projects):** Inbox, Личные дела, Развлечения, Работа, Здоровье, Тренировки, Питание, Идеи — sidebar + `@название` в задаче
+- **Sidebar:** кнопка «←» в topbar — сворачивает меню, состояние в `localStorage` (`notetask_sidebar_collapsed`)
 
 ## Stack
 
