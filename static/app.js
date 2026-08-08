@@ -476,7 +476,10 @@ function initTaskMetaChips() {
     });
   });
 
-  document.addEventListener("click", closeTaskPopovers);
+  document.addEventListener("click", (e) => {
+    if (e.target.closest(".chip-popover")) return;
+    closeTaskPopovers();
+  });
   document.querySelectorAll(".chip-menu").forEach((menu) => {
     menu.addEventListener("click", (e) => e.stopPropagation());
   });
@@ -1305,6 +1308,10 @@ $("task-list").addEventListener("click", async (e) => {
         if (input?.showPicker) window.setTimeout(() => input.showPicker(), 0);
         else if (input) input.focus();
       }
+      return;
+    }
+    if (e.target.closest(".chip-menu")) {
+      e.stopPropagation();
       return;
     }
   }
