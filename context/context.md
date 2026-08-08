@@ -41,8 +41,7 @@ Personal tracker (not TreckBas):
 ## Credentials
 
 - File: `/home/kon/Projects/notetask/.env` (gitignored)
-- Password: `NoteTask-2026-baski`
-- Change ASAP after first login if exposed in chat
+- Password: in `.env` (`NOTEBOOK_PASSWORD`), gitignored
 
 ## Todoist import
 
