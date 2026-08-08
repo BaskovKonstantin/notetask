@@ -173,7 +173,7 @@ async function loadTasks(view) {
         </div>
         <div class="item-actions">
           ${promote}
-          <button class="btn ghost small" data-del-task="${t.id}">Удал.</button>
+          <button class="btn ghost small btn-del" data-del-task="${t.id}" aria-label="Удалить">×</button>
         </div>
       </div>`;
     })
@@ -195,7 +195,7 @@ async function loadNotes() {
       <pre>${escapeHtml(n.body || "")}</pre>
       <div class="item-meta" style="margin-top:10px">
         <span>${fmtDate(n.updated_at)}</span>
-        <button class="btn ghost small" data-del-note="${n.id}">Удалить</button>
+        <button class="btn ghost small btn-del" data-del-note="${n.id}" aria-label="Удалить">×</button>
       </div>
     </article>`
     )
@@ -236,7 +236,7 @@ async function loadWorkouts() {
           <div class="item-meta">${fmtDate(w.started_at)}</div>
           ${sets}
         </div>
-        <button class="btn ghost small" data-del-wo="${w.id}">Удал.</button>
+        <button class="btn ghost small btn-del" data-del-wo="${w.id}" aria-label="Удалить">×</button>
       </div>`;
     })
     .join("");
