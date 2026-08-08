@@ -194,7 +194,15 @@ async def list_tasks(
     )
     rows = [row_to_dict(r) for r in await cur.fetchall()]
     if project_id is not None:
-        rows = [t for t in rows if t["project_id"] == project_id]
+        cur = await db.execute(
+            "SELECT id FROM projects WHERE id=? AND deleted_at IS NULL AND name='Inbox'",
+            (project_id,),
+        )
+        inbox = await cur.fetchone()
+        if inbox:
+            rows = [t for t in rows if t["project_id"] == project_id or t["project_id"] is None]
+        else:
+            rows = [t for t in rows if t["project_id"] == project_id]
     today = date.today().isoformat()
     if view == "today":
         return [

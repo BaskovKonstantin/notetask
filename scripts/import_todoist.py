@@ -28,7 +28,7 @@ PRIORITY_PROJECTS: dict[int, str | None] = {
     1: "Работа",
     2: "Личные дела",
     3: "Тренировки",
-    4: None,
+    4: "Inbox",
 }
 
 TODOIST_COLORS = {

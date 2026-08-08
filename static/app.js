@@ -21,7 +21,7 @@ const titles = {
 
 const emptyHints = {
   today: "Нет задач на сегодня. Добавь задачу ниже (срок подставится).",
-  project: "Нет задач в этом разделе.",
+  project: "Нет задач. P4 и новые без @раздела — сюда.",
 };
 
 function todayIso() {
@@ -321,15 +321,16 @@ async function loadProjectsCache() {
 function renderProjectNav() {
   const nav = $("project-nav");
   if (!nav) return;
-  const sections = state.projects.filter((p) => p.name !== "Inbox");
+  const sections = [...state.projects].sort((a, b) => a.sort - b.sort || a.id - b.id);
   nav.innerHTML = sections
-    .map(
-      (p) => `
+    .map((p) => {
+      const label = p.name === "Inbox" ? "Разобрать" : p.name;
+      return `
     <button type="button" data-view="project" data-project-id="${p.id}">
       <span class="project-dot" style="background:${escapeAttr(p.color)}"></span>
-      ${escapeHtml(p.name)}
-    </button>`
-    )
+      ${escapeHtml(label)}
+    </button>`;
+    })
     .join("");
 }
 
@@ -478,7 +479,8 @@ function setView(view, opts = {}) {
   if (view === "project") {
     const proj = state.projects.find((p) => p.id === state.projectId);
     $("view-title").textContent = proj?.name || "Раздел";
-    $("view-sub").textContent = "Задачи раздела";
+    $("view-sub").textContent =
+      proj?.name === "Inbox" ? "P4 и задачи без раздела — разложи по проектам" : "Задачи раздела";
   } else {
     const [t, s] = titles[view] || ["", ""];
     $("view-title").textContent = t;
