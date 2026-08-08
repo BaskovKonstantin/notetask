@@ -676,37 +676,76 @@ function playCompleteSound() {
   try {
     completeAudioCtx = completeAudioCtx || new AudioContext();
     const ctx = completeAudioCtx;
-    if (ctx.state === "suspended") ctx.resume();
+    if (ctx.state === "suspended") void ctx.resume();
 
-    const t0 = ctx.currentTime;
+    const t0 = ctx.currentTime + 0.001;
+
     const master = ctx.createGain();
-    master.gain.setValueAtTime(0.0001, t0);
-    master.gain.exponentialRampToValueAtTime(0.22, t0 + 0.01);
-    master.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.18);
+    master.gain.setValueAtTime(0.85, t0);
     master.connect(ctx.destination);
 
-    const pop = ctx.createOscillator();
-    pop.type = "sine";
-    pop.frequency.setValueAtTime(520, t0);
-    pop.frequency.exponentialRampToValueAtTime(260, t0 + 0.07);
-    const popGain = ctx.createGain();
-    popGain.gain.setValueAtTime(0.7, t0);
-    pop.connect(popGain);
-    popGain.connect(master);
-    pop.start(t0);
-    pop.stop(t0 + 0.08);
+    const toneBus = ctx.createGain();
+    toneBus.gain.setValueAtTime(1, t0);
+    toneBus.connect(master);
 
-    const click = ctx.createOscillator();
-    click.type = "triangle";
-    click.frequency.setValueAtTime(1400, t0 + 0.015);
-    click.frequency.exponentialRampToValueAtTime(900, t0 + 0.05);
+    const warm = ctx.createBiquadFilter();
+    warm.type = "lowpass";
+    warm.Q.value = 0.85;
+    warm.frequency.setValueAtTime(3600, t0);
+    warm.frequency.exponentialRampToValueAtTime(1200, t0 + 0.32);
+    warm.connect(toneBus);
+
+    const playTone = (type, start, stop, freqStart, freqEnd, peak, attack, decay) => {
+      const osc = ctx.createOscillator();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freqStart, start);
+      if (freqEnd !== freqStart) osc.frequency.exponentialRampToValueAtTime(freqEnd, stop - 0.02);
+
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.linearRampToValueAtTime(peak, start + attack);
+      gain.gain.exponentialRampToValueAtTime(0.0001, stop);
+
+      osc.connect(gain);
+      gain.connect(warm);
+      osc.start(start);
+      osc.stop(stop + 0.01);
+    };
+
+    // Soft checkbox thump
+    playTone("sine", t0, t0 + 0.07, 196, 98, 0.42, 0.004, 0.07);
+
+    // Main marimba-like note (Todoist: warm descending chime)
+    playTone("sine", t0 + 0.008, t0 + 0.34, 880, 659.25, 0.52, 0.006, 0.34);
+
+    // Fifth overtone — "smaчный" sparkle
+    playTone("sine", t0 + 0.01, t0 + 0.22, 1318.5, 987.77, 0.22, 0.004, 0.22);
+
+    // High shimmer, very short
+    playTone("triangle", t0 + 0.014, t0 + 0.12, 1760, 1567.98, 0.08, 0.003, 0.12);
+
+    // Tactile click — filtered noise burst
+    const clickDur = 0.018;
+    const buffer = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * clickDur), ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i += 1) {
+      const env = 1 - i / data.length;
+      data[i] = (Math.random() * 2 - 1) * env * env;
+    }
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+    const clickFilter = ctx.createBiquadFilter();
+    clickFilter.type = "bandpass";
+    clickFilter.frequency.value = 2200;
+    clickFilter.Q.value = 0.9;
     const clickGain = ctx.createGain();
-    clickGain.gain.setValueAtTime(0.12, t0 + 0.015);
-    clickGain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.06);
-    click.connect(clickGain);
+    clickGain.gain.setValueAtTime(0.16, t0);
+    clickGain.gain.exponentialRampToValueAtTime(0.0001, t0 + clickDur);
+    noise.connect(clickFilter);
+    clickFilter.connect(clickGain);
     clickGain.connect(master);
-    click.start(t0 + 0.015);
-    click.stop(t0 + 0.07);
+    noise.start(t0);
+    noise.stop(t0 + clickDur + 0.01);
   } catch {
     /* audio optional */
   }
