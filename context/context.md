@@ -4,10 +4,9 @@ Updated: 2026-08-08
 
 ## Live
 
-- **Subdomain (LAN/WG via dnsmasq):** https://todo.baski.pro
-- **Fallback:** https://baski.pro/todo/
-- **Public DNS:** add A `todo` → `5.144.98.126` in reg.ru (API blocked `ACCESS_DENIED_FROM_IP` 2026-08-08)
-- Caddy vhost `todo.baski.pro` → `127.0.0.1:8100` (same pattern as treck.baski.pro)
+- **Primary URL:** https://baski.pro/todo/ (valid Let's Encrypt cert)
+- **Subdomain todo.baski.pro:** blocked until public A record `todo → 5.144.98.126` in reg.ru + `./deploy/enable-todo-https.sh`
+- reg.ru API rate-limited 2026-08-08 (`IP_EXCEEDED_ALLOWED_CONNECTION_RATE`)
 
 ## Product
 
@@ -15,9 +14,15 @@ Personal tracker (not TreckBas):
 - Tasks + Ideas/Someday
 - Notes
 - Workout diary
-- ActionLog + soft-delete
+- ActionLog + soft-delete — **все действия на сервере** (`action_log`)
+  - CRUD задач/заметок/тренировок/проектов с `changes` в payload
+  - UI: `POST /api/events` — экраны, шорткаты, logout, app_opened
+  - login, backup → тоже в лог
+  - `GET /api/history?entity_type=&action=&since=&until=`
 - Stats (streak, 30d)
 - Auth: shared password
+- **Ctrl+Space** → Today + task form (`#view-tasks`), focus input
+- Default view on open: **Today** (not Inbox)
 
 ## Stack
 

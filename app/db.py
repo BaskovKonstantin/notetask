@@ -78,6 +78,9 @@ CREATE TABLE IF NOT EXISTS action_log (
   payload_json TEXT NOT NULL DEFAULT '{}'
 );
 
+CREATE INDEX IF NOT EXISTS idx_action_log_at ON action_log(at);
+CREATE INDEX IF NOT EXISTS idx_action_log_entity ON action_log(entity_type, action);
+
 CREATE TABLE IF NOT EXISTS daily_stats (
   day TEXT PRIMARY KEY,
   completions INTEGER NOT NULL DEFAULT 0,

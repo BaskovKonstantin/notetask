@@ -87,7 +87,23 @@ class WorkoutIn(BaseModel):
     sets: list[WorkoutSetIn] = Field(default_factory=list)
 
 
+class EventIn(BaseModel):
+    action: str = Field(min_length=1, max_length=64)
+    entity_type: str = Field(default="ui", min_length=1, max_length=32)
+    entity_id: int | None = None
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
 # ---------- helpers ----------
+
+def diff_fields(old: dict[str, Any], new: dict[str, Any], fields: list[str]) -> dict[str, dict[str, Any]]:
+    changes: dict[str, dict[str, Any]] = {}
+    for field in fields:
+        old_val = old.get(field)
+        new_val = new.get(field)
+        if old_val != new_val:
+            changes[field] = {"from": old_val, "to": new_val}
+    return changes
 
 async def fetch_task(db: aiosqlite.Connection, task_id: int) -> dict[str, Any]:
     cur = await db.execute("SELECT * FROM tasks WHERE id=?", (task_id,))
@@ -126,9 +142,11 @@ async def health():
 
 
 @app.post("/api/login")
-async def login(body: LoginIn):
+async def login(body: LoginIn, db: aiosqlite.Connection = Depends(get_db)):
     if not verify_password(body.password):
         raise HTTPException(401, "Wrong password")
+    await log_action(db, "login", "session", None, {})
+    await db.commit()
     return {"token": make_token()}
 
 
@@ -244,21 +262,45 @@ async def update_task(
     old = await fetch_task(db, task_id)
     status = body.status or old["status"]
     completed_at = old["completed_at"]
+    next_values = {
+        "project_id": body.project_id,
+        "title": body.title.strip(),
+        "notes": body.notes,
+        "kind": body.kind,
+        "priority": body.priority,
+        "due_at": body.due_at,
+        "remind_at": body.remind_at,
+        "status": status,
+    }
     if status == "done" and old["status"] != "done":
         completed_at = utcnow()
         await bump_completions(db)
-        await log_action(db, "completed", "task", task_id, {"title": body.title or old["title"]})
-    elif status == "open" and old["status"] == "done":
-        completed_at = None
-        await log_action(db, "reopened", "task", task_id, {"title": body.title or old["title"]})
-    else:
         await log_action(
             db,
-            "updated",
+            "completed",
             "task",
             task_id,
-            {"title": body.title, "kind": body.kind, "status": status},
+            {"title": next_values["title"], "changes": diff_fields(old, next_values, ["status"])},
         )
+    elif status == "open" and old["status"] == "done":
+        completed_at = None
+        await log_action(
+            db,
+            "reopened",
+            "task",
+            task_id,
+            {"title": next_values["title"], "changes": diff_fields(old, next_values, ["status"])},
+        )
+    else:
+        changes = diff_fields(old, next_values, list(next_values.keys()))
+        if changes:
+            await log_action(
+                db,
+                "updated",
+                "task",
+                task_id,
+                {"title": next_values["title"], "changes": changes},
+            )
 
     await db.execute(
         """
@@ -266,13 +308,13 @@ async def update_task(
           status=?, completed_at=?, updated_at=? WHERE id=?
         """,
         (
-            body.project_id,
-            body.title.strip(),
-            body.notes,
-            body.kind,
-            body.priority,
-            body.due_at,
-            body.remind_at,
+            next_values["project_id"],
+            next_values["title"],
+            next_values["notes"],
+            next_values["kind"],
+            next_values["priority"],
+            next_values["due_at"],
+            next_values["remind_at"],
             status,
             completed_at,
             utcnow(),
@@ -368,12 +410,19 @@ async def update_note(
     db: aiosqlite.Connection = Depends(get_db),
     _: dict = Depends(require_auth),
 ):
-    await fetch_note(db, note_id)
+    old = await fetch_note(db, note_id)
+    next_values = {
+        "project_id": body.project_id,
+        "title": body.title.strip(),
+        "body": body.body,
+    }
+    changes = diff_fields(old, next_values, list(next_values.keys()))
     await db.execute(
         "UPDATE notes SET project_id=?, title=?, body=?, updated_at=? WHERE id=?",
-        (body.project_id, body.title.strip(), body.body, utcnow(), note_id),
+        (next_values["project_id"], next_values["title"], next_values["body"], utcnow(), note_id),
     )
-    await log_action(db, "updated", "note", note_id, {"title": body.title})
+    if changes:
+        await log_action(db, "updated", "note", note_id, {"title": next_values["title"], "changes": changes})
     await db.commit()
     return await fetch_note(db, note_id)
 
@@ -463,15 +512,46 @@ async def delete_workout(
 
 # ---------- history / stats / backup ----------
 
-@app.get("/api/history")
-async def history(
-    limit: int = 100,
+@app.post("/api/events")
+async def record_event(
+    body: EventIn,
     db: aiosqlite.Connection = Depends(get_db),
     _: dict = Depends(require_auth),
 ):
+    await log_action(db, body.action, body.entity_type, body.entity_id, body.payload)
+    await db.commit()
+    return {"ok": True}
+
+
+@app.get("/api/history")
+async def history(
+    limit: int = 100,
+    entity_type: str | None = None,
+    action: str | None = None,
+    since: str | None = None,
+    until: str | None = None,
+    db: aiosqlite.Connection = Depends(get_db),
+    _: dict = Depends(require_auth),
+):
+    clauses: list[str] = []
+    params: list[Any] = []
+    if entity_type:
+        clauses.append("entity_type = ?")
+        params.append(entity_type)
+    if action:
+        clauses.append("action = ?")
+        params.append(action)
+    if since:
+        clauses.append("at >= ?")
+        params.append(since)
+    if until:
+        clauses.append("at <= ?")
+        params.append(until)
+    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    params.append(min(limit, 500))
     cur = await db.execute(
-        "SELECT * FROM action_log ORDER BY id DESC LIMIT ?",
-        (min(limit, 500),),
+        f"SELECT * FROM action_log {where} ORDER BY id DESC LIMIT ?",
+        params,
     )
     rows = []
     for r in await cur.fetchall():
@@ -537,6 +617,8 @@ async def stats(db: aiosqlite.Connection = Depends(get_db), _: dict = Depends(re
 
 @app.get("/api/backup")
 async def backup(db: aiosqlite.Connection = Depends(get_db), _: dict = Depends(require_auth)):
+    await log_action(db, "backup_exported", "system", None, {})
+    await db.commit()
     tables = [
         "projects",
         "tasks",

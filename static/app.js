@@ -49,11 +49,29 @@ async function api(path, opts = {}) {
   return res.json();
 }
 
+async function track(action, entityType = "ui", entityId = null, payload = {}) {
+  if (!state.token) return;
+  try {
+    await api("/api/events", {
+      method: "POST",
+      body: JSON.stringify({
+        action,
+        entity_type: entityType,
+        entity_id: entityId,
+        payload,
+      }),
+    });
+  } catch {
+    /* history must not break UX */
+  }
+}
+
 function $(id) {
   return document.getElementById(id);
 }
 
 function logout(reload = true) {
+  if (state.token) track("logout", "session", null, {});
   state.token = "";
   localStorage.removeItem(TOKEN_KEY);
   if (reload) location.reload();
@@ -107,6 +125,7 @@ function setView(view) {
   if (view === "today") dueInput.value = todayIso();
   else if (view !== "upcoming") dueInput.value = "";
 
+  track("view_opened", "ui", null, { view });
   refresh();
 }
 
@@ -223,6 +242,43 @@ async function loadWorkouts() {
     .join("");
 }
 
+const actionLabels = {
+  created: "создано",
+  updated: "изменено",
+  deleted: "удалено",
+  completed: "выполнено",
+  reopened: "снова открыто",
+  promoted: "в задачу",
+  workout_logged: "тренировка",
+  login: "вход",
+  logout: "выход",
+  view_opened: "экран",
+  shortcut_used: "шорткат",
+  backup_exported: "бэкап",
+  app_opened: "открытие",
+};
+
+const entityLabels = {
+  task: "задача",
+  note: "заметка",
+  workout: "тренировка",
+  project: "проект",
+  session: "сессия",
+  ui: "интерфейс",
+  system: "система",
+};
+
+function formatChanges(changes) {
+  if (!changes || typeof changes !== "object") return "";
+  return Object.entries(changes)
+    .map(([field, diff]) => {
+      const from = diff?.from ?? "—";
+      const to = diff?.to ?? "—";
+      return `${field}: ${from} → ${to}`;
+    })
+    .join(" · ");
+}
+
 async function loadHistory() {
   const rows = await api("/api/history?limit=150");
   const root = $("history-list");
@@ -232,13 +288,18 @@ async function loadHistory() {
   }
   root.innerHTML = rows
     .map((r) => {
-      const title = r.payload?.title || r.payload?.name || "";
+      const title = r.payload?.title || r.payload?.name || r.payload?.view || "";
+      const action = actionLabels[r.action] || r.action;
+      const entity = entityLabels[r.entity_type] || r.entity_type;
+      const changes = formatChanges(r.payload?.changes);
+      const extra = r.payload?.shortcut ? ` · ${r.payload.shortcut}` : "";
       return `
       <div class="tl-item">
         <div class="tl-time">${fmtDate(r.at)}</div>
         <div>
-          <div class="tl-action">${escapeHtml(r.action)} · ${escapeHtml(r.entity_type)}</div>
-          <div class="item-meta">${escapeHtml(title)} ${r.entity_id ? "#" + r.entity_id : ""}</div>
+          <div class="tl-action">${escapeHtml(action)} · ${escapeHtml(entity)}</div>
+          <div class="item-meta">${escapeHtml(String(title))}${extra} ${r.entity_id ? "#" + r.entity_id : ""}</div>
+          ${changes ? `<div class="item-meta tl-changes">${escapeHtml(changes)}</div>` : ""}
         </div>
       </div>`;
     })
@@ -274,10 +335,34 @@ function escapeAttr(str) {
   return escapeHtml(str).replaceAll("'", "&#39;");
 }
 
+function openTaskCapture() {
+  if ($("app").classList.contains("hidden")) return;
+  track("shortcut_used", "ui", null, { shortcut: "ctrl+space", target: "task_capture" });
+  setView("today");
+  const panel = $("view-tasks");
+  panel.classList.add("capture-focus");
+  panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  window.setTimeout(() => $("task-title").focus(), 50);
+  window.setTimeout(() => panel.classList.remove("capture-focus"), 1400);
+}
+
+function isTypingTarget(el) {
+  if (!el) return false;
+  const tag = el.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el.isContentEditable;
+}
+
 function localInputValue(dt = new Date()) {
   const pad = (n) => String(n).padStart(2, "0");
   return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
 }
+
+document.addEventListener("keydown", (e) => {
+  if (!e.ctrlKey || e.code !== "Space") return;
+  if (isTypingTarget(document.activeElement) && document.activeElement?.id !== "task-title") return;
+  e.preventDefault();
+  openTaskCapture();
+});
 
 // events
 $("login-form").addEventListener("submit", async (e) => {
@@ -291,7 +376,7 @@ $("login-form").addEventListener("submit", async (e) => {
     state.token = data.token;
     localStorage.setItem(TOKEN_KEY, state.token);
     showApp();
-    setView("inbox");
+    setView("today");
   } catch {
     $("login-error").classList.remove("hidden");
   }
@@ -421,7 +506,8 @@ async function boot() {
     // validate token via protected endpoint
     await api("/api/projects");
     showApp();
-    setView("inbox");
+    track("app_opened", "ui", null, { path: location.pathname });
+    setView("today");
   } catch {
     showLogin();
   }
