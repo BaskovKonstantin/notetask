@@ -83,6 +83,28 @@ button, input, select, textarea {
   font-weight: 600;
 }
 
+.nav-label {
+  margin: 20px 0 8px;
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.nav-projects button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.project-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
 .main {
   padding: 28px 28px 60px;
   max-width: 980px;

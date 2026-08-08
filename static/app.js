@@ -9,6 +9,7 @@ const state = {
   view: "today",
   token: localStorage.getItem(TOKEN_KEY) || "",
   projects: [],
+  projectId: null,
 };
 
 const titles = {
@@ -17,7 +18,7 @@ const titles = {
   someday: ["Идеи / планы", "Захватить мысль — разобрать потом"],
   upcoming: ["Предстоящие", "Срок позже сегодняшнего"],
   notes: ["Заметки", "Структурированные записи"],
-  workouts: ["Тренировки", "Дневник подходов и прогресса"],
+  workouts: ["Дневник", "Дневник подходов и прогресса"],
   history: ["История", "Ничего не теряется"],
   stats: ["Статистика", "Streak и активность за 30 дней"],
 };
@@ -27,6 +28,7 @@ const emptyHints = {
   inbox: "Inbox пуст. Добавь задачу без даты.",
   someday: "Пока нет идей. Выбери тип «Идея» или «План».",
   upcoming: "Нет задач с будущим сроком.",
+  project: "Нет задач в этом разделе.",
 };
 
 function todayIso() {
@@ -155,8 +157,13 @@ function parseKindToken(text) {
 }
 
 function findProjectId(name) {
-  const q = name.toLowerCase();
-  const hit = state.projects.find((p) => p.name.toLowerCase() === q);
+  const raw = name.toLowerCase();
+  const compact = raw.replace(/[\s_-]+/g, "");
+  const hit = state.projects.find((p) => {
+    const pn = p.name.toLowerCase();
+    const pc = pn.replace(/[\s_-]+/g, "");
+    return pn === raw || pc === compact || pc.startsWith(compact);
+  });
   return hit?.id ?? null;
 }
 
@@ -311,9 +318,26 @@ function initTaskTitleHighlight() {
 async function loadProjectsCache() {
   try {
     state.projects = await api("/api/projects");
+    renderProjectNav();
   } catch {
     state.projects = [];
+    renderProjectNav();
   }
+}
+
+function renderProjectNav() {
+  const nav = $("project-nav");
+  if (!nav) return;
+  const sections = state.projects.filter((p) => p.name !== "Inbox");
+  nav.innerHTML = sections
+    .map(
+      (p) => `
+    <button type="button" data-view="project" data-project-id="${p.id}">
+      <span class="project-dot" style="background:${escapeAttr(p.color)}"></span>
+      ${escapeHtml(p.name)}
+    </button>`
+    )
+    .join("");
 }
 
 function fmtShortDay(isoDate) {
@@ -447,16 +471,28 @@ function fmtDate(iso) {
   }
 }
 
-function setView(view) {
+function setView(view, opts = {}) {
   state.view = view;
-  document.querySelectorAll("#nav button").forEach((b) => {
-    b.classList.toggle("active", b.dataset.view === view);
-  });
-  const [t, s] = titles[view];
-  $("view-title").textContent = t;
-  $("view-sub").textContent = s;
+  state.projectId = opts.projectId ?? null;
 
-  const taskViews = ["today", "inbox", "someday", "upcoming"];
+  document.querySelectorAll("#nav button, #project-nav button").forEach((b) => {
+    const pid = b.dataset.projectId ? Number(b.dataset.projectId) : null;
+    const active =
+      view === "project" ? pid === state.projectId : b.dataset.view === view && !b.dataset.projectId;
+    b.classList.toggle("active", active);
+  });
+
+  if (view === "project") {
+    const proj = state.projects.find((p) => p.id === state.projectId);
+    $("view-title").textContent = proj?.name || "Раздел";
+    $("view-sub").textContent = "Задачи раздела";
+  } else {
+    const [t, s] = titles[view] || ["", ""];
+    $("view-title").textContent = t;
+    $("view-sub").textContent = s;
+  }
+
+  const taskViews = ["today", "inbox", "someday", "upcoming", "project"];
   $("view-tasks").classList.toggle("hidden", !taskViews.includes(view));
   $("view-notes").classList.toggle("hidden", view !== "notes");
   $("view-workouts").classList.toggle("hidden", view !== "workouts");
@@ -471,13 +507,13 @@ function setView(view) {
   else if (view !== "upcoming") dueInput.value = "";
 
   updateTaskChips();
-  track("view_opened", "ui", null, { view });
+  track("view_opened", "ui", null, { view, project_id: state.projectId });
   refresh();
 }
 
 async function refresh() {
   const v = state.view;
-  if (["today", "inbox", "someday", "upcoming"].includes(v)) await loadTasks(v);
+  if (["today", "inbox", "someday", "upcoming", "project"].includes(v)) await loadTasks(v);
   else if (v === "notes") await loadNotes();
   else if (v === "workouts") await loadWorkouts();
   else if (v === "history") await loadHistory();
@@ -491,8 +527,11 @@ function priorityBadge(p) {
 }
 
 async function loadTasks(view) {
-  const tasks = await api(`/api/tasks?view=${view}`);
+  let url = `/api/tasks?view=${view === "project" ? "open" : view}`;
+  if (view === "project" && state.projectId) url += `&project_id=${state.projectId}`;
+  const tasks = await api(url);
   const root = $("task-list");
+  const projectMap = Object.fromEntries(state.projects.map((p) => [p.id, p.name]));
   if (!tasks.length) {
     root.innerHTML = `<div class="empty">${emptyHints[view] || "Пусто."}</div>`;
     return;
@@ -506,6 +545,10 @@ async function loadTasks(view) {
             ? '<span class="badge idea">план</span>'
             : "";
       const due = t.due_at ? `<span class="badge">${t.due_at.slice(0, 10)}</span>` : "";
+      const project =
+        t.project_id && projectMap[t.project_id] && view !== "project"
+          ? `<span class="badge">${escapeHtml(projectMap[t.project_id])}</span>`
+          : "";
       const promote =
         t.kind !== "task"
           ? `<button class="btn ghost small" data-promote="${t.id}">В задачу</button>`
@@ -515,7 +558,7 @@ async function loadTasks(view) {
         <button class="check ${t.status === "done" ? "done" : ""}" data-complete="${t.id}" aria-label="done"></button>
         <div>
           <div class="item-title">${escapeHtml(t.title)}</div>
-          <div class="item-meta">${priorityBadge(t.priority)}${kind}${due}</div>
+          <div class="item-meta">${priorityBadge(t.priority)}${kind}${due}${project}</div>
         </div>
         <div class="item-actions">
           ${promote}
@@ -731,7 +774,14 @@ $("login-form").addEventListener("submit", async (e) => {
 
 $("nav").addEventListener("click", (e) => {
   const btn = e.target.closest("button[data-view]");
-  if (btn) setView(btn.dataset.view);
+  if (!btn || btn.closest("#project-nav")) return;
+  setView(btn.dataset.view);
+});
+
+$("project-nav").addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-project-id]");
+  if (!btn) return;
+  setView("project", { projectId: Number(btn.dataset.projectId) });
 });
 
 $("logout-btn").onclick = () => logout(true);
@@ -764,7 +814,7 @@ $("task-form").addEventListener("submit", async (e) => {
       priority,
       due_at: due,
       remind_at: remind,
-      project_id: parsed.meta.projectId || null,
+      project_id: parsed.meta.projectId || (state.view === "project" ? state.projectId : null) || null,
     }),
   });
   $("task-title").value = "";

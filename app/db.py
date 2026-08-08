@@ -170,20 +170,38 @@ def row_to_dict(row: aiosqlite.Row | None) -> dict[str, Any] | None:
     return {k: row[k] for k in row.keys()}
 
 
+async def ensure_project_catalog(db: aiosqlite.Connection) -> None:
+    catalog = [
+        ("Inbox", "#2f6f4e", 0),
+        ("Личные дела", "#3d7a5a", 1),
+        ("Развлечения", "#c45c26", 2),
+        ("Работа", "#4073ff", 3),
+        ("Здоровье", "#158fad", 4),
+        ("Тренировки", "#1f4b7a", 5),
+        ("Питание", "#7ecc49", 6),
+    ]
+    now = utcnow()
+    for name, color, sort in catalog:
+        cur = await db.execute(
+            "SELECT id FROM projects WHERE deleted_at IS NULL AND name=?",
+            (name,),
+        )
+        row = await cur.fetchone()
+        if row:
+            await db.execute(
+                "UPDATE projects SET color=?, sort=?, updated_at=? WHERE id=?",
+                (color, sort, now, row["id"]),
+            )
+        else:
+            await db.execute(
+                "INSERT INTO projects(name, color, sort, created_at, updated_at) VALUES(?,?,?,?,?)",
+                (name, color, sort, now, now),
+            )
+    await db.commit()
+
+
 async def ensure_defaults(db: aiosqlite.Connection) -> None:
-    cur = await db.execute("SELECT COUNT(*) AS c FROM projects WHERE deleted_at IS NULL")
-    n = (await cur.fetchone())["c"]
-    if n == 0:
-        now = utcnow()
-        await db.execute(
-            "INSERT INTO projects(name, color, sort, created_at, updated_at) VALUES(?,?,?,?,?)",
-            ("Inbox", "#2f6f4e", 0, now, now),
-        )
-        await db.execute(
-            "INSERT INTO projects(name, color, sort, created_at, updated_at) VALUES(?,?,?,?,?)",
-            ("Тренировки", "#1f4b7a", 1, now, now),
-        )
-        await db.commit()
+    await ensure_project_catalog(db)
 
 
 def db_file() -> Path:

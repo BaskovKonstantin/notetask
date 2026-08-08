@@ -15,7 +15,7 @@
       window.NOTETASK_BASE = base === "/todo/" ? "/todo" : "";
     })();
   </script>
-  <link rel="stylesheet" href="assets/styles.css?v=8" />
+  <link rel="stylesheet" href="assets/styles.css?v=9" />
 </head>
 <body>
   <div id="login" class="login-wrap">
@@ -38,10 +38,12 @@
         <button data-view="someday">Идеи / планы</button>
         <button data-view="upcoming">Предстоящие</button>
         <button data-view="notes">Заметки</button>
-        <button data-view="workouts">Тренировки</button>
+        <button data-view="workouts">Дневник</button>
         <button data-view="history">История</button>
         <button data-view="stats">Статистика</button>
       </nav>
+      <p class="nav-label">Разделы</p>
+      <nav class="nav nav-projects" id="project-nav"></nav>
       <div style="margin-top:28px">
         <button class="btn ghost" id="backup-btn" style="width:100%">Экспорт JSON</button>
         <button class="btn ghost" id="logout-btn" style="width:100%;margin-top:8px">Выйти</button>
@@ -178,6 +180,6 @@
     </main>
   </div>
 
-  <script src="assets/app.js?v=8"></script>
+  <script src="assets/app.js?v=9"></script>
 </body>
 </html>

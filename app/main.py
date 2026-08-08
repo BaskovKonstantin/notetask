@@ -182,6 +182,7 @@ async def create_project(
 @app.get("/api/tasks")
 async def list_tasks(
     view: str = "all",
+    project_id: int | None = None,
     db: aiosqlite.Connection = Depends(get_db),
     _: dict = Depends(require_auth),
 ):
@@ -191,6 +192,8 @@ async def list_tasks(
         "CASE WHEN due_at IS NULL THEN 1 ELSE 0 END, due_at, priority, id DESC"
     )
     rows = [row_to_dict(r) for r in await cur.fetchall()]
+    if project_id is not None:
+        rows = [t for t in rows if t["project_id"] == project_id]
     today = date.today().isoformat()
     if view == "today":
         return [
