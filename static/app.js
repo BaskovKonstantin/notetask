@@ -13,10 +13,10 @@ const state = {
 };
 
 const titles = {
-  today: ["Сегодня", "Задачи на сегодня и просроченные"],
-  history: ["История", "Ничего не теряется"],
-  stats: ["Статистика", "Streak и активность за 30 дней"],
-  project: ["Раздел", "Задачи раздела"],
+  today: "Сегодня",
+  history: "История",
+  stats: "Статистика",
+  project: "Раздел",
 };
 
 const emptyHints = {
@@ -491,13 +491,9 @@ function setView(view, opts = {}) {
 
   if (view === "project") {
     const proj = state.projects.find((p) => p.id === state.projectId);
-    $("view-title").textContent = proj?.name || "Раздел";
-    $("view-sub").textContent =
-      proj?.name === "Inbox" ? "P4 и задачи без раздела — разложи по проектам" : "Задачи раздела";
+    $("view-title").textContent = proj?.name === "Inbox" ? "Разобрать" : (proj?.name || titles.project);
   } else {
-    const [t, s] = titles[view] || ["", ""];
-    $("view-title").textContent = t;
-    $("view-sub").textContent = s;
+    $("view-title").textContent = titles[view] || "";
   }
 
   const taskViews = ["today", "project"];
