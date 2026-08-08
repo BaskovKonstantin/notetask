@@ -23,7 +23,7 @@ Personal tracker (not TreckBas):
 - Auth: shared password
 - **Ctrl+Space** → Today + task form (`#view-tasks`), focus input
 - Default view on open: **Today** (not Inbox)
-- **Разделы (projects):** Inbox, Личные дела, Развлечения, Работа, Здоровье, Тренировки, Питание — sidebar + `@название` в задаче
+- **Разделы (projects):** Inbox, Личные дела, Развлечения, Работа, Здоровье, Тренировки, Питание, Идеи — sidebar + `@название` в задаче
 
 ## Stack
 

@@ -179,6 +179,7 @@ async def ensure_project_catalog(db: aiosqlite.Connection) -> None:
         ("Здоровье", "#158fad", 4),
         ("Тренировки", "#1f4b7a", 5),
         ("Питание", "#7ecc49", 6),
+        ("Идеи", "#884dff", 7),
     ]
     now = utcnow()
     for name, color, sort in catalog:
