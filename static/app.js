@@ -375,6 +375,23 @@ function closeTaskPopovers() {
     btn.classList.remove("active");
     btn.setAttribute("aria-expanded", "false");
   });
+  document.querySelectorAll(".chip-popover.is-open").forEach((el) => el.classList.remove("is-open"));
+  document.querySelectorAll(".item.popover-open").forEach((el) => el.classList.remove("popover-open"));
+}
+
+function openChipPopover(btn, menu) {
+  if (!menu) return;
+  menu.classList.remove("hidden");
+  btn.classList.add("active");
+  btn.setAttribute("aria-expanded", "true");
+  btn.closest(".chip-popover")?.classList.add("is-open");
+  btn.closest(".item")?.classList.add("popover-open");
+}
+
+function toggleChipPopover(btn, menu) {
+  const wasOpen = menu && !menu.classList.contains("hidden");
+  closeTaskPopovers();
+  if (menu && !wasOpen) openChipPopover(btn, menu);
 }
 
 function updateTaskChips() {
@@ -420,12 +437,8 @@ function initTaskMetaChips() {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
       const menu = btn.parentElement.querySelector(".chip-menu");
-      const wasOpen = menu && !menu.classList.contains("hidden");
-      closeTaskPopovers();
-      if (menu && !wasOpen) {
-        menu.classList.remove("hidden");
-        btn.classList.add("active");
-        btn.setAttribute("aria-expanded", "true");
+      toggleChipPopover(btn, menu);
+      if (menu && !menu.classList.contains("hidden")) {
         const input = menu.querySelector("input");
         if (input && !["date", "time", "datetime-local"].includes(input.type)) {
           input.focus();
@@ -475,7 +488,7 @@ function initTaskMetaChips() {
   });
 
   document.addEventListener("click", (e) => {
-    if (e.target.closest(".chip-popover")) return;
+    if (e.target.closest(".chip-popover, .chip-menu")) return;
     closeTaskPopovers();
   });
   document.querySelectorAll(".chip-menu").forEach((menu) => {
@@ -1248,6 +1261,10 @@ $("task-form").addEventListener("submit", async (e) => {
   }
 });
 
+$("task-list").addEventListener("mousedown", (e) => {
+  if (e.target.closest(".chip-menu, .chip-popover")) e.stopPropagation();
+});
+
 $("task-list").addEventListener("click", async (e) => {
   const attrsRoot = e.target.closest(".task-attrs");
   if (attrsRoot) {
@@ -1296,20 +1313,10 @@ $("task-list").addEventListener("click", async (e) => {
     if (chipBtn) {
       e.stopPropagation();
       const menu = chipBtn.parentElement.querySelector(".chip-menu");
-      const wasOpen = menu && !menu.classList.contains("hidden");
-      closeTaskPopovers();
-      if (menu && !wasOpen) {
-        menu.classList.remove("hidden");
-        chipBtn.classList.add("active");
-        chipBtn.setAttribute("aria-expanded", "true");
-        const input = menu.querySelector("input");
-        if (input && !["date", "time", "datetime-local"].includes(input.type)) {
-          input.focus();
-        }
-      }
+      toggleChipPopover(chipBtn, menu);
       return;
     }
-    if (e.target.closest(".chip-menu")) {
+    if (e.target.closest(".chip-menu, .chip-popover")) {
       e.stopPropagation();
       return;
     }
@@ -1343,7 +1350,6 @@ $("task-list").addEventListener("change", async (e) => {
   }
   if (field === "location") {
     await patchTask(taskId, { location: e.target.value.trim() || null });
-    closeTaskPopovers();
     return;
   }
   if (field === "cost") {
@@ -1351,7 +1357,7 @@ $("task-list").addEventListener("change", async (e) => {
     const costType = typeBtn?.dataset.taskCostType || "expense";
     const val = e.target.value ? Number(e.target.value) : null;
     await patchTask(taskId, { cost: val, cost_type: val ? costType : null });
-    closeTaskPopovers();
+    return;
   }
 });
 
