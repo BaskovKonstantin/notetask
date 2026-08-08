@@ -36,6 +36,11 @@ button, input, select, textarea {
   display: grid;
   grid-template-columns: 240px 1fr;
   min-height: 100vh;
+  transition: grid-template-columns 0.22s ease;
+}
+
+.app-shell.sidebar-collapsed {
+  grid-template-columns: 0 1fr;
 }
 
 .sidebar {
@@ -43,6 +48,15 @@ button, input, select, textarea {
   border-right: 1px solid var(--line);
   background: rgba(255,255,255,0.35);
   backdrop-filter: blur(10px);
+  overflow: hidden;
+  min-width: 0;
+  transition: opacity 0.18s ease;
+}
+
+.app-shell.sidebar-collapsed .sidebar {
+  opacity: 0;
+  pointer-events: none;
+  border-right-color: transparent;
 }
 
 .brand {
@@ -116,6 +130,37 @@ button, input, select, textarea {
   align-items: end;
   gap: 16px;
   margin-bottom: 22px;
+}
+
+.topbar-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.sidebar-toggle {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.65);
+  color: var(--muted);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+.sidebar-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: #fff;
+}
+
+.app-shell.sidebar-collapsed .sidebar-toggle svg {
+  transform: rotate(180deg);
 }
 
 .topbar h1 {
@@ -610,6 +655,7 @@ textarea { min-height: 90px; resize: vertical; }
 
 @media (max-width: 860px) {
   .app-shell { grid-template-columns: 1fr; }
+  .app-shell.sidebar-collapsed .sidebar { display: none; }
   .sidebar {
     border-right: 0;
     border-bottom: 1px solid var(--line);

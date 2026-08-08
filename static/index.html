@@ -15,7 +15,7 @@
       window.NOTETASK_BASE = base === "/todo/" ? "/todo" : "";
     })();
   </script>
-  <link rel="stylesheet" href="assets/styles.css?v=16" />
+  <link rel="stylesheet" href="assets/styles.css?v=17" />
 </head>
 <body>
   <div id="login" class="login-wrap">
@@ -47,7 +47,10 @@
 
     <main class="main">
       <div class="topbar">
-        <div>
+        <div class="topbar-head">
+          <button type="button" class="sidebar-toggle" id="sidebar-toggle" aria-label="Скрыть меню" aria-expanded="true" title="Скрыть меню">
+            <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M9.5 3.5 8.8 4.2 12.6 8 8.8 11.8l.7.7 4.5-4.5-4.5-4.5zm-5 0L3.8 4.2 7.6 8 3.8 11.8l.7.7L9 8 4.5 3.5z"/></svg>
+          </button>
           <h1 id="view-title">Сегодня</h1>
         </div>
       </div>
@@ -175,6 +178,6 @@
     </main>
   </div>
 
-  <script src="assets/app.js?v=17"></script>
+  <script src="assets/app.js?v=18"></script>
 </body>
 </html>

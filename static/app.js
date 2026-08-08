@@ -1,4 +1,5 @@
 const TOKEN_KEY = "notetask_token";
+const SIDEBAR_KEY = "notetask_sidebar_collapsed";
 const BASE = window.NOTETASK_BASE ?? (() => {
   const path = window.location.pathname;
   if (path === "/todo" || path.startsWith("/todo/")) return "/todo";
@@ -469,6 +470,25 @@ function hideTaskForm() {
   $("task-form").classList.add("hidden");
   $("task-add-trigger")?.classList.remove("hidden");
   closeTaskPopovers();
+}
+
+function setSidebarCollapsed(collapsed) {
+  $("app").classList.toggle("sidebar-collapsed", collapsed);
+  localStorage.setItem(SIDEBAR_KEY, collapsed ? "1" : "0");
+  const btn = $("sidebar-toggle");
+  if (!btn) return;
+  btn.setAttribute("aria-expanded", collapsed ? "false" : "true");
+  btn.setAttribute("aria-label", collapsed ? "Показать меню" : "Скрыть меню");
+  btn.title = collapsed ? "Показать меню" : "Скрыть меню";
+}
+
+function initSidebarToggle() {
+  setSidebarCollapsed(localStorage.getItem(SIDEBAR_KEY) === "1");
+  $("sidebar-toggle")?.addEventListener("click", () => {
+    const collapsed = !$("app").classList.contains("sidebar-collapsed");
+    setSidebarCollapsed(collapsed);
+    track("sidebar_toggle", "ui", null, { collapsed });
+  });
 }
 
 function showTaskForm() {
@@ -1122,6 +1142,7 @@ async function boot() {
   $("wo-started").value = localInputValue();
   initTaskMetaChips();
   initTaskTitleHighlight();
+  initSidebarToggle();
   hideTaskForm();
   if (!state.token) {
     showLogin();
