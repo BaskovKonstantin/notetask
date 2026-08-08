@@ -527,7 +527,7 @@ function priorityBadge(p) {
 }
 
 async function loadTasks(view) {
-  let url = `/api/tasks?view=${view === "project" ? "open" : view}`;
+  let url = `/api/tasks?view=${view === "project" ? "all" : view}`;
   if (view === "project" && state.projectId) url += `&project_id=${state.projectId}`;
   const tasks = await api(url);
   const root = $("task-list");
@@ -536,28 +536,41 @@ async function loadTasks(view) {
     root.innerHTML = `<div class="empty">${emptyHints[view] || "Пусто."}</div>`;
     return;
   }
-  root.innerHTML = tasks
-    .map((t) => {
-      const kind =
-        t.kind === "idea"
-          ? '<span class="badge idea">идея</span>'
-          : t.kind === "plan"
-            ? '<span class="badge idea">план</span>'
-            : "";
-      const due = t.due_at ? `<span class="badge">${t.due_at.slice(0, 10)}</span>` : "";
-      const project =
-        t.project_id && projectMap[t.project_id] && view !== "project"
-          ? `<span class="badge">${escapeHtml(projectMap[t.project_id])}</span>`
-          : "";
-      const promote =
-        t.kind !== "task"
-          ? `<button class="btn ghost small" data-promote="${t.id}">В задачу</button>`
-          : "";
-      return `
-      <div class="item" data-id="${t.id}">
-        <button class="check ${t.status === "done" ? "done" : ""}" data-complete="${t.id}" aria-label="done"></button>
+
+  let html = "";
+  let seenDone = false;
+  for (const t of tasks) {
+    if (t.status === "done" && !seenDone) {
+      seenDone = true;
+      html += '<div class="list-divider">Выполнено</div>';
+    }
+    html += renderTaskItem(t, view, projectMap);
+  }
+  root.innerHTML = html;
+}
+
+function renderTaskItem(t, view, projectMap) {
+  const done = t.status === "done";
+  const kind =
+    t.kind === "idea"
+      ? '<span class="badge idea">идея</span>'
+      : t.kind === "plan"
+        ? '<span class="badge idea">план</span>'
+        : "";
+  const due = t.due_at ? `<span class="badge">${t.due_at.slice(0, 10)}</span>` : "";
+  const project =
+    t.project_id && projectMap[t.project_id] && view !== "project"
+      ? `<span class="badge">${escapeHtml(projectMap[t.project_id])}</span>`
+      : "";
+  const promote =
+    t.kind !== "task" && !done
+      ? `<button class="btn ghost small" data-promote="${t.id}">В задачу</button>`
+      : "";
+  return `
+      <div class="item${done ? " is-done" : ""}" data-id="${t.id}">
+        <button class="check${done ? " done" : ""}" data-complete="${t.id}" aria-label="${done ? "Выполнено" : "Отметить выполненным"}"></button>
         <div>
-          <div class="item-title">${escapeHtml(t.title)}</div>
+          <div class="item-title${done ? " done-title" : ""}">${escapeHtml(t.title)}</div>
           <div class="item-meta">${priorityBadge(t.priority)}${kind}${due}${project}</div>
         </div>
         <div class="item-actions">
@@ -565,8 +578,89 @@ async function loadTasks(view) {
           <button class="btn ghost small btn-del" data-del-task="${t.id}" aria-label="Удалить">×</button>
         </div>
       </div>`;
-    })
-    .join("");
+}
+
+let completeAudioCtx;
+
+function playCompleteSound() {
+  try {
+    completeAudioCtx = completeAudioCtx || new AudioContext();
+    const ctx = completeAudioCtx;
+    if (ctx.state === "suspended") ctx.resume();
+
+    const t0 = ctx.currentTime;
+    const master = ctx.createGain();
+    master.gain.setValueAtTime(0.0001, t0);
+    master.gain.exponentialRampToValueAtTime(0.22, t0 + 0.01);
+    master.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.18);
+    master.connect(ctx.destination);
+
+    const pop = ctx.createOscillator();
+    pop.type = "sine";
+    pop.frequency.setValueAtTime(520, t0);
+    pop.frequency.exponentialRampToValueAtTime(260, t0 + 0.07);
+    const popGain = ctx.createGain();
+    popGain.gain.setValueAtTime(0.7, t0);
+    pop.connect(popGain);
+    popGain.connect(master);
+    pop.start(t0);
+    pop.stop(t0 + 0.08);
+
+    const click = ctx.createOscillator();
+    click.type = "triangle";
+    click.frequency.setValueAtTime(1400, t0 + 0.015);
+    click.frequency.exponentialRampToValueAtTime(900, t0 + 0.05);
+    const clickGain = ctx.createGain();
+    clickGain.gain.setValueAtTime(0.12, t0 + 0.015);
+    clickGain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.06);
+    click.connect(clickGain);
+    clickGain.connect(master);
+    click.start(t0 + 0.015);
+    click.stop(t0 + 0.07);
+  } catch {
+    /* audio optional */
+  }
+}
+
+async function completeTaskItem(completeBtn) {
+  if (completeBtn.classList.contains("done")) return;
+  const item = completeBtn.closest(".item");
+  const id = completeBtn.dataset.complete;
+  const root = $("task-list");
+
+  playCompleteSound();
+  completeBtn.classList.add("done");
+  item.classList.add("item-completing");
+
+  try {
+    await api(`/api/tasks/${id}/complete`, { method: "POST" });
+  } catch {
+    completeBtn.classList.remove("done");
+    item.classList.remove("item-completing");
+    return;
+  }
+
+  window.setTimeout(() => {
+    item.classList.remove("item-completing");
+    item.classList.add("is-done");
+    const title = item.querySelector(".item-title");
+    if (title) title.classList.add("done-title");
+
+    let divider = root.querySelector(".list-divider");
+    if (!divider) {
+      divider = document.createElement("div");
+      divider.className = "list-divider";
+      divider.textContent = "Выполнено";
+    } else {
+      divider.remove();
+    }
+
+    item.classList.add("item-slide-down");
+    root.appendChild(divider);
+    root.appendChild(item);
+
+    window.setTimeout(() => item.classList.remove("item-slide-down"), 450);
+  }, 280);
 }
 
 async function loadNotes() {
@@ -830,8 +924,7 @@ $("task-list").addEventListener("click", async (e) => {
   const del = e.target.closest("[data-del-task]");
   const promote = e.target.closest("[data-promote]");
   if (complete) {
-    await api(`/api/tasks/${complete.dataset.complete}/complete`, { method: "POST" });
-    await refresh();
+    await completeTaskItem(complete);
   } else if (del) {
     await api(`/api/tasks/${del.dataset.delTask}`, { method: "DELETE" });
     await refresh();

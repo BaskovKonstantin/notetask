@@ -189,6 +189,7 @@ async def list_tasks(
     cur = await db.execute(
         "SELECT * FROM tasks WHERE deleted_at IS NULL ORDER BY "
         "CASE status WHEN 'open' THEN 0 ELSE 1 END, "
+        "CASE WHEN status='done' THEN completed_at END DESC, "
         "CASE WHEN due_at IS NULL THEN 1 ELSE 0 END, due_at, priority, id DESC"
     )
     rows = [row_to_dict(r) for r in await cur.fetchall()]
@@ -199,8 +200,7 @@ async def list_tasks(
         return [
             t
             for t in rows
-            if t["status"] == "open"
-            and t["kind"] == "task"
+            if t["kind"] == "task"
             and t["due_at"]
             and t["due_at"][:10] <= today
         ]
@@ -208,12 +208,12 @@ async def list_tasks(
         return [
             t
             for t in rows
-            if t["status"] == "open" and t["kind"] == "task" and t["due_at"] and t["due_at"][:10] > today
+            if t["kind"] == "task" and t["due_at"] and t["due_at"][:10] > today
         ]
     if view == "inbox":
-        return [t for t in rows if t["status"] == "open" and t["kind"] == "task" and not t["due_at"]]
+        return [t for t in rows if t["kind"] == "task" and not t["due_at"]]
     if view == "someday":
-        return [t for t in rows if t["status"] == "open" and t["kind"] in ("idea", "plan")]
+        return [t for t in rows if t["kind"] in ("idea", "plan")]
     if view == "open":
         return [t for t in rows if t["status"] == "open"]
     return rows
