@@ -427,9 +427,7 @@ function initTaskMetaChips() {
         btn.classList.add("active");
         btn.setAttribute("aria-expanded", "true");
         const input = menu.querySelector("input");
-        if (input?.showPicker) {
-          window.setTimeout(() => input.showPicker(), 0);
-        } else if (input) {
+        if (input && !["date", "time", "datetime-local"].includes(input.type)) {
           input.focus();
         }
       }
@@ -1305,8 +1303,9 @@ $("task-list").addEventListener("click", async (e) => {
         chipBtn.classList.add("active");
         chipBtn.setAttribute("aria-expanded", "true");
         const input = menu.querySelector("input");
-        if (input?.showPicker) window.setTimeout(() => input.showPicker(), 0);
-        else if (input) input.focus();
+        if (input && !["date", "time", "datetime-local"].includes(input.type)) {
+          input.focus();
+        }
       }
       return;
     }
