@@ -1,0 +1,17 @@
+services:
+  notetask:
+    build: .
+    container_name: notetask
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NOTEBOOK_DB: /data/notetask.db
+      NOTEBOOK_DATA: /data
+      NOTEBOOK_PORT: "8100"
+    volumes:
+      - ./data:/data
+      - ./static:/app/static:ro
+      - ./app:/app/app:ro
+    ports:
+      - "127.0.0.1:8100:8100"

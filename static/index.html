@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NoteTask — todo.baski.pro</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Manrope:wght@400;500;650;700&display=swap" rel="stylesheet" />
+  <base href="/" id="app-base" />
+  <link rel="stylesheet" href="assets/styles.css" />
+</head>
+<body>
+  <div id="login" class="login-wrap">
+    <form class="login-card" id="login-form">
+      <h1>NoteTask</h1>
+      <p>Задачи, идеи, тренировки и история — всё на todo.baski.pro</p>
+      <input type="password" id="password" placeholder="Пароль" autocomplete="current-password" required />
+      <button class="btn" type="submit">Войти</button>
+      <div class="error hidden" id="login-error">Неверный пароль</div>
+    </form>
+  </div>
+
+  <div id="app" class="app-shell hidden">
+    <aside class="sidebar">
+      <h2 class="brand">Note<span>Task</span></h2>
+      <p class="tagline">личное · с историей</p>
+      <nav class="nav" id="nav">
+        <button data-view="today" class="active">Сегодня</button>
+        <button data-view="inbox">Inbox</button>
+        <button data-view="someday">Идеи / планы</button>
+        <button data-view="upcoming">Предстоящие</button>
+        <button data-view="notes">Заметки</button>
+        <button data-view="workouts">Тренировки</button>
+        <button data-view="history">История</button>
+        <button data-view="stats">Статистика</button>
+      </nav>
+      <div style="margin-top:28px">
+        <button class="btn ghost" id="backup-btn" style="width:100%">Экспорт JSON</button>
+        <button class="btn ghost" id="logout-btn" style="width:100%;margin-top:8px">Выйти</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="topbar">
+        <div>
+          <h1 id="view-title">Сегодня</h1>
+          <p id="view-sub">Что сделать сегодня</p>
+        </div>
+      </div>
+
+      <section id="view-tasks" class="panel">
+        <form class="composer" id="task-form">
+          <div class="composer row">
+            <input type="text" id="task-title" placeholder="Новая задача или идея…" required />
+            <button class="btn" type="submit">Добавить</button>
+          </div>
+          <div class="field-row">
+            <select id="task-kind">
+              <option value="task">Задача</option>
+              <option value="idea">Идея</option>
+              <option value="plan">План</option>
+            </select>
+            <select id="task-priority">
+              <option value="4">P4</option>
+              <option value="3">P3</option>
+              <option value="2">P2</option>
+              <option value="1">P1</option>
+            </select>
+            <input type="date" id="task-due" />
+            <input type="datetime-local" id="task-remind" title="Напоминание" />
+          </div>
+        </form>
+        <div class="list" id="task-list"></div>
+      </section>
+
+      <section id="view-notes" class="panel hidden">
+        <form class="composer" id="note-form">
+          <input type="text" id="note-title" placeholder="Заголовок заметки" required />
+          <textarea id="note-body" placeholder="Текст… планы, мысли, структура"></textarea>
+          <button class="btn" type="submit">Сохранить заметку</button>
+        </form>
+        <div id="note-list"></div>
+      </section>
+
+      <section id="view-workouts" class="panel hidden">
+        <form class="composer" id="workout-form">
+          <div class="field-row">
+            <input type="text" id="wo-title" placeholder="Название тренировки" value="Тренировка" />
+            <input type="datetime-local" id="wo-started" />
+          </div>
+          <div id="wo-sets"></div>
+          <div class="field-row">
+            <button type="button" class="btn ghost" id="wo-add-set">+ подход</button>
+            <button class="btn warn" type="submit">Записать тренировку</button>
+          </div>
+          <textarea id="wo-notes" placeholder="Заметки к сессии"></textarea>
+        </form>
+        <div id="workout-list" class="list"></div>
+      </section>
+
+      <section id="view-history" class="panel hidden">
+        <div class="timeline" id="history-list"></div>
+      </section>
+
+      <section id="view-stats" class="panel hidden">
+        <div class="stats-grid" id="stats-cards"></div>
+        <h3 style="font-family:var(--font-display);margin:0 0 8px">30 дней</h3>
+        <div class="bars" id="stats-bars"></div>
+        <p class="empty" style="padding-left:0">Зелёный — задачи · оранжевый — тренировки (если в день есть)</p>
+      </section>
+    </main>
+  </div>
+
+  <script src="assets/app.js"></script>
+</body>
+</html>

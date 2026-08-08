@@ -1,0 +1,14 @@
+[Unit]
+Description=NoteTask personal tracker (todo.baski.pro)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/kon/Projects/notetask
+EnvironmentFile=/home/kon/Projects/notetask/.env
+ExecStart=/home/kon/Projects/notetask/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8100
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target
