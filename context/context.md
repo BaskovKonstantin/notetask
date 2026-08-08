@@ -4,9 +4,9 @@ Updated: 2026-08-08
 
 ## Live
 
-- **Primary URL:** https://baski.pro/todo/ (valid Let's Encrypt cert)
-- **Subdomain todo.baski.pro:** blocked until public A record `todo → 5.144.98.126` in reg.ru + `./deploy/enable-todo-https.sh`
-- reg.ru API rate-limited 2026-08-08 (`IP_EXCEEDED_ALLOWED_CONNECTION_RATE`)
+- **Primary URL:** https://todo.baski.pro/ (Let's Encrypt, A `todo` → 5.144.98.126)
+- **Legacy path:** https://baski.pro/todo/
+- Caddy: `todo.baski.pro` → `127.0.0.1:8100` (LE cert, no `tls internal`)
 
 ## Product
 
@@ -27,6 +27,8 @@ Personal tracker (not TreckBas):
 - **Sidebar:** кнопка «←» в topbar — сворачивает меню, состояние в `localStorage` (`notetask_sidebar_collapsed`)
 - **Плашка задачи:** под каждой задачей чипы — раздел, P, срок/время, место, сумма (расход/доход)
 - **Финансы:** суммы в задачах; сводка в «Статистика» — расходы/доходы/баланс за 30д + список операций
+- **PWA / мобильное:** баннер «Скачать» на телефоне; manifest + service worker
+- **Виджет:** https://todo.baski.pro/widget — компакт «Сегодня», после установки PWA открывается как приложение
 
 ## Stack
 

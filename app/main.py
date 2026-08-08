@@ -8,7 +8,7 @@ from typing import Any, Literal
 
 import aiosqlite
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -775,6 +775,62 @@ async def backup(db: aiosqlite.Connection = Depends(get_db), _: dict = Depends(r
         cur = await db.execute(f"SELECT * FROM {t}")
         data["tables"][t] = [row_to_dict(r) for r in await cur.fetchall()]
     return data
+
+
+@app.get("/widget")
+async def widget_page():
+    return FileResponse(STATIC / "widget.html")
+
+
+@app.get("/manifest.webmanifest")
+async def web_manifest(request: Request):
+    prefix = "/todo" if request.url.path.startswith("/todo") else ""
+    # baski.pro/todo: Caddy handle_path strips prefix — detect via Referer
+    referer = request.headers.get("referer", "")
+    if not prefix and "/todo" in referer:
+        prefix = "/todo"
+    base = prefix or ""
+    return JSONResponse(
+        {
+            "name": "NoteTask",
+            "short_name": "NoteTask",
+            "description": "Личные задачи, финансы и виджет на главном экране",
+            "start_url": f"{base}/widget",
+            "scope": f"{base}/" if base else "/",
+            "display": "standalone",
+            "background_color": "#f5f1e8",
+            "theme_color": "#1f6b4e",
+            "lang": "ru",
+            "orientation": "portrait-primary",
+            "icons": [
+                {
+                    "src": f"{base}/assets/icons/icon-192.png",
+                    "sizes": "192x192",
+                    "type": "image/png",
+                    "purpose": "any",
+                },
+                {
+                    "src": f"{base}/assets/icons/icon-512.png",
+                    "sizes": "512x512",
+                    "type": "image/png",
+                    "purpose": "any maskable",
+                },
+            ],
+            "shortcuts": [
+                {
+                    "name": "Сегодня",
+                    "url": f"{base}/widget",
+                    "icons": [{"src": f"{base}/assets/icons/icon-192.png", "sizes": "192x192"}],
+                },
+                {
+                    "name": "Добавить задачу",
+                    "url": f"{base}/widget?add=1",
+                    "icons": [{"src": f"{base}/assets/icons/icon-192.png", "sizes": "192x192"}],
+                },
+            ],
+        },
+        media_type="application/manifest+json",
+    )
 
 
 @app.get("/")

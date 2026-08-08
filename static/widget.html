@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>NoteTask — Сегодня</title>
+  <script>
+    (function () {
+      var p = location.pathname;
+      var base = (p === "/todo" || p.startsWith("/todo/")) ? "/todo/" : "/";
+      document.write('<base href="' + base + '" id="app-base" />');
+      window.NOTETASK_BASE = base === "/todo/" ? "/todo" : "";
+    })();
+  </script>
+  <script src="assets/pwa.js?v=1"></script>
+  <link rel="stylesheet" href="assets/widget.css?v=1" />
+</head>
+<body class="widget-body">
+  <div id="widget-login" class="widget-login hidden">
+    <form id="widget-login-form" class="widget-login-card">
+      <h1>NoteTask</h1>
+      <p>Виджет «Сегодня»</p>
+      <input type="password" id="widget-password" placeholder="Пароль" autocomplete="current-password" required />
+      <button class="btn" type="submit">Войти</button>
+      <div class="error hidden" id="widget-login-error">Неверный пароль</div>
+    </form>
+  </div>
+
+  <div id="widget-app" class="widget-app hidden">
+    <header class="widget-header">
+      <div>
+        <h1>Сегодня</h1>
+        <p class="widget-sub" id="widget-date"></p>
+      </div>
+      <a class="widget-open-full" href="./" title="Полное приложение">↗</a>
+    </header>
+    <ul class="widget-list" id="widget-list"></ul>
+    <form class="widget-add" id="widget-add">
+      <input type="text" id="widget-input" placeholder="Новая задача…" autocomplete="off" enterkeyhint="done" />
+      <button type="submit" class="btn widget-add-btn" aria-label="Добавить">+</button>
+    </form>
+  </div>
+
+  <script src="assets/pwa-install.js?v=1"></script>
+  <script src="assets/widget.js?v=1"></script>
+</body>
+</html>
