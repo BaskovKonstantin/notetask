@@ -2,7 +2,8 @@
 
 Personal task / ideas / workout diary with action history.
 
-**Live:** https://todo.baski.pro
+**Live:** https://baski.pro/todo/  
+**Subdomain (after DNS):** https://todo.baski.pro
 
 ## Stack
 
