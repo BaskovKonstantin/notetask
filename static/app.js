@@ -1,13 +1,9 @@
 const TOKEN_KEY = "notetask_token";
-const BASE = (() => {
+const BASE = window.NOTETASK_BASE ?? (() => {
   const path = window.location.pathname;
   if (path === "/todo" || path.startsWith("/todo/")) return "/todo";
   return "";
 })();
-if (BASE) {
-  const baseEl = document.getElementById("app-base");
-  if (baseEl) baseEl.setAttribute("href", `${BASE}/`);
-}
 
 const state = {
   view: "today",
@@ -15,8 +11,8 @@ const state = {
 };
 
 const titles = {
-  today: ["Сегодня", "Что сделать сегодня"],
-  inbox: ["Inbox", "Задачи без срока"],
+  today: ["Сегодня", "Задачи на сегодня и просроченные"],
+  inbox: ["Inbox", "Задачи без срока — сюда попадают новые"],
   someday: ["Идеи / планы", "Захватить мысль — разобрать потом"],
   upcoming: ["Предстоящие", "Срок позже сегодняшнего"],
   notes: ["Заметки", "Структурированные записи"],
@@ -24,6 +20,17 @@ const titles = {
   history: ["История", "Ничего не теряется"],
   stats: ["Статистика", "Streak и активность за 30 дней"],
 };
+
+const emptyHints = {
+  today: "Нет задач на сегодня. Добавь задачу ниже (срок подставится) или открой Inbox / Идеи.",
+  inbox: "Inbox пуст. Добавь задачу без даты.",
+  someday: "Пока нет идей. Выбери тип «Идея» или «План».",
+  upcoming: "Нет задач с будущим сроком.",
+};
+
+function todayIso() {
+  return new Date().toISOString().slice(0, 10);
+}
 
 async function api(path, opts = {}) {
   const headers = { "Content-Type": "application/json", ...(opts.headers || {}) };
@@ -96,6 +103,10 @@ function setView(view) {
   if (view === "someday") $("task-kind").value = "idea";
   else if (taskViews.includes(view)) $("task-kind").value = "task";
 
+  const dueInput = $("task-due");
+  if (view === "today") dueInput.value = todayIso();
+  else if (view !== "upcoming") dueInput.value = "";
+
   refresh();
 }
 
@@ -118,7 +129,7 @@ async function loadTasks(view) {
   const tasks = await api(`/api/tasks?view=${view}`);
   const root = $("task-list");
   if (!tasks.length) {
-    root.innerHTML = '<div class="empty">Пусто. Добавь первую запись сверху.</div>';
+    root.innerHTML = `<div class="empty">${emptyHints[view] || "Пусто."}</div>`;
     return;
   }
   root.innerHTML = tasks
@@ -280,7 +291,7 @@ $("login-form").addEventListener("submit", async (e) => {
     state.token = data.token;
     localStorage.setItem(TOKEN_KEY, state.token);
     showApp();
-    setView("today");
+    setView("inbox");
   } catch {
     $("login-error").classList.remove("hidden");
   }
@@ -304,20 +315,24 @@ $("backup-btn").onclick = async () => {
 
 $("task-form").addEventListener("submit", async (e) => {
   e.preventDefault();
-  const due = $("task-due").value || null;
+  const kind = $("task-kind").value;
+  let due = $("task-due").value || null;
+  if (kind === "task" && !due && state.view === "today") due = todayIso();
   const remind = $("task-remind").value ? new Date($("task-remind").value).toISOString() : null;
   await api("/api/tasks", {
     method: "POST",
     body: JSON.stringify({
       title: $("task-title").value.trim(),
-      kind: $("task-kind").value,
+      kind,
       priority: Number($("task-priority").value),
       due_at: due,
       remind_at: remind,
     }),
   });
   $("task-title").value = "";
-  await refresh();
+  if (kind === "idea" || kind === "plan") setView("someday");
+  else if (!due) setView("inbox");
+  else await refresh();
 });
 
 $("task-list").addEventListener("click", async (e) => {
@@ -406,7 +421,7 @@ async function boot() {
     // validate token via protected endpoint
     await api("/api/projects");
     showApp();
-    setView("today");
+    setView("inbox");
   } catch {
     showLogin();
   }

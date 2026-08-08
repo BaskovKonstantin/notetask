@@ -4,10 +4,10 @@ Updated: 2026-08-08
 
 ## Live
 
-- **Working now:** https://baski.pro/todo/ (Caddy `handle_path /todo*` → `127.0.0.1:8100`)
-- **Subdomain ready in Caddy:** `todo.baski.pro` → `:8100` (needs DNS A `todo` → `5.144.98.126`)
-- DNS API reg.ru: `ACCESS_DENIED_FROM_IP` from `5.144.98.126` (2026-08-08) — re-allowlist IP in reg.ru API settings, then:
-  `/home/kon/bin/regru-dns.sh add-a todo 5.144.98.126`
+- **Subdomain (LAN/WG via dnsmasq):** https://todo.baski.pro
+- **Fallback:** https://baski.pro/todo/
+- **Public DNS:** add A `todo` → `5.144.98.126` in reg.ru (API blocked `ACCESS_DENIED_FROM_IP` 2026-08-08)
+- Caddy vhost `todo.baski.pro` → `127.0.0.1:8100` (same pattern as treck.baski.pro)
 
 ## Product
 
