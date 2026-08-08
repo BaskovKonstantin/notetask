@@ -45,7 +45,8 @@ Personal tracker (not TreckBas):
 - Token: `TODOIST_API_TOKEN` in `.env` (gitignored), **never commit**
 - Run: `docker compose exec notetask python /app/scripts/import_todoist.py [--completed]`
 - Idempotent: `source=todoist` + `external_id` on tasks/projects
-- Maps: projects, due dates, priority (P1↔4), labels/sections → notes
+- Maps: projects by **P1→Работа, P2→Личные дела, P3→Тренировки, P4→без проекта**, due dates, priority, labels/sections → notes
+- Remap: `docker compose exec notetask python /app/scripts/import_todoist.py --remap-projects`
 - After import: revoke Todoist token in Settings → Integrations
 
 

@@ -23,6 +23,14 @@ from app.db import connect, ensure_defaults, log_action, migrate, utcnow
 API_BASE = "https://api.todoist.com/api/v1"
 SOURCE = "todoist"
 
+# NoteTask P-level -> catalog project name (P4 left unset for manual triage)
+PRIORITY_PROJECTS: dict[int, str | None] = {
+    1: "Работа",
+    2: "Личные дела",
+    3: "Тренировки",
+    4: None,
+}
+
 TODOIST_COLORS = {
     "berry_red": "#b8255f",
     "red": "#db4035",
@@ -74,6 +82,39 @@ def fetch_all(token: str, path: str, params: dict[str, str] | None = None) -> li
 
 def map_priority(todoist_priority: int | None) -> int:
     return max(1, min(4, 5 - int(todoist_priority or 1)))
+
+
+async def load_catalog_project_ids(db) -> dict[str, int]:
+    cur = await db.execute("SELECT id, name FROM projects WHERE deleted_at IS NULL")
+    return {row["name"]: row["id"] for row in await cur.fetchall()}
+
+
+def project_id_for_priority(priority: int, catalog: dict[str, int]) -> int | None:
+    name = PRIORITY_PROJECTS.get(priority)
+    if not name:
+        return None
+    return catalog.get(name)
+
+
+async def remap_tasks_by_priority(db, *, source: str | None = SOURCE) -> int:
+    catalog = await load_catalog_project_ids(db)
+    query = "SELECT id, priority, project_id FROM tasks WHERE deleted_at IS NULL"
+    params: tuple[Any, ...] = ()
+    if source:
+        query += " AND source=?"
+        params = (source,)
+    cur = await db.execute(query, params)
+    updated = 0
+    now = utcnow()
+    for row in await cur.fetchall():
+        new_pid = project_id_for_priority(int(row["priority"]), catalog)
+        if new_pid != row["project_id"]:
+            await db.execute(
+                "UPDATE tasks SET project_id=?, updated_at=? WHERE id=?",
+                (new_pid, now, row["id"]),
+            )
+            updated += 1
+    return updated
 
 
 def map_color(name: str | None) -> str:
@@ -239,6 +280,7 @@ async def run_import(*, include_completed: bool) -> dict[str, int]:
 
     db = await connect()
     await ensure_defaults(db)
+    catalog_projects = await load_catalog_project_ids(db)
 
     projects = fetch_all(token, "projects")
     sections = fetch_all(token, "sections")
@@ -256,7 +298,8 @@ async def run_import(*, include_completed: bool) -> dict[str, int]:
 
     for task in open_tasks:
         ext = task["id"]
-        project_id = project_map.get(task.get("project_id")) if task.get("project_id") else None
+        priority = map_priority(task.get("priority"))
+        project_id = project_id_for_priority(priority, catalog_projects)
         due_day, remind_at = parse_due(task.get("due"))
         notes = build_notes(
             description=task.get("description") or "",
@@ -275,7 +318,7 @@ async def run_import(*, include_completed: bool) -> dict[str, int]:
             project_id=project_id,
             title=title,
             notes=notes,
-            priority=map_priority(task.get("priority")),
+            priority=priority,
             due_at=due_day,
             remind_at=remind_at,
             status="open",
@@ -293,7 +336,7 @@ async def run_import(*, include_completed: bool) -> dict[str, int]:
             ext = item.get("task_id") or item.get("id")
             if not ext:
                 continue
-            project_id = project_map.get(item.get("project_id")) if item.get("project_id") else None
+            project_id = None
             section_name = sections_by_id.get(item.get("section_id") or "")
             notes = build_notes(section_name=section_name or None)
             inserted = await insert_task(
@@ -320,6 +363,16 @@ async def run_import(*, include_completed: bool) -> dict[str, int]:
     return stats
 
 
+async def run_remap(*, source: str | None = SOURCE) -> dict[str, int]:
+    db = await connect()
+    await ensure_defaults(db)
+    updated = await remap_tasks_by_priority(db, source=source)
+    await log_action(db, "todoist_remap_projects", "system", None, {"updated": updated, "source": source})
+    await db.commit()
+    await db.close()
+    return {"updated": updated}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Import Todoist data into NoteTask SQLite DB")
     parser.add_argument(
@@ -327,8 +380,16 @@ def main() -> None:
         action="store_true",
         help="Also import completed tasks (may overlap skip if already imported as open)",
     )
+    parser.add_argument(
+        "--remap-projects",
+        action="store_true",
+        help="Re-assign project_id on imported tasks by P1-P4 mapping (no API fetch)",
+    )
     args = parser.parse_args()
-    stats = asyncio.run(run_import(include_completed=args.completed))
+    if args.remap_projects:
+        stats = asyncio.run(run_remap())
+    else:
+        stats = asyncio.run(run_import(include_completed=args.completed))
     print(json.dumps(stats, ensure_ascii=False, indent=2))
 
 
