@@ -13,5 +13,6 @@ services:
       - ./data:/data
       - ./static:/app/static:ro
       - ./app:/app/app:ro
+      - ./scripts:/app/scripts:ro
     ports:
       - "127.0.0.1:8100:8100"

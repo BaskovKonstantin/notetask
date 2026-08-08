@@ -20,7 +20,9 @@ CREATE TABLE IF NOT EXISTS projects (
   sort INTEGER NOT NULL DEFAULT 0,
   deleted_at TEXT,
   created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
+  updated_at TEXT NOT NULL,
+  source TEXT,
+  external_id TEXT
 );
 
 CREATE TABLE IF NOT EXISTS tasks (
@@ -36,7 +38,9 @@ CREATE TABLE IF NOT EXISTS tasks (
   deleted_at TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
-  completed_at TEXT
+  completed_at TEXT,
+  source TEXT,
+  external_id TEXT
 );
 
 CREATE TABLE IF NOT EXISTS notes (
@@ -93,11 +97,34 @@ def utcnow() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
+async def ensure_column(db: aiosqlite.Connection, table: str, column: str, ddl: str) -> None:
+    cur = await db.execute(f"PRAGMA table_info({table})")
+    cols = [row[1] for row in await cur.fetchall()]
+    if column not in cols:
+        await db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+
+
+async def migrate(db: aiosqlite.Connection) -> None:
+    await ensure_column(db, "tasks", "source", "TEXT")
+    await ensure_column(db, "tasks", "external_id", "TEXT")
+    await ensure_column(db, "projects", "source", "TEXT")
+    await ensure_column(db, "projects", "external_id", "TEXT")
+    await db.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_source_ext "
+        "ON tasks(source, external_id) WHERE external_id IS NOT NULL"
+    )
+    await db.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_projects_source_ext "
+        "ON projects(source, external_id) WHERE external_id IS NOT NULL"
+    )
+
+
 async def connect() -> aiosqlite.Connection:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     db = await aiosqlite.connect(DB_PATH)
     db.row_factory = aiosqlite.Row
     await db.executescript(SCHEMA)
+    await migrate(db)
     await db.commit()
     return db
 

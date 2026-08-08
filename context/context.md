@@ -38,7 +38,15 @@ Personal tracker (not TreckBas):
 - Password: `NoteTask-2026-baski`
 - Change ASAP after first login if exposed in chat
 
-## Android widget
+## Todoist import
+
+- Script: `scripts/import_todoist.py`
+- Token: `TODOIST_API_TOKEN` in `.env` (gitignored), **never commit**
+- Run: `docker compose exec notetask python /app/scripts/import_todoist.py [--completed]`
+- Idempotent: `source=todoist` + `external_id` on tasks/projects
+- Maps: projects, due dates, priority (P1↔4), labels/sections → notes
+- After import: revoke Todoist token in Settings → Integrations
+
 
 Phase 2: Flutter/Kotlin client against same API + App Widget.
 
