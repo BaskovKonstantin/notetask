@@ -526,6 +526,87 @@ function priorityBadge(p) {
   return `<span class="badge">P${p}</span>`;
 }
 
+function taskDayKey(task) {
+  if (!task.due_at) return "none";
+  return task.due_at.slice(0, 10);
+}
+
+function taskTimeSortKey(task) {
+  const iso =
+    task.due_at && task.due_at.includes("T")
+      ? task.due_at
+      : task.remind_at && task.remind_at.includes("T")
+        ? task.remind_at
+        : null;
+  if (!iso) return 0;
+  try {
+    const d = new Date(iso);
+    return d.getHours() * 60 + d.getMinutes() + 1;
+  } catch {
+    return 0;
+  }
+}
+
+function formatTaskTime(task) {
+  const iso =
+    task.due_at && task.due_at.includes("T")
+      ? task.due_at
+      : task.remind_at && task.remind_at.includes("T")
+        ? task.remind_at
+        : null;
+  if (!iso) return "";
+  try {
+    return new Date(iso).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+  } catch {
+    return "";
+  }
+}
+
+function formatDayHeader(dayKey) {
+  if (dayKey === "none") return "Без срока";
+  const today = todayIso();
+  const tomorrow = toIsoDate(addDays(new Date(), 1));
+  if (dayKey === today) return "Сегодня";
+  if (dayKey === tomorrow) return "Завтра";
+  try {
+    return new Date(`${dayKey}T12:00:00`).toLocaleDateString("ru-RU", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+    });
+  } catch {
+    return dayKey;
+  }
+}
+
+function sortTasksInDayGroup(tasks) {
+  return [...tasks].sort((a, b) => {
+    const ta = taskTimeSortKey(a);
+    const tb = taskTimeSortKey(b);
+    if (ta !== tb) return ta - tb;
+    if (a.priority !== b.priority) return a.priority - b.priority;
+    return b.id - a.id;
+  });
+}
+
+function groupTasksByDay(tasks) {
+  const groups = new Map();
+  for (const task of tasks) {
+    const key = taskDayKey(task);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(task);
+  }
+  const keys = [...groups.keys()].sort((a, b) => {
+    if (a === "none") return 1;
+    if (b === "none") return -1;
+    return a.localeCompare(b);
+  });
+  return keys.map((key) => ({
+    day: key,
+    tasks: sortTasksInDayGroup(groups.get(key)),
+  }));
+}
+
 async function loadTasks(view) {
   let url = `/api/tasks?view=${view === "project" ? "all" : view}`;
   if (view === "project" && state.projectId) url += `&project_id=${state.projectId}`;
@@ -537,15 +618,23 @@ async function loadTasks(view) {
     return;
   }
 
+  const openTasks = tasks.filter((t) => t.status !== "done");
+  const doneTasks = tasks.filter((t) => t.status === "done");
   let html = "";
-  let seenDone = false;
-  for (const t of tasks) {
-    if (t.status === "done" && !seenDone) {
-      seenDone = true;
-      html += '<div class="list-divider">Выполнено</div>';
-    }
-    html += renderTaskItem(t, view, projectMap);
+
+  for (const group of groupTasksByDay(openTasks)) {
+    html += `<div class="day-group-header">${escapeHtml(formatDayHeader(group.day))}</div>`;
+    for (const t of group.tasks) html += renderTaskItem(t, view, projectMap);
   }
+
+  if (doneTasks.length) {
+    html += '<div class="list-divider">Выполнено</div>';
+    for (const group of groupTasksByDay(doneTasks)) {
+      html += `<div class="day-group-header day-group-header-done">${escapeHtml(formatDayHeader(group.day))}</div>`;
+      for (const t of group.tasks) html += renderTaskItem(t, view, projectMap);
+    }
+  }
+
   root.innerHTML = html;
 }
 
@@ -557,7 +646,8 @@ function renderTaskItem(t, view, projectMap) {
       : t.kind === "plan"
         ? '<span class="badge idea">план</span>'
         : "";
-  const due = t.due_at ? `<span class="badge">${t.due_at.slice(0, 10)}</span>` : "";
+  const time = formatTaskTime(t);
+  const timeBadge = time ? `<span class="badge time">${time}</span>` : "";
   const project =
     t.project_id && projectMap[t.project_id] && view !== "project"
       ? `<span class="badge">${escapeHtml(projectMap[t.project_id])}</span>`
@@ -571,7 +661,7 @@ function renderTaskItem(t, view, projectMap) {
         <button class="check${done ? " done" : ""}" data-complete="${t.id}" aria-label="${done ? "Выполнено" : "Отметить выполненным"}"></button>
         <div>
           <div class="item-title${done ? " done-title" : ""}">${escapeHtml(t.title)}</div>
-          <div class="item-meta">${priorityBadge(t.priority)}${kind}${due}${project}</div>
+          <div class="item-meta">${timeBadge}${priorityBadge(t.priority)}${kind}${project}</div>
         </div>
         <div class="item-actions">
           ${promote}
@@ -626,7 +716,6 @@ async function completeTaskItem(completeBtn) {
   if (completeBtn.classList.contains("done")) return;
   const item = completeBtn.closest(".item");
   const id = completeBtn.dataset.complete;
-  const root = $("task-list");
 
   playCompleteSound();
   completeBtn.classList.add("done");
@@ -640,27 +729,9 @@ async function completeTaskItem(completeBtn) {
     return;
   }
 
-  window.setTimeout(() => {
-    item.classList.remove("item-completing");
-    item.classList.add("is-done");
-    const title = item.querySelector(".item-title");
-    if (title) title.classList.add("done-title");
-
-    let divider = root.querySelector(".list-divider");
-    if (!divider) {
-      divider = document.createElement("div");
-      divider.className = "list-divider";
-      divider.textContent = "Выполнено";
-    } else {
-      divider.remove();
-    }
-
-    item.classList.add("item-slide-down");
-    root.appendChild(divider);
-    root.appendChild(item);
-
-    window.setTimeout(() => item.classList.remove("item-slide-down"), 450);
-  }, 280);
+  window.setTimeout(async () => {
+    await loadTasks(state.view);
+  }, 320);
 }
 
 async function loadNotes() {

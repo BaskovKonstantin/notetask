@@ -404,6 +404,27 @@ textarea { min-height: 90px; resize: vertical; }
   color: var(--muted);
 }
 
+.day-group-header {
+  margin: 18px 0 8px;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+.day-group-header:first-child { margin-top: 0; }
+.day-group-header-done {
+  font-size: 0.95rem;
+  color: var(--muted);
+}
+
+.badge.time {
+  background: rgba(31, 107, 74, 0.1);
+  border-color: rgba(31, 107, 74, 0.18);
+  color: var(--accent);
+  font-weight: 650;
+}
+
 .done-title {
   text-decoration: line-through;
   color: var(--muted);
