@@ -14,20 +14,13 @@ const state = {
 
 const titles = {
   today: ["Сегодня", "Задачи на сегодня и просроченные"],
-  inbox: ["Inbox", "Задачи без срока — сюда попадают новые"],
-  someday: ["Идеи / планы", "Захватить мысль — разобрать потом"],
-  upcoming: ["Предстоящие", "Срок позже сегодняшнего"],
-  notes: ["Заметки", "Структурированные записи"],
-  workouts: ["Дневник", "Дневник подходов и прогресса"],
   history: ["История", "Ничего не теряется"],
   stats: ["Статистика", "Streak и активность за 30 дней"],
+  project: ["Раздел", "Задачи раздела"],
 };
 
 const emptyHints = {
-  today: "Нет задач на сегодня. Добавь задачу ниже (срок подставится) или открой Inbox / Идеи.",
-  inbox: "Inbox пуст. Добавь задачу без даты.",
-  someday: "Пока нет идей. Выбери тип «Идея» или «План».",
-  upcoming: "Нет задач с будущим сроком.",
+  today: "Нет задач на сегодня. Добавь задачу ниже (срок подставится).",
   project: "Нет задач в этом разделе.",
 };
 
@@ -492,19 +485,18 @@ function setView(view, opts = {}) {
     $("view-sub").textContent = s;
   }
 
-  const taskViews = ["today", "inbox", "someday", "upcoming", "project"];
+  const taskViews = ["today", "project"];
   $("view-tasks").classList.toggle("hidden", !taskViews.includes(view));
-  $("view-notes").classList.toggle("hidden", view !== "notes");
-  $("view-workouts").classList.toggle("hidden", view !== "workouts");
+  $("view-notes").classList.add("hidden");
+  $("view-workouts").classList.add("hidden");
   $("view-history").classList.toggle("hidden", view !== "history");
   $("view-stats").classList.toggle("hidden", view !== "stats");
 
-  if (view === "someday") $("task-kind").value = "idea";
-  else if (taskViews.includes(view)) $("task-kind").value = "task";
+  if (taskViews.includes(view)) $("task-kind").value = "task";
 
   const dueInput = $("task-due");
   if (view === "today") dueInput.value = todayIso();
-  else if (view !== "upcoming") dueInput.value = "";
+  else if (view === "project") dueInput.value = "";
 
   updateTaskChips();
   track("view_opened", "ui", null, { view, project_id: state.projectId });
@@ -513,9 +505,7 @@ function setView(view, opts = {}) {
 
 async function refresh() {
   const v = state.view;
-  if (["today", "inbox", "someday", "upcoming", "project"].includes(v)) await loadTasks(v);
-  else if (v === "notes") await loadNotes();
-  else if (v === "workouts") await loadWorkouts();
+  if (["today", "project"].includes(v)) await loadTasks(v);
   else if (v === "history") await loadHistory();
   else if (v === "stats") await loadStats();
 }
@@ -1024,9 +1014,13 @@ $("task-form").addEventListener("submit", async (e) => {
   $("task-title").value = "";
   syncTaskTitleHighlight();
   updateTaskChips();
-  if (kind === "idea" || kind === "plan") setView("someday");
-  else if (!due) setView("inbox");
-  else await refresh();
+  if (kind === "idea" || kind === "plan") {
+    const ideas = state.projects.find((p) => p.name === "Идеи");
+    if (ideas) setView("project", { projectId: ideas.id });
+    else await refresh();
+  } else {
+    await refresh();
+  }
 });
 
 $("task-list").addEventListener("click", async (e) => {
