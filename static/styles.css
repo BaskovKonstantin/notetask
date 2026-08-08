@@ -124,6 +124,112 @@ button, input, select, textarea {
   align-items: start;
 }
 
+.task-composer { align-items: stretch; }
+.task-composer-body { min-width: 0; }
+
+.task-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.chip-popover { position: relative; }
+
+.chip-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.65);
+  font-size: 0.78rem;
+  color: var(--muted);
+  cursor: pointer;
+  line-height: 1.2;
+}
+.chip-btn:hover,
+.chip-btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: #fff;
+}
+.chip-btn.has-value { color: var(--ink); }
+.chip-btn.has-value .chip-label { font-weight: 650; }
+
+.chip-icon {
+  display: inline-flex;
+  opacity: 0.75;
+}
+
+.chip-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 30;
+  min-width: 140px;
+  padding: 6px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+.chip-menu-wide { min-width: 210px; }
+
+.chip-option {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+.chip-option:hover,
+.chip-option.selected {
+  background: rgba(31, 107, 74, 0.1);
+  color: var(--accent);
+}
+
+.priority-picker {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+}
+.priority-picker .chip-option {
+  text-align: center;
+  padding: 7px 0;
+  font-weight: 650;
+}
+.priority-picker .p1 { color: #9b2c2c; }
+.priority-picker .p2 { color: #c45c26; }
+.priority-picker .p3 { color: #8a6d1f; }
+.priority-picker .p4 { color: var(--muted); }
+
+.chip-menu input[type="date"],
+.chip-menu input[type="datetime-local"] {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 0.85rem;
+  border-radius: 10px;
+}
+
+.chip-clear {
+  margin-top: 6px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.78rem;
+  padding: 6px;
+  cursor: pointer;
+  border-radius: 8px;
+}
+.chip-clear:hover { background: rgba(0, 0, 0, 0.04); color: var(--ink); }
+
 .field-row {
   display: flex;
   flex-wrap: wrap;

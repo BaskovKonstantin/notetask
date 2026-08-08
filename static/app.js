@@ -88,6 +88,125 @@ function showApp() {
   $("app").classList.remove("hidden");
 }
 
+const kindLabels = { task: "Задача", idea: "Идея", plan: "План" };
+
+function fmtShortDay(isoDate) {
+  if (!isoDate) return "";
+  try {
+    return new Date(`${isoDate}T12:00:00`).toLocaleDateString("ru-RU", {
+      day: "numeric",
+      month: "short",
+    });
+  } catch {
+    return isoDate;
+  }
+}
+
+function fmtShortDateTime(value) {
+  if (!value) return "";
+  try {
+    return new Date(value).toLocaleString("ru-RU", {
+      day: "numeric",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return value;
+  }
+}
+
+function closeTaskPopovers() {
+  document.querySelectorAll(".chip-menu").forEach((menu) => menu.classList.add("hidden"));
+  document.querySelectorAll(".chip-btn").forEach((btn) => {
+    btn.classList.remove("active");
+    btn.setAttribute("aria-expanded", "false");
+  });
+}
+
+function updateTaskChips() {
+  const kind = $("task-kind").value;
+  $("chip-kind-label").textContent = kindLabels[kind] || kind;
+  document.querySelectorAll("[data-set-kind]").forEach((btn) => {
+    btn.classList.toggle("selected", btn.dataset.setKind === kind);
+  });
+
+  const priority = $("task-priority").value;
+  $("chip-priority-label").textContent = `P${priority}`;
+  $("chip-priority").classList.toggle("has-value", priority !== "4");
+  document.querySelectorAll("[data-set-priority]").forEach((btn) => {
+    btn.classList.toggle("selected", btn.dataset.setPriority === priority);
+  });
+
+  const due = $("task-due").value;
+  $("chip-due-label").textContent = due ? fmtShortDay(due) : "Срок";
+  $("chip-due").classList.toggle("has-value", !!due);
+
+  const remind = $("task-remind").value;
+  $("chip-remind-label").textContent = remind ? fmtShortDateTime(remind) : "Напомн.";
+  $("chip-remind").classList.toggle("has-value", !!remind);
+}
+
+function initTaskMetaChips() {
+  document.querySelectorAll(".chip-popover .chip-btn").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const menu = btn.parentElement.querySelector(".chip-menu");
+      const wasOpen = menu && !menu.classList.contains("hidden");
+      closeTaskPopovers();
+      if (menu && !wasOpen) {
+        menu.classList.remove("hidden");
+        btn.classList.add("active");
+        btn.setAttribute("aria-expanded", "true");
+        const input = menu.querySelector("input");
+        if (input?.showPicker) {
+          window.setTimeout(() => input.showPicker(), 0);
+        } else if (input) {
+          input.focus();
+        }
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-set-kind]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      $("task-kind").value = btn.dataset.setKind;
+      updateTaskChips();
+      closeTaskPopovers();
+    });
+  });
+
+  document.querySelectorAll("[data-set-priority]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      $("task-priority").value = btn.dataset.setPriority;
+      updateTaskChips();
+      closeTaskPopovers();
+    });
+  });
+
+  $("task-due").addEventListener("change", () => {
+    updateTaskChips();
+    closeTaskPopovers();
+  });
+  $("task-remind").addEventListener("change", updateTaskChips);
+
+  document.querySelectorAll("[data-clear]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const el = $(btn.dataset.clear);
+      if (el) el.value = "";
+      updateTaskChips();
+      closeTaskPopovers();
+    });
+  });
+
+  document.addEventListener("click", closeTaskPopovers);
+  document.querySelectorAll(".chip-menu").forEach((menu) => {
+    menu.addEventListener("click", (e) => e.stopPropagation());
+  });
+
+  updateTaskChips();
+}
+
 function fmtDate(iso) {
   if (!iso) return "";
   try {
@@ -125,6 +244,7 @@ function setView(view) {
   if (view === "today") dueInput.value = todayIso();
   else if (view !== "upcoming") dueInput.value = "";
 
+  updateTaskChips();
   track("view_opened", "ui", null, { view });
   refresh();
 }
@@ -415,6 +535,7 @@ $("task-form").addEventListener("submit", async (e) => {
     }),
   });
   $("task-title").value = "";
+  updateTaskChips();
   if (kind === "idea" || kind === "plan") setView("someday");
   else if (!due) setView("inbox");
   else await refresh();
@@ -497,6 +618,7 @@ $("workout-list").addEventListener("click", async (e) => {
 async function boot() {
   addWorkoutSetRow();
   $("wo-started").value = localInputValue();
+  initTaskMetaChips();
   if (!state.token) {
     showLogin();
     return;

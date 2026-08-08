@@ -15,7 +15,7 @@
       window.NOTETASK_BASE = base === "/todo/" ? "/todo" : "";
     })();
   </script>
-  <link rel="stylesheet" href="assets/styles.css?v=6" />
+  <link rel="stylesheet" href="assets/styles.css?v=7" />
 </head>
 <body>
   <div id="login" class="login-wrap">
@@ -58,24 +58,80 @@
 
       <section id="view-tasks" class="panel">
         <form class="composer" id="task-form">
-          <div class="composer row">
-            <input type="text" id="task-title" placeholder="Новая задача или идея…" required />
+          <div class="composer row task-composer">
+            <div class="task-composer-body">
+              <input type="text" id="task-title" placeholder="Новая задача или идея…" required />
+              <div class="task-chips" id="task-chips">
+                <div class="chip-popover">
+                  <button type="button" class="chip-btn" id="chip-kind" aria-expanded="false" aria-controls="pop-kind">
+                    <span class="chip-icon" aria-hidden="true">
+                      <svg viewBox="0 0 16 16" width="14" height="14"><path fill="currentColor" d="M2 3.5h12v1.2H2V3.5zm0 3.8h12v1.2H2V7.3zm0 3.8h8v1.2H2v-1.2z"/></svg>
+                    </span>
+                    <span class="chip-label" id="chip-kind-label">Задача</span>
+                  </button>
+                  <div class="chip-menu hidden" id="pop-kind" role="menu">
+                    <button type="button" class="chip-option" data-set-kind="task" role="menuitem">Задача</button>
+                    <button type="button" class="chip-option" data-set-kind="idea" role="menuitem">Идея</button>
+                    <button type="button" class="chip-option" data-set-kind="plan" role="menuitem">План</button>
+                  </div>
+                  <select id="task-kind" class="hidden" tabindex="-1" aria-hidden="true">
+                    <option value="task">Задача</option>
+                    <option value="idea">Идея</option>
+                    <option value="plan">План</option>
+                  </select>
+                </div>
+
+                <div class="chip-popover">
+                  <button type="button" class="chip-btn" id="chip-priority" aria-expanded="false" aria-controls="pop-priority">
+                    <span class="chip-icon" aria-hidden="true">
+                      <svg viewBox="0 0 16 16" width="14" height="14"><path fill="currentColor" d="M3 2.5l5 2.8 5-2.8v11L8 10.7 3 13.5V2.5z"/></svg>
+                    </span>
+                    <span class="chip-label" id="chip-priority-label">P4</span>
+                  </button>
+                  <div class="chip-menu hidden" id="pop-priority" role="menu">
+                    <div class="priority-picker">
+                      <button type="button" class="chip-option p4" data-set-priority="4" role="menuitem">P4</button>
+                      <button type="button" class="chip-option p3" data-set-priority="3" role="menuitem">P3</button>
+                      <button type="button" class="chip-option p2" data-set-priority="2" role="menuitem">P2</button>
+                      <button type="button" class="chip-option p1" data-set-priority="1" role="menuitem">P1</button>
+                    </div>
+                  </div>
+                  <select id="task-priority" class="hidden" tabindex="-1" aria-hidden="true">
+                    <option value="4">P4</option>
+                    <option value="3">P3</option>
+                    <option value="2">P2</option>
+                    <option value="1">P1</option>
+                  </select>
+                </div>
+
+                <div class="chip-popover">
+                  <button type="button" class="chip-btn" id="chip-due" aria-expanded="false" aria-controls="pop-due">
+                    <span class="chip-icon" aria-hidden="true">
+                      <svg viewBox="0 0 16 16" width="14" height="14"><path fill="currentColor" d="M3 2h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zm1 2v1h1V4h6v1h1V4h1v2H4V4zm0 4h8v1H4V8z"/></svg>
+                    </span>
+                    <span class="chip-label" id="chip-due-label">Срок</span>
+                  </button>
+                  <div class="chip-menu chip-menu-wide hidden" id="pop-due" role="dialog" aria-label="Срок">
+                    <input type="date" id="task-due" />
+                    <button type="button" class="chip-clear" data-clear="task-due">Без срока</button>
+                  </div>
+                </div>
+
+                <div class="chip-popover">
+                  <button type="button" class="chip-btn" id="chip-remind" aria-expanded="false" aria-controls="pop-remind">
+                    <span class="chip-icon" aria-hidden="true">
+                      <svg viewBox="0 0 16 16" width="14" height="14"><path fill="currentColor" d="M8 1.5a4.5 4.5 0 0 0-4.5 4.5v2.1L2 10.5h12l-1.5-2.4V6A4.5 4.5 0 0 0 8 1.5zm-2.2 11h4.4a1.6 1.6 0 0 1-4.4 0z"/></svg>
+                    </span>
+                    <span class="chip-label" id="chip-remind-label">Напомн.</span>
+                  </button>
+                  <div class="chip-menu chip-menu-wide hidden" id="pop-remind" role="dialog" aria-label="Напоминание">
+                    <input type="datetime-local" id="task-remind" title="Напоминание" />
+                    <button type="button" class="chip-clear" data-clear="task-remind">Без напоминания</button>
+                  </div>
+                </div>
+              </div>
+            </div>
             <button class="btn" type="submit">Добавить</button>
-          </div>
-          <div class="field-row">
-            <select id="task-kind">
-              <option value="task">Задача</option>
-              <option value="idea">Идея</option>
-              <option value="plan">План</option>
-            </select>
-            <select id="task-priority">
-              <option value="4">P4</option>
-              <option value="3">P3</option>
-              <option value="2">P2</option>
-              <option value="1">P1</option>
-            </select>
-            <input type="date" id="task-due" />
-            <input type="datetime-local" id="task-remind" title="Напоминание" />
           </div>
         </form>
         <div class="list" id="task-list"></div>
@@ -119,6 +175,6 @@
     </main>
   </div>
 
-  <script src="assets/app.js?v=6"></script>
+  <script src="assets/app.js?v=7"></script>
 </body>
 </html>
