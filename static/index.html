@@ -15,7 +15,7 @@
       window.NOTETASK_BASE = base === "/todo/" ? "/todo" : "";
     })();
   </script>
-  <link rel="stylesheet" href="assets/styles.css?v=13" />
+  <link rel="stylesheet" href="assets/styles.css?v=15" />
 </head>
 <body>
   <div id="login" class="login-wrap">
@@ -54,7 +54,8 @@
       </div>
 
       <section id="view-tasks" class="panel">
-        <form class="composer" id="task-form">
+        <button type="button" class="task-add-trigger" id="task-add-trigger">+ Добавить задачу</button>
+        <form class="composer hidden" id="task-form">
           <div class="composer row task-composer">
             <div class="task-composer-body">
               <div class="task-title-wrap">
@@ -175,6 +176,6 @@
     </main>
   </div>
 
-  <script src="assets/app.js?v=14"></script>
+  <script src="assets/app.js?v=15"></script>
 </body>
 </html>

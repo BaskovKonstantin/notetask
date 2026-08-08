@@ -465,7 +465,20 @@ function fmtDate(iso) {
   }
 }
 
+function hideTaskForm() {
+  $("task-form").classList.add("hidden");
+  $("task-add-trigger")?.classList.remove("hidden");
+  closeTaskPopovers();
+}
+
+function showTaskForm() {
+  $("task-form").classList.remove("hidden");
+  $("task-add-trigger")?.classList.add("hidden");
+  window.setTimeout(() => $("task-title").focus(), 30);
+}
+
 function setView(view, opts = {}) {
+  if (!opts.keepTaskForm) hideTaskForm();
   state.view = view;
   state.projectId = opts.projectId ?? null;
 
@@ -923,11 +936,11 @@ function escapeAttr(str) {
 function openTaskCapture() {
   if ($("app").classList.contains("hidden")) return;
   track("shortcut_used", "ui", null, { shortcut: "ctrl+space", target: "task_capture" });
-  setView("today");
+  setView("today", { keepTaskForm: true });
+  showTaskForm();
   const panel = $("view-tasks");
   panel.classList.add("capture-focus");
   panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  window.setTimeout(() => $("task-title").focus(), 50);
   window.setTimeout(() => panel.classList.remove("capture-focus"), 1400);
 }
 
@@ -991,6 +1004,15 @@ $("backup-btn").onclick = async () => {
   a.click();
 };
 
+$("task-add-trigger").addEventListener("click", () => {
+  if (!["today", "project"].includes(state.view)) setView("today", { keepTaskForm: true });
+  showTaskForm();
+});
+
+$("task-title").addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !e.target.value.trim()) hideTaskForm();
+});
+
 $("task-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const parsed = parseTaskInput($("task-title").value);
@@ -1016,6 +1038,7 @@ $("task-form").addEventListener("submit", async (e) => {
   $("task-title").value = "";
   syncTaskTitleHighlight();
   updateTaskChips();
+  hideTaskForm();
   if (kind === "idea" || kind === "plan") {
     const ideas = state.projects.find((p) => p.name === "Идеи");
     if (ideas) setView("project", { projectId: ideas.id });
@@ -1103,6 +1126,7 @@ async function boot() {
   $("wo-started").value = localInputValue();
   initTaskMetaChips();
   initTaskTitleHighlight();
+  hideTaskForm();
   if (!state.token) {
     showLogin();
     return;
