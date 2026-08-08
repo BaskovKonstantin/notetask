@@ -87,6 +87,14 @@ function showApp() {
 
 const kindLabels = { task: "Задача", idea: "Идея", plan: "План" };
 
+const CHIP_ICON = {
+  project: '<svg viewBox="0 0 16 16" width="13" height="13"><path fill="currentColor" d="M2 4.5h5v7H2v-7zm7 0h5v7H9v-7z"/></svg>',
+  priority: '<svg viewBox="0 0 16 16" width="13" height="13"><path fill="currentColor" d="M3 2.5l5 2.8 5-2.8v11L8 10.7 3 13.5V2.5z"/></svg>',
+  time: '<svg viewBox="0 0 16 16" width="13" height="13"><path fill="currentColor" d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13zm0 1.2a5.3 5.3 0 1 1 0 10.6 5.3 5.3 0 0 1 0-10.6zm.6 2.5v3.2l2.4 1.4-.6 1-3-1.8V5.2h1.2z"/></svg>',
+  location: '<svg viewBox="0 0 16 16" width="13" height="13"><path fill="currentColor" d="M8 1.2a4.8 4.8 0 0 0-4.8 4.8c0 3.6 4.8 8.8 4.8 8.8s4.8-5.2 4.8-8.8A4.8 4.8 0 0 0 8 1.2zm0 6.5a1.7 1.7 0 1 1 0-3.4 1.7 1.7 0 0 1 0 3.4z"/></svg>',
+  cost: '<svg viewBox="0 0 16 16" width="13" height="13"><path fill="currentColor" d="M2.5 4.5h11v7h-11v-7zm1.5 1.5v4h8V6h-8zm2 3.5H5V7h1v2.5zm3 0H8V7h1.5v2.5z"/></svg>',
+};
+
 const RU_MONTHS = {
   янв: 0, январ: 0, фев: 1, феврал: 1, мар: 2, март: 2, апр: 3, апрел: 3,
   май: 4, мая: 4, июн: 5, июн: 5, июл: 6, июл: 6, авг: 7, август: 7,
@@ -390,6 +398,21 @@ function updateTaskChips() {
   const remind = $("task-remind").value;
   $("chip-remind-label").textContent = remind ? fmtShortDateTime(remind) : "Напомн.";
   $("chip-remind").classList.toggle("has-value", !!remind);
+
+  const location = $("task-location").value.trim();
+  $("chip-location-label").textContent = location ? truncateText(location, 14) : "Место";
+  $("chip-location").classList.toggle("has-value", !!location);
+
+  const costRaw = $("task-cost").value;
+  const costType = $("task-cost-type-value").value || "expense";
+  const cost = costRaw ? Number(costRaw) : null;
+  $("chip-cost-label").textContent = cost ? formatMoney(cost, costType) : "Сумма";
+  $("chip-cost").classList.toggle("has-value", !!cost);
+  $("chip-cost").classList.toggle("cost-expense", costType === "expense");
+  $("chip-cost").classList.toggle("cost-income", costType === "income");
+  document.querySelectorAll("[data-set-cost-type]").forEach((btn) => {
+    btn.classList.toggle("selected", btn.dataset.setCostType === costType);
+  });
 }
 
 function initTaskMetaChips() {
@@ -434,6 +457,15 @@ function initTaskMetaChips() {
     closeTaskPopovers();
   });
   $("task-remind").addEventListener("change", updateTaskChips);
+  $("task-location").addEventListener("input", updateTaskChips);
+  $("task-cost").addEventListener("input", updateTaskChips);
+
+  document.querySelectorAll("[data-set-cost-type]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      $("task-cost-type-value").value = btn.dataset.setCostType;
+      updateTaskChips();
+    });
+  });
 
   document.querySelectorAll("[data-clear]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -545,6 +577,124 @@ function priorityBadge(p) {
   if (p === 1) return '<span class="badge p1">P1</span>';
   if (p === 2) return '<span class="badge p2">P2</span>';
   return `<span class="badge">P${p}</span>`;
+}
+
+function truncateText(str, max) {
+  const s = String(str || "").trim();
+  if (s.length <= max) return s;
+  return `${s.slice(0, max - 1)}…`;
+}
+
+function formatMoney(amount, type = "expense") {
+  const n = Number(amount);
+  if (!Number.isFinite(n) || n === 0) return "—";
+  const formatted = n.toLocaleString("ru-RU", { maximumFractionDigits: 2 });
+  return type === "income" ? `+${formatted} ₽` : `−${formatted} ₽`;
+}
+
+function taskDueParts(task) {
+  if (!task.due_at) return { date: "", time: "" };
+  return {
+    date: task.due_at.slice(0, 10),
+    time: task.due_at.includes("T") ? task.due_at.slice(11, 16) : "",
+  };
+}
+
+function mergeTaskDue(date, time) {
+  if (!date) return null;
+  if (time) {
+    const d = new Date(`${date}T${time}:00`);
+    return Number.isNaN(d.getTime()) ? date : d.toISOString();
+  }
+  return date;
+}
+
+async function patchTask(taskId, patch) {
+  await api(`/api/tasks/${taskId}`, { method: "PATCH", body: JSON.stringify(patch) });
+  await refresh();
+}
+
+function renderTaskAttrs(t, projectMap) {
+  const due = taskDueParts(t);
+  const projectName = t.project_id ? projectMap[t.project_id] || "Раздел" : "Раздел";
+  const hasProject = !!t.project_id;
+  const hasPriority = t.priority !== 4;
+  const hasDue = !!due.date || !!due.time;
+  const hasLocation = !!t.location;
+  const hasCost = t.cost != null && Number(t.cost) !== 0;
+  const costType = t.cost_type === "income" ? "income" : "expense";
+  const dueLabel = due.date ? fmtShortDay(due.date) : "Срок";
+
+  const projects = [...state.projects].sort((a, b) => a.sort - b.sort || a.id - b.id);
+  const projectOptions = [
+    `<button type="button" class="chip-option${!t.project_id ? " selected" : ""}" data-task-patch='{"project_id":null}'>Без раздела</button>`,
+    ...projects.map(
+      (p) =>
+        `<button type="button" class="chip-option${t.project_id === p.id ? " selected" : ""}" data-task-patch='{"project_id":${p.id}}'><span class="project-dot" style="background:${escapeAttr(p.color)}"></span>${escapeHtml(p.name)}</button>`,
+    ),
+  ].join("");
+
+  return `
+    <div class="task-attrs" data-task-id="${t.id}">
+      <div class="chip-popover">
+        <button type="button" class="chip-btn${hasProject ? " has-value" : ""}" aria-expanded="false">
+          <span class="chip-icon">${CHIP_ICON.project}</span>
+          <span class="chip-label">${escapeHtml(truncateText(projectName, 12))}</span>
+        </button>
+        <div class="chip-menu chip-menu-wide hidden" role="menu">${projectOptions}</div>
+      </div>
+      <div class="chip-popover">
+        <button type="button" class="chip-btn${hasPriority ? " has-value" : ""}" aria-expanded="false">
+          <span class="chip-icon">${CHIP_ICON.priority}</span>
+          <span class="chip-label">P${t.priority}</span>
+        </button>
+        <div class="chip-menu hidden" role="menu">
+          <div class="priority-picker">
+            ${[4, 3, 2, 1]
+              .map(
+                (p) =>
+                  `<button type="button" class="chip-option p${p}${t.priority === p ? " selected" : ""}" data-task-patch='{"priority":${p}}'>P${p}</button>`,
+              )
+              .join("")}
+          </div>
+        </div>
+      </div>
+      <div class="chip-popover">
+        <button type="button" class="chip-btn${hasDue ? " has-value" : ""}" aria-expanded="false">
+          <span class="chip-icon">${CHIP_ICON.time}</span>
+          <span class="chip-label">${due.time || dueLabel}</span>
+        </button>
+        <div class="chip-menu chip-menu-wide hidden" role="dialog" aria-label="Срок и время">
+          <input type="date" data-task-field="due-date" value="${escapeAttr(due.date)}" />
+          <input type="time" data-task-field="due-time" value="${escapeAttr(due.time)}" />
+          <button type="button" class="chip-clear" data-task-clear-due>Без срока</button>
+        </div>
+      </div>
+      <div class="chip-popover">
+        <button type="button" class="chip-btn${hasLocation ? " has-value" : ""}" aria-expanded="false">
+          <span class="chip-icon">${CHIP_ICON.location}</span>
+          <span class="chip-label">${escapeHtml(truncateText(t.location, 12) || "Место")}</span>
+        </button>
+        <div class="chip-menu chip-menu-wide hidden" role="dialog" aria-label="Место">
+          <input type="text" data-task-field="location" value="${escapeAttr(t.location || "")}" placeholder="Адрес, зал…" autocomplete="off" />
+          <button type="button" class="chip-clear" data-task-clear-location>Без места</button>
+        </div>
+      </div>
+      <div class="chip-popover">
+        <button type="button" class="chip-btn ${costType}${hasCost ? " has-value" : ""}" aria-expanded="false">
+          <span class="chip-icon">${CHIP_ICON.cost}</span>
+          <span class="chip-label">${hasCost ? formatMoney(t.cost, costType) : "Сумма"}</span>
+        </button>
+        <div class="chip-menu chip-menu-wide hidden" role="dialog" aria-label="Сумма">
+          <div class="cost-type-toggle">
+            <button type="button" class="chip-option cost-expense${costType === "expense" ? " selected" : ""}" data-task-cost-type="expense">Расход</button>
+            <button type="button" class="chip-option cost-income${costType === "income" ? " selected" : ""}" data-task-cost-type="income">Доход</button>
+          </div>
+          <input type="number" data-task-field="cost" min="0" step="0.01" value="${t.cost != null ? escapeAttr(String(t.cost)) : ""}" placeholder="0" inputmode="decimal" />
+          <button type="button" class="chip-clear" data-task-clear-cost>Без суммы</button>
+        </div>
+      </div>
+    </div>`;
 }
 
 function taskDayKey(task) {
@@ -667,12 +817,6 @@ function renderTaskItem(t, view, projectMap) {
       : t.kind === "plan"
         ? '<span class="badge idea">план</span>'
         : "";
-  const time = formatTaskTime(t);
-  const timeBadge = time ? `<span class="badge time">${time}</span>` : "";
-  const project =
-    t.project_id && projectMap[t.project_id] && view !== "project"
-      ? `<span class="badge">${escapeHtml(projectMap[t.project_id])}</span>`
-      : "";
   const promote =
     t.kind !== "task" && !done
       ? `<button class="btn ghost small" data-promote="${t.id}">В задачу</button>`
@@ -680,9 +824,12 @@ function renderTaskItem(t, view, projectMap) {
   return `
       <div class="item${done ? " is-done" : ""}" data-id="${t.id}">
         <button class="check${done ? " done" : ""}" data-complete="${t.id}" aria-label="${done ? "Выполнено" : "Отметить выполненным"}"></button>
-        <div>
-          <div class="item-title${done ? " done-title" : ""}">${escapeHtml(t.title)}</div>
-          <div class="item-meta">${timeBadge}${priorityBadge(t.priority)}${kind}${project}</div>
+        <div class="item-body">
+          <div class="item-title-row">
+            <div class="item-title${done ? " done-title" : ""}">${escapeHtml(t.title)}</div>
+            ${kind}
+          </div>
+          ${renderTaskAttrs(t, projectMap)}
         </div>
         <div class="item-actions">
           ${promote}
@@ -935,6 +1082,33 @@ async function loadStats() {
       return `<div class="${cls}" style="height:${Math.max(4, h)}%" title="${d.day}: ${d.completions}/${d.workouts}"></div>`;
     })
     .join("");
+
+  const fin = s.finance || { expense_30d: 0, income_30d: 0, balance_30d: 0, entries: [] };
+  $("finance-cards").innerHTML = `
+    <div class="stat"><div class="n">${Number(fin.expense_30d || 0).toLocaleString("ru-RU")} ₽</div><div class="l">Расходы 30д</div></div>
+    <div class="stat"><div class="n">${Number(fin.income_30d || 0).toLocaleString("ru-RU")} ₽</div><div class="l">Доходы 30д</div></div>
+    <div class="stat"><div class="n">${formatMoney(Math.abs(fin.balance_30d || 0), fin.balance_30d >= 0 ? "income" : "expense")}</div><div class="l">Баланс 30д</div></div>`;
+
+  const projectMap = Object.fromEntries(state.projects.map((p) => [p.id, p.name]));
+  $("finance-list").innerHTML = fin.entries?.length
+    ? fin.entries
+        .map((e) => {
+          const type = e.cost_type === "income" ? "income" : "expense";
+          const meta = [
+            e.due_at ? fmtShortDay(e.due_at.slice(0, 10)) : "",
+            e.location ? truncateText(e.location, 24) : "",
+            e.project_id ? projectMap[e.project_id] : "",
+          ]
+            .filter(Boolean)
+            .join(" · ");
+          return `<div class="finance-item">
+            <div class="finance-item-title">${escapeHtml(e.title)}</div>
+            <div class="finance-amount ${type}">${formatMoney(e.cost, type)}</div>
+            ${meta ? `<div class="finance-item-meta">${escapeHtml(meta)}</div>` : ""}
+          </div>`;
+        })
+        .join("")
+    : '<div class="empty">Нет сумм в задачах. Укажи «Сумма» в плашке под задачей.</div>';
 }
 
 function escapeHtml(str) {
@@ -1039,6 +1213,9 @@ $("task-form").addEventListener("submit", async (e) => {
   const priority = parsed.meta.priority || Number($("task-priority").value);
   const title = parsed.cleanTitle || $("task-title").value.trim();
   const labelsNote = parsed.meta.labels?.length ? `Метки: ${parsed.meta.labels.join(", ")}` : "";
+  const location = $("task-location").value.trim() || null;
+  const costVal = $("task-cost").value ? Number($("task-cost").value) : null;
+  const costType = costVal ? $("task-cost-type-value").value || "expense" : null;
   await api("/api/tasks", {
     method: "POST",
     body: JSON.stringify({
@@ -1049,9 +1226,15 @@ $("task-form").addEventListener("submit", async (e) => {
       due_at: due,
       remind_at: remind,
       project_id: parsed.meta.projectId || (state.view === "project" ? state.projectId : null) || null,
+      location,
+      cost: costVal,
+      cost_type: costType,
     }),
   });
   $("task-title").value = "";
+  $("task-location").value = "";
+  $("task-cost").value = "";
+  $("task-cost-type-value").value = "expense";
   syncTaskTitleHighlight();
   updateTaskChips();
   hideTaskForm();
@@ -1065,6 +1248,67 @@ $("task-form").addEventListener("submit", async (e) => {
 });
 
 $("task-list").addEventListener("click", async (e) => {
+  const attrsRoot = e.target.closest(".task-attrs");
+  if (attrsRoot) {
+    const patchBtn = e.target.closest("[data-task-patch]");
+    if (patchBtn) {
+      e.stopPropagation();
+      await patchTask(Number(attrsRoot.dataset.taskId), JSON.parse(patchBtn.dataset.taskPatch));
+      closeTaskPopovers();
+      return;
+    }
+    const costTypeBtn = e.target.closest("[data-task-cost-type]");
+    if (costTypeBtn) {
+      e.stopPropagation();
+      attrsRoot.querySelectorAll("[data-task-cost-type]").forEach((b) => {
+        b.classList.toggle("selected", b === costTypeBtn);
+      });
+      const costInput = attrsRoot.querySelector('[data-task-field="cost"]');
+      const cost = costInput?.value ? Number(costInput.value) : null;
+      if (cost) {
+        await patchTask(Number(attrsRoot.dataset.taskId), {
+          cost_type: costTypeBtn.dataset.taskCostType,
+          cost,
+        });
+      }
+      return;
+    }
+    if (e.target.closest("[data-task-clear-due]")) {
+      e.stopPropagation();
+      await patchTask(Number(attrsRoot.dataset.taskId), { due_at: null });
+      closeTaskPopovers();
+      return;
+    }
+    if (e.target.closest("[data-task-clear-location]")) {
+      e.stopPropagation();
+      await patchTask(Number(attrsRoot.dataset.taskId), { location: null });
+      closeTaskPopovers();
+      return;
+    }
+    if (e.target.closest("[data-task-clear-cost]")) {
+      e.stopPropagation();
+      await patchTask(Number(attrsRoot.dataset.taskId), { cost: null, cost_type: null });
+      closeTaskPopovers();
+      return;
+    }
+    const chipBtn = e.target.closest(".chip-btn");
+    if (chipBtn) {
+      e.stopPropagation();
+      const menu = chipBtn.parentElement.querySelector(".chip-menu");
+      const wasOpen = menu && !menu.classList.contains("hidden");
+      closeTaskPopovers();
+      if (menu && !wasOpen) {
+        menu.classList.remove("hidden");
+        chipBtn.classList.add("active");
+        chipBtn.setAttribute("aria-expanded", "true");
+        const input = menu.querySelector("input");
+        if (input?.showPicker) window.setTimeout(() => input.showPicker(), 0);
+        else if (input) input.focus();
+      }
+      return;
+    }
+  }
+
   const complete = e.target.closest("[data-complete]");
   const del = e.target.closest("[data-del-task]");
   const promote = e.target.closest("[data-promote]");
@@ -1076,6 +1320,32 @@ $("task-list").addEventListener("click", async (e) => {
   } else if (promote) {
     await api(`/api/tasks/${promote.dataset.promote}/promote`, { method: "POST" });
     await refresh();
+  }
+});
+
+$("task-list").addEventListener("change", async (e) => {
+  const attrsRoot = e.target.closest(".task-attrs");
+  if (!attrsRoot) return;
+  const taskId = Number(attrsRoot.dataset.taskId);
+  const field = e.target.dataset.taskField;
+  if (field === "due-date" || field === "due-time") {
+    const dateInput = attrsRoot.querySelector('[data-task-field="due-date"]');
+    const timeInput = attrsRoot.querySelector('[data-task-field="due-time"]');
+    await patchTask(taskId, { due_at: mergeTaskDue(dateInput.value, timeInput.value) });
+    closeTaskPopovers();
+    return;
+  }
+  if (field === "location") {
+    await patchTask(taskId, { location: e.target.value.trim() || null });
+    closeTaskPopovers();
+    return;
+  }
+  if (field === "cost") {
+    const typeBtn = attrsRoot.querySelector("[data-task-cost-type].selected");
+    const costType = typeBtn?.dataset.taskCostType || "expense";
+    const val = e.target.value ? Number(e.target.value) : null;
+    await patchTask(taskId, { cost: val, cost_type: val ? costType : null });
+    closeTaskPopovers();
   }
 });
 

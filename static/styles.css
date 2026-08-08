@@ -395,6 +395,71 @@ button, input, select, textarea {
 }
 .chip-clear:hover { background: rgba(0, 0, 0, 0.04); color: var(--ink); }
 
+.cost-type-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+.cost-type-toggle .cost-expense.selected { background: rgba(155, 44, 44, 0.12); color: #9b2c2c; }
+.cost-type-toggle .cost-income.selected { background: rgba(31, 107, 74, 0.12); color: var(--accent); }
+
+.chip-menu input[type="text"],
+.chip-menu input[type="number"] {
+  width: 100%;
+  margin-bottom: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-size: 0.85rem;
+}
+
+.item-body { min-width: 0; }
+
+.task-attrs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 8px;
+}
+.task-attrs .chip-btn {
+  font-size: 0.72rem;
+  padding: 3px 8px;
+}
+.task-attrs .chip-menu {
+  z-index: 35;
+}
+.task-attrs .chip-btn.cost-expense.has-value { color: #9b2c2c; border-color: rgba(155, 44, 44, 0.35); }
+.task-attrs .chip-btn.cost-income.has-value { color: var(--accent); border-color: rgba(31, 107, 74, 0.35); }
+
+.finance-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+.finance-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #fff;
+  border: 1px solid var(--line);
+}
+.finance-item-title { font-weight: 650; font-size: 0.9rem; }
+.finance-item-meta { font-size: 0.78rem; color: var(--muted); grid-column: 1 / -1; }
+.finance-amount {
+  font-weight: 700;
+  font-size: 0.95rem;
+  white-space: nowrap;
+}
+.finance-amount.expense { color: #9b2c2c; }
+.finance-amount.income { color: var(--accent); }
+
+.stats-grid-finance { grid-template-columns: repeat(3, 1fr); }
+
 .field-row {
   display: flex;
   flex-wrap: wrap;
@@ -531,6 +596,12 @@ textarea { min-height: 90px; resize: vertical; }
 }
 
 .item-title { font-weight: 650; }
+.item-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
 .item-meta {
   display: flex;
   flex-wrap: wrap;
@@ -663,6 +734,7 @@ textarea { min-height: 90px; resize: vertical; }
   }
   .nav { flex-direction: row; flex-wrap: wrap; }
   .stats-grid { grid-template-columns: 1fr 1fr; }
+  .stats-grid-finance { grid-template-columns: 1fr; }
   .tl-item { grid-template-columns: 1fr; gap: 4px; }
   .workout-set-row { grid-template-columns: 1fr 1fr; }
   .main { padding: 18px 14px 48px; }

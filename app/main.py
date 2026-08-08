@@ -64,6 +64,23 @@ class TaskIn(BaseModel):
     remind_at: str | None = None
     project_id: int | None = None
     status: Literal["open", "done"] | None = None
+    location: str | None = None
+    cost: float | None = None
+    cost_type: Literal["expense", "income"] | None = None
+
+
+class TaskPatchIn(BaseModel):
+    title: str | None = None
+    notes: str | None = None
+    kind: Literal["task", "idea", "plan"] | None = None
+    priority: int | None = Field(default=None, ge=1, le=4)
+    due_at: str | None = None
+    remind_at: str | None = None
+    project_id: int | None = None
+    status: Literal["open", "done"] | None = None
+    location: str | None = None
+    cost: float | None = None
+    cost_type: Literal["expense", "income"] | None = None
 
 
 class NoteIn(BaseModel):
@@ -236,8 +253,11 @@ async def create_task(
     now = utcnow()
     cur = await db.execute(
         """
-        INSERT INTO tasks(project_id, title, notes, kind, priority, due_at, remind_at, status, created_at, updated_at)
-        VALUES(?,?,?,?,?,?,?,'open',?,?)
+        INSERT INTO tasks(
+          project_id, title, notes, kind, priority, due_at, remind_at,
+          status, created_at, updated_at, location, cost, cost_type
+        )
+        VALUES(?,?,?,?,?,?,?,'open',?,?,?,?,?)
         """,
         (
             body.project_id,
@@ -249,6 +269,9 @@ async def create_task(
             body.remind_at,
             now,
             now,
+            body.location,
+            body.cost,
+            body.cost_type,
         ),
     )
     tid = cur.lastrowid
@@ -264,6 +287,76 @@ async def create_task(
 
 
 @app.patch("/api/tasks/{task_id}")
+async def patch_task(
+    task_id: int,
+    body: TaskPatchIn,
+    db: aiosqlite.Connection = Depends(get_db),
+    _: dict = Depends(require_auth),
+):
+    old = await fetch_task(db, task_id)
+    patch = body.model_dump(exclude_unset=True)
+    next_values = {**old, **patch}
+    if "title" in patch and patch["title"] is not None:
+        next_values["title"] = patch["title"].strip()
+    status = next_values["status"]
+    completed_at = old["completed_at"]
+    if status == "done" and old["status"] != "done":
+        completed_at = utcnow()
+        await bump_completions(db)
+        await log_action(
+            db,
+            "completed",
+            "task",
+            task_id,
+            {"title": next_values["title"], "changes": diff_fields(old, next_values, ["status"])},
+        )
+    elif status == "open" and old["status"] == "done":
+        completed_at = None
+        await log_action(
+            db,
+            "reopened",
+            "task",
+            task_id,
+            {"title": next_values["title"], "changes": diff_fields(old, next_values, ["status"])},
+        )
+    else:
+        changes = diff_fields(old, next_values, list(patch.keys()))
+        if changes:
+            await log_action(
+                db,
+                "updated",
+                "task",
+                task_id,
+                {"title": next_values["title"], "changes": changes},
+            )
+
+    await db.execute(
+        """
+        UPDATE tasks SET project_id=?, title=?, notes=?, kind=?, priority=?, due_at=?, remind_at=?,
+          status=?, completed_at=?, updated_at=?, location=?, cost=?, cost_type=? WHERE id=?
+        """,
+        (
+            next_values["project_id"],
+            next_values["title"],
+            next_values["notes"],
+            next_values["kind"],
+            next_values["priority"],
+            next_values["due_at"],
+            next_values["remind_at"],
+            status,
+            completed_at,
+            utcnow(),
+            next_values.get("location"),
+            next_values.get("cost"),
+            next_values.get("cost_type"),
+            task_id,
+        ),
+    )
+    await db.commit()
+    return await fetch_task(db, task_id)
+
+
+@app.put("/api/tasks/{task_id}")
 async def update_task(
     task_id: int,
     body: TaskIn,
@@ -282,6 +375,9 @@ async def update_task(
         "due_at": body.due_at,
         "remind_at": body.remind_at,
         "status": status,
+        "location": body.location,
+        "cost": body.cost,
+        "cost_type": body.cost_type,
     }
     if status == "done" and old["status"] != "done":
         completed_at = utcnow()
@@ -316,7 +412,7 @@ async def update_task(
     await db.execute(
         """
         UPDATE tasks SET project_id=?, title=?, notes=?, kind=?, priority=?, due_at=?, remind_at=?,
-          status=?, completed_at=?, updated_at=? WHERE id=?
+          status=?, completed_at=?, updated_at=?, location=?, cost=?, cost_type=? WHERE id=?
         """,
         (
             next_values["project_id"],
@@ -329,6 +425,9 @@ async def update_task(
             status,
             completed_at,
             utcnow(),
+            next_values["location"],
+            next_values["cost"],
+            next_values["cost_type"],
             task_id,
         ),
     )
@@ -616,6 +715,32 @@ async def stats(db: aiosqlite.Connection = Depends(get_db), _: dict = Depends(re
         "SELECT COUNT(*) AS c FROM tasks WHERE deleted_at IS NULL AND status='open' AND kind IN ('idea','plan')"
     )
     ideas = (await cur.fetchone())["c"]
+    finance_day = "COALESCE(SUBSTR(completed_at,1,10), SUBSTR(due_at,1,10), SUBSTR(created_at,1,10))"
+    cur = await db.execute(
+        f"""
+        SELECT cost_type, SUM(cost) AS total
+        FROM tasks
+        WHERE deleted_at IS NULL AND cost IS NOT NULL AND cost != 0
+          AND {finance_day} >= ?
+        GROUP BY cost_type
+        """,
+        (days[0],),
+    )
+    finance_totals = {"expense": 0.0, "income": 0.0}
+    for row in await cur.fetchall():
+        d = row_to_dict(row)
+        if d["cost_type"] in finance_totals:
+            finance_totals[d["cost_type"]] = float(d["total"] or 0)
+    cur = await db.execute(
+        """
+        SELECT id, title, cost, cost_type, due_at, completed_at, location, project_id
+        FROM tasks
+        WHERE deleted_at IS NULL AND cost IS NOT NULL AND cost != 0
+        ORDER BY updated_at DESC
+        LIMIT 25
+        """
+    )
+    finance_entries = [row_to_dict(r) for r in await cur.fetchall()]
     return {
         "series": series,
         "streak": streak,
@@ -623,6 +748,12 @@ async def stats(db: aiosqlite.Connection = Depends(get_db), _: dict = Depends(re
         "workouts_30d": total_workouts,
         "open_tasks": open_tasks,
         "ideas": ideas,
+        "finance": {
+            "expense_30d": finance_totals["expense"],
+            "income_30d": finance_totals["income"],
+            "balance_30d": finance_totals["income"] - finance_totals["expense"],
+            "entries": finance_entries,
+        },
     }
 
 

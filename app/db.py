@@ -40,7 +40,10 @@ CREATE TABLE IF NOT EXISTS tasks (
   updated_at TEXT NOT NULL,
   completed_at TEXT,
   source TEXT,
-  external_id TEXT
+  external_id TEXT,
+  location TEXT,
+  cost REAL,
+  cost_type TEXT
 );
 
 CREATE TABLE IF NOT EXISTS notes (
@@ -109,6 +112,9 @@ async def migrate(db: aiosqlite.Connection) -> None:
     await ensure_column(db, "tasks", "external_id", "TEXT")
     await ensure_column(db, "projects", "source", "TEXT")
     await ensure_column(db, "projects", "external_id", "TEXT")
+    await ensure_column(db, "tasks", "location", "TEXT")
+    await ensure_column(db, "tasks", "cost", "REAL")
+    await ensure_column(db, "tasks", "cost_type", "TEXT")
     await db.execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_source_ext "
         "ON tasks(source, external_id) WHERE external_id IS NOT NULL"

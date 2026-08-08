@@ -15,7 +15,7 @@
       window.NOTETASK_BASE = base === "/todo/" ? "/todo" : "";
     })();
   </script>
-  <link rel="stylesheet" href="assets/styles.css?v=17" />
+  <link rel="stylesheet" href="assets/styles.css?v=18" />
 </head>
 <body>
   <div id="login" class="login-wrap">
@@ -132,6 +132,37 @@
                     <button type="button" class="chip-clear" data-clear="task-remind">Без напоминания</button>
                   </div>
                 </div>
+
+                <div class="chip-popover">
+                  <button type="button" class="chip-btn" id="chip-location" aria-expanded="false" aria-controls="pop-location">
+                    <span class="chip-icon" aria-hidden="true">
+                      <svg viewBox="0 0 16 16" width="14" height="14"><path fill="currentColor" d="M8 1.2a4.8 4.8 0 0 0-4.8 4.8c0 3.6 4.8 8.8 4.8 8.8s4.8-5.2 4.8-8.8A4.8 4.8 0 0 0 8 1.2zm0 6.5a1.7 1.7 0 1 1 0-3.4 1.7 1.7 0 0 1 0 3.4z"/></svg>
+                    </span>
+                    <span class="chip-label" id="chip-location-label">Место</span>
+                  </button>
+                  <div class="chip-menu chip-menu-wide hidden" id="pop-location" role="dialog" aria-label="Место">
+                    <input type="text" id="task-location" placeholder="Адрес, зал, офис…" autocomplete="off" />
+                    <button type="button" class="chip-clear" data-clear="task-location">Без места</button>
+                  </div>
+                </div>
+
+                <div class="chip-popover">
+                  <button type="button" class="chip-btn" id="chip-cost" aria-expanded="false" aria-controls="pop-cost">
+                    <span class="chip-icon" aria-hidden="true">
+                      <svg viewBox="0 0 16 16" width="14" height="14"><path fill="currentColor" d="M2.5 4.5h11v7h-11v-7zm1.5 1.5v4h8V6h-8zm2 3.5H5V7h1v2.5zm3 0H8V7h1.5v2.5z"/></svg>
+                    </span>
+                    <span class="chip-label" id="chip-cost-label">Сумма</span>
+                  </button>
+                  <div class="chip-menu chip-menu-wide hidden" id="pop-cost" role="dialog" aria-label="Сумма">
+                    <div class="cost-type-toggle" id="task-cost-type">
+                      <button type="button" class="chip-option cost-expense selected" data-set-cost-type="expense">Расход</button>
+                      <button type="button" class="chip-option cost-income" data-set-cost-type="income">Доход</button>
+                    </div>
+                    <input type="number" id="task-cost" min="0" step="0.01" placeholder="0" inputmode="decimal" />
+                    <button type="button" class="chip-clear" data-clear="task-cost">Без суммы</button>
+                  </div>
+                  <input type="hidden" id="task-cost-type-value" value="expense" />
+                </div>
               </div>
             </div>
             <button class="btn" type="submit">Добавить</button>
@@ -174,10 +205,13 @@
         <h3 style="font-family:var(--font-display);margin:0 0 8px">30 дней</h3>
         <div class="bars" id="stats-bars"></div>
         <p class="empty" style="padding-left:0">Зелёный — задачи · оранжевый — тренировки (если в день есть)</p>
+        <h3 style="font-family:var(--font-display);margin:24px 0 8px">Финансы</h3>
+        <div class="stats-grid stats-grid-finance" id="finance-cards"></div>
+        <div class="finance-list" id="finance-list"></div>
       </section>
     </main>
   </div>
 
-  <script src="assets/app.js?v=18"></script>
+  <script src="assets/app.js?v=19"></script>
 </body>
 </html>
