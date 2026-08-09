@@ -111,6 +111,42 @@ function toIsoDate(d) {
   return d.toISOString().slice(0, 10);
 }
 
+function quickDueDate(kind) {
+  const now = new Date();
+  now.setHours(12, 0, 0, 0);
+  switch (kind) {
+    case "tomorrow":
+      return toIsoDate(addDays(now, 1));
+    case "weekend": {
+      const day = now.getDay();
+      if (day === 6 || day === 0) return toIsoDate(now);
+      return toIsoDate(addDays(now, 6 - day));
+    }
+    case "next_week": {
+      const day = now.getDay();
+      const add = day === 0 ? 1 : 8 - day;
+      return toIsoDate(addDays(now, add));
+    }
+    case "next_month": {
+      const d = new Date(now);
+      d.setMonth(d.getMonth() + 1);
+      return toIsoDate(d);
+    }
+    default:
+      return null;
+  }
+}
+
+function quickDueButtonsHtml() {
+  return `
+    <div class="due-quick">
+      <button type="button" class="chip-option" data-quick-due="tomorrow">Завтра</button>
+      <button type="button" class="chip-option" data-quick-due="weekend">На выходных</button>
+      <button type="button" class="chip-option" data-quick-due="next_week">На след. неделе</button>
+      <button type="button" class="chip-option" data-quick-due="next_month">Через месяц</button>
+    </div>`;
+}
+
 function parseDateToken(text) {
   const lower = text.toLowerCase().trim();
   const now = new Date();
@@ -467,6 +503,16 @@ function initTaskMetaChips() {
     updateTaskChips();
     closeTaskPopovers();
   });
+
+  document.querySelectorAll("[data-composer-quick-due]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const date = quickDueDate(btn.dataset.composerQuickDue);
+      if (!date) return;
+      $("task-due").value = date;
+      updateTaskChips();
+      closeTaskPopovers();
+    });
+  });
   $("task-remind").addEventListener("change", updateTaskChips);
   $("task-location").addEventListener("input", updateTaskChips);
   $("task-cost").addEventListener("input", updateTaskChips);
@@ -681,6 +727,7 @@ function renderTaskAttrs(t, projectMap) {
         <div class="chip-menu chip-menu-wide hidden" role="dialog" aria-label="Срок и время">
           <input type="date" data-task-field="due-date" value="${escapeAttr(due.date)}" />
           <input type="time" data-task-field="due-time" value="${escapeAttr(due.time)}" />
+          ${quickDueButtonsHtml()}
           <button type="button" class="chip-clear" data-task-clear-due>Без срока</button>
         </div>
       </div>
@@ -1264,6 +1311,18 @@ $("task-list").addEventListener("click", async (e) => {
           cost,
         });
       }
+      return;
+    }
+    const quickDue = e.target.closest("[data-quick-due]");
+    if (quickDue) {
+      e.stopPropagation();
+      const date = quickDueDate(quickDue.dataset.quickDue);
+      if (!date) return;
+      const timeInput = attrsRoot.querySelector('[data-task-field="due-time"]');
+      await patchTask(Number(attrsRoot.dataset.taskId), {
+        due_at: mergeTaskDue(date, timeInput?.value || ""),
+      });
+      closeTaskPopovers();
       return;
     }
     if (e.target.closest("[data-task-clear-due]")) {

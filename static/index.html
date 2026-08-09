@@ -15,7 +15,7 @@
       window.NOTETASK_BASE = base === "/todo/" ? "/todo" : "";
     })();
   </script>
-  <link rel="stylesheet" href="assets/styles.css?v=22" />
+  <link rel="stylesheet" href="assets/styles.css?v=23" />
   <script src="assets/pwa.js?v=1"></script>
 </head>
 <body>
@@ -117,6 +117,12 @@
                   </button>
                   <div class="chip-menu chip-menu-wide hidden" id="pop-due" role="dialog" aria-label="Срок">
                     <input type="date" id="task-due" />
+                    <div class="due-quick">
+                      <button type="button" class="chip-option" data-composer-quick-due="tomorrow">Завтра</button>
+                      <button type="button" class="chip-option" data-composer-quick-due="weekend">На выходных</button>
+                      <button type="button" class="chip-option" data-composer-quick-due="next_week">На след. неделе</button>
+                      <button type="button" class="chip-option" data-composer-quick-due="next_month">Через месяц</button>
+                    </div>
                     <button type="button" class="chip-clear" data-clear="task-due">Без срока</button>
                   </div>
                 </div>
@@ -214,6 +220,6 @@
   </div>
 
   <script src="assets/pwa-install.js?v=1"></script>
-  <script src="assets/app.js?v=26"></script>
+  <script src="assets/app.js?v=27"></script>
 </body>
 </html>

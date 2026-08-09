@@ -375,11 +375,23 @@ button, input, select, textarea {
 .priority-picker .p4 { color: var(--muted); }
 
 .chip-menu input[type="date"],
-.chip-menu input[type="datetime-local"] {
+.chip-menu input[type="datetime-local"],
+.chip-menu input[type="time"] {
   width: 100%;
   padding: 8px 10px;
   font-size: 0.85rem;
   border-radius: 10px;
+  margin-bottom: 4px;
+}
+
+.due-quick {
+  display: grid;
+  gap: 2px;
+  margin: 6px 0 2px;
+}
+.due-quick .chip-option {
+  font-size: 0.8rem;
+  padding: 7px 10px;
 }
 
 .chip-clear {
