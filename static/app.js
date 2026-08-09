@@ -336,20 +336,14 @@ function applyParsedMeta(meta) {
 
 function syncTaskTitleHighlight() {
   const input = $("task-title");
-  const layer = $("task-title-highlight");
-  const text = input.value;
-  const parsed = parseTaskInput(text);
-  layer.innerHTML = buildTaskHighlightHtml(text, parsed.tokens) || "&nbsp;";
-  layer.scrollLeft = input.scrollLeft;
-  applyParsedMeta(parsed.meta);
+  if (!input) return;
+  applyParsedMeta(parseTaskInput(input.value).meta);
 }
 
 function initTaskTitleHighlight() {
   const input = $("task-title");
+  if (!input) return;
   input.addEventListener("input", syncTaskTitleHighlight);
-  input.addEventListener("scroll", () => {
-    $("task-title-highlight").scrollLeft = input.scrollLeft;
-  });
   syncTaskTitleHighlight();
 }
 
