@@ -144,7 +144,7 @@ body.widget-body {
   border: 0;
   border-radius: 14px;
   background: var(--accent);
-  color: #fff;
+  color: #f3f0e8;
   font-size: 1.4rem;
   font-weight: 600;
   cursor: pointer;
@@ -155,7 +155,7 @@ body.widget-body {
   border-radius: 12px;
   padding: 11px 16px;
   background: var(--accent);
-  color: #fff;
+  color: #f3f0e8;
   cursor: pointer;
   font-weight: 650;
   width: 100%;

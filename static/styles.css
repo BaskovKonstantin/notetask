@@ -9,6 +9,7 @@
   --accent-2: #c45c26;
   --danger: #9b2c2c;
   --ok: #1f6b4a;
+  --on-accent: #f3f0e8;
   --shadow: 0 18px 50px rgba(26, 34, 24, 0.12);
   --radius: 18px;
   --font-display: "Fraunces", Georgia, serif;
@@ -93,7 +94,7 @@ button, input, select, textarea {
 .nav button:hover { background: rgba(31,107,74,0.08); color: var(--ink); }
 .nav button.active {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   font-weight: 600;
 }
 
@@ -251,16 +252,29 @@ button, input, select, textarea {
   overflow: hidden;
   background: #fff;
   color: var(--ink);
+  -webkit-text-fill-color: var(--ink);
 }
 
 .task-title-input {
   position: relative;
   background: transparent;
-  color: transparent;
+  color: var(--ink);
+  -webkit-text-fill-color: transparent;
   caret-color: var(--ink);
 }
-.task-title-input::placeholder { color: var(--muted); -webkit-text-fill-color: var(--muted); }
+.task-title-input::placeholder {
+  color: var(--muted);
+  -webkit-text-fill-color: var(--muted);
+  opacity: 1;
+}
 .task-title-input:focus { outline: 2px solid rgba(31, 107, 74, 0.35); outline-offset: 0; }
+.task-title-input:-webkit-autofill,
+.task-title-input:-webkit-autofill:hover,
+.task-title-input:-webkit-autofill:focus {
+  -webkit-text-fill-color: transparent;
+  caret-color: var(--ink);
+  transition: background-color 99999s ease-out;
+}
 
 .task-title-highlight .hl-date {
   color: var(--accent);
@@ -523,7 +537,7 @@ textarea { min-height: 90px; resize: vertical; }
   border-radius: 12px;
   padding: 11px 16px;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   cursor: pointer;
   font-weight: 650;
   white-space: nowrap;
