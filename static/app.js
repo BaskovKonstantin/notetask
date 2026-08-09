@@ -148,11 +148,30 @@ function quickDueButtonsHtml() {
 }
 
 function parseDateToken(text) {
-  const lower = text.toLowerCase().trim();
+  const lower = text.toLowerCase().trim().replace(/\s+/g, " ");
   const now = new Date();
+  now.setHours(12, 0, 0, 0);
   if (/^(?:сегодня|today)$/.test(lower)) return toIsoDate(now);
   if (/^(?:завтра|tomorrow)$/.test(lower)) return toIsoDate(addDays(now, 1));
   if (/^послезавтра$/.test(lower)) return toIsoDate(addDays(now, 2));
+  if (/^(?:на\s+выходн(?:ых|ой)|в\s+выходн(?:ые|ой))$/.test(lower)) return quickDueDate("weekend");
+  if (/^(?:на\s+след(?:ующей|\.)?\s+неделе|следующая\s+неделя)$/.test(lower)) return quickDueDate("next_week");
+  if (/^(?:через\s+месяц|на\s+след(?:ующий|\.)?\s+месяц)$/.test(lower)) return quickDueDate("next_month");
+
+  const inDays = lower.match(/^через\s+(\d+)\s*(?:дн(?:я|ей|ь)?|d)$/);
+  if (inDays) return toIsoDate(addDays(now, Number(inDays[1])));
+
+  const inWeeks = lower.match(/^через\s+(\d+)\s*(?:недел(?:ю|и|ь)?|нед\.?|w)$/);
+  if (inWeeks) return toIsoDate(addDays(now, Number(inWeeks[1]) * 7));
+
+  const inMonths = lower.match(/^через\s+(\d+)\s*(?:месяц(?:а|ев)?|мес\.?|m)$/);
+  if (inMonths) {
+    const d = new Date(now);
+    d.setMonth(d.getMonth() + Number(inMonths[1]));
+    return toIsoDate(d);
+  }
+
+  if (/^через\s+неделю$/.test(lower)) return toIsoDate(addDays(now, 7));
 
   const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
@@ -166,7 +185,7 @@ function parseDateToken(text) {
     return toIsoDate(new Date(year, month, day));
   }
 
-  const named = lower.match(/^(\d{1,2})\s+([a-zа-я]+)/);
+  const named = lower.match(/^(\d{1,2})\s+([a-zа-яё]+)/);
   if (named) {
     const day = Number(named[1]);
     const monthKey = Object.keys(RU_MONTHS).find((k) => named[2].startsWith(k));
@@ -206,10 +225,37 @@ function findProjectId(name) {
 }
 
 function collectTaskTokens(text) {
+  const monthNames =
+    "янв(?:арь|аря|аре)?|фев(?:раль|раля|рале)?|мар(?:т|та|те)?|апр(?:ель|еля|еле)?|ма[йяе]|июн(?:ь|я|е)?|июл(?:ь|я|е)?|авг(?:уст|уста|усте)?|сен(?:тябрь|тября|тябре)?|окт(?:ябрь|ября|ябре)?|ноя(?:брь|бря|бре)?|дек(?:абрь|абря|абре)?";
   const patterns = [
     {
       type: "date",
       re: /\b(?:сегодня|today|завтра|tomorrow|послезавтра)\b/gi,
+      meta: (m) => ({ due: parseDateToken(m[0]) }),
+    },
+    {
+      type: "date",
+      re: /\bчерез\s+\d+\s*(?:дн(?:я|ей|ь)?|недел(?:ю|и|ь)?|нед\.?|месяц(?:а|ев)?|мес\.?|[dwm])\b/gi,
+      meta: (m) => ({ due: parseDateToken(m[0]) }),
+    },
+    {
+      type: "date",
+      re: /\bчерез\s+(?:неделю|месяц)\b/gi,
+      meta: (m) => ({ due: parseDateToken(m[0]) }),
+    },
+    {
+      type: "date",
+      re: /\bна\s+след(?:ующей|\.)?\s+неделе\b/gi,
+      meta: (m) => ({ due: parseDateToken(m[0]) }),
+    },
+    {
+      type: "date",
+      re: /\bна\s+след(?:ующий|\.)?\s+месяц\b/gi,
+      meta: (m) => ({ due: parseDateToken(m[0]) }),
+    },
+    {
+      type: "date",
+      re: /\b(?:на\s+выходн(?:ых|ой)|в\s+выходн(?:ые|ой))\b/gi,
       meta: (m) => ({ due: parseDateToken(m[0]) }),
     },
     {
@@ -224,7 +270,7 @@ function collectTaskTokens(text) {
     },
     {
       type: "date",
-      re: /\b\d{1,2}\s+(?:янв(?:[а-я]*?)?|фев(?:[а-я]*?)?|мар(?:[а-я]*?)?|апр(?:[а-я]*?)?|мая|май|июн(?:[а-я]*?)?|июл(?:[а-я]*?)?|авг(?:[а-я]*?)?|сен(?:[а-я]*?)?|окт(?:[а-я]*?)?|ноя(?:[а-я]*?)?|дек(?:[а-я]*?)?)\b/gi,
+      re: new RegExp(`\\b\\d{1,2}\\s+(?:${monthNames})\\b`, "gi"),
       meta: (m) => ({ due: parseDateToken(m[0]) }),
     },
     {
