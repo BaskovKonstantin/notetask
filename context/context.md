@@ -1,6 +1,6 @@
 # NoteTask / todo.baski.pro — context
 
-Updated: 2026-08-08
+Updated: 2026-08-09
 
 ## Live
 
@@ -31,6 +31,13 @@ Personal tracker (not TreckBas):
 - **Виджет:** https://todo.baski.pro/widget — компакт «Сегодня», после установки PWA открывается как приложение
 - **Звук выполнения:** «Глухой удар» (Web Audio)
 - **Тема раздела:** при открытии раздела UI плавно перекрашивается в `project.color` (CSS vars `--accent`, `--theme-glow*`)
+- **Правая панель раздела** (клик по разделу → workspace split):
+  - Личные дела → финансы по месяцам (`/api/finance/months`, таблица `finance_months`) + подсказка сумм из задач
+  - Работа → рабочие проекты (`/api/work-projects`, `work_projects`)
+  - Здоровье → SVG тела + метрики (`/api/health-profile`, `health_metrics` / `health_body`)
+  - Тренировки → цели и прогресс (`/api/workout-panel`, `workout_goals`)
+  - Остальные разделы / Сегодня — панель скрыта
+  - UI: `#section-panel`, CSS `main.with-section-panel`, `app.js` v32 / `styles.css` v27
 
 ## Stack
 

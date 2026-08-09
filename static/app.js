@@ -11,7 +11,34 @@ const state = {
   token: localStorage.getItem(TOKEN_KEY) || "",
   projects: [],
   projectId: null,
+  panelKind: null,
+  healthSelected: "chest",
 };
+
+const SECTION_PANELS = {
+  "Личные дела": "finance",
+  Работа: "work",
+  Здоровье: "health",
+  Тренировки: "workout",
+};
+
+const HEALTH_REGIONS = [
+  { id: "head", label: "Голова" },
+  { id: "chest", label: "Грудь" },
+  { id: "arms", label: "Руки" },
+  { id: "stomach", label: "Живот" },
+  { id: "back", label: "Спина" },
+  { id: "legs", label: "Ноги" },
+];
+
+const HEALTH_METRIC_FIELDS = [
+  { key: "weight", label: "Вес" },
+  { key: "height", label: "Рост" },
+  { key: "sleep", label: "Сон" },
+  { key: "pressure", label: "Давление" },
+  { key: "pulse", label: "Пульс" },
+  { key: "mood", label: "Самочувствие" },
+];
 
 const titles = {
   today: "Сегодня",
@@ -664,6 +691,276 @@ function applySectionTheme(hex) {
   document.body.dataset.theme = color;
 }
 
+function currentPanelKind() {
+  if (state.view !== "project" || !state.projectId) return null;
+  const proj = state.projects.find((p) => p.id === state.projectId);
+  return proj ? SECTION_PANELS[proj.name] || null : null;
+}
+
+function hideSectionPanel() {
+  state.panelKind = null;
+  const panel = $("section-panel");
+  const main = document.querySelector(".main");
+  if (panel) {
+    panel.classList.add("hidden");
+    $("section-panel-inner").innerHTML = "";
+  }
+  if (main) main.classList.remove("with-section-panel");
+}
+
+function monthLabel(ym) {
+  const [y, m] = ym.split("-").map(Number);
+  const d = new Date(y, m - 1, 1);
+  return d.toLocaleDateString("ru-RU", { month: "long", year: "numeric" });
+}
+
+function moneyPlain(amount) {
+  const n = Number(amount) || 0;
+  return `${n.toLocaleString("ru-RU", { maximumFractionDigits: 2 })} ₽`;
+}
+
+async function loadSectionPanel() {
+  const kind = currentPanelKind();
+  const panel = $("section-panel");
+  const main = document.querySelector(".main");
+  if (!kind) {
+    hideSectionPanel();
+    return;
+  }
+  state.panelKind = kind;
+  panel.classList.remove("hidden");
+  main.classList.add("with-section-panel");
+  $("section-panel-inner").innerHTML = `<p class="sp-sub">Загрузка…</p>`;
+  try {
+    if (kind === "finance") await renderFinancePanel();
+    else if (kind === "work") await renderWorkPanel();
+    else if (kind === "health") await renderHealthPanel();
+    else if (kind === "workout") await renderWorkoutPanel();
+  } catch (err) {
+    $("section-panel-inner").innerHTML = `<p class="error">${escapeHtml(err.message || "Ошибка")}</p>`;
+  }
+}
+
+async function renderFinancePanel() {
+  const data = await api("/api/finance/months?months=6");
+  const totals = data.totals || {};
+  const bal = Number(totals.balance) || 0;
+  const months = data.months || [];
+  $("section-panel-inner").innerHTML = `
+    <h2>Финансы</h2>
+    <p class="sp-sub">По месяцам — ввод и расчёт баланса</p>
+    <div class="sp-totals">
+      <div class="sp-stat"><span class="label">Доход</span><span class="value pos">${escapeHtml(moneyPlain(totals.income))}</span></div>
+      <div class="sp-stat"><span class="label">Расход</span><span class="value neg">${escapeHtml(moneyPlain(totals.expense))}</span></div>
+      <div class="sp-stat"><span class="label">Баланс</span><span class="value ${bal >= 0 ? "pos" : "neg"}">${escapeHtml(moneyPlain(bal))}</span></div>
+    </div>
+    ${months
+      .map((m) => {
+        const b = Number(m.income || 0) - Number(m.expense || 0);
+        return `
+      <form class="finance-month" data-finance-month="${escapeAttr(m.year_month)}">
+        <header>
+          <span class="ym">${escapeHtml(monthLabel(m.year_month))}</span>
+          <span class="hint">из задач: −${escapeHtml(moneyPlain(m.task_expense))} / +${escapeHtml(moneyPlain(m.task_income))}</span>
+        </header>
+        <div class="finance-fields">
+          <label>Доход <input type="number" name="income" min="0" step="0.01" value="${escapeAttr(String(m.income ?? 0))}" /></label>
+          <label>Расход <input type="number" name="expense" min="0" step="0.01" value="${escapeAttr(String(m.expense ?? 0))}" /></label>
+        </div>
+        <label>Заметки <textarea name="notes" rows="2">${escapeHtml(m.notes || "")}</textarea></label>
+        <footer>
+          <strong class="${b >= 0 ? "pos" : "neg"}">${escapeHtml(moneyPlain(b))}</strong>
+          <button class="btn" type="submit">Сохранить</button>
+        </footer>
+      </form>`;
+      })
+      .join("")}
+  `;
+}
+
+async function renderWorkPanel() {
+  const items = await api("/api/work-projects");
+  $("section-panel-inner").innerHTML = `
+    <h2>Проекты</h2>
+    <p class="sp-sub">Рабочие проекты и статусы</p>
+    ${
+      items.length
+        ? items
+            .map(
+              (p) => `
+      <article class="work-item" data-work-id="${p.id}">
+        <header>
+          <strong>${escapeHtml(p.title)}</strong>
+          <span class="status-pill ${escapeAttr(p.status)}">${escapeHtml(
+                p.status === "active" ? "в работе" : p.status === "paused" ? "пауза" : "готово",
+              )}</span>
+        </header>
+        <div class="work-meta">
+          ${p.client ? escapeHtml(p.client) : "без клиента"}
+          ${p.budget != null ? ` · бюджет ${escapeHtml(moneyPlain(p.budget))}` : ""}
+        </div>
+        ${p.notes ? `<div class="work-meta">${escapeHtml(p.notes)}</div>` : ""}
+        <div class="sp-actions">
+          <button type="button" class="btn ghost" data-work-status="active">В работе</button>
+          <button type="button" class="btn ghost" data-work-status="paused">Пауза</button>
+          <button type="button" class="btn ghost" data-work-status="done">Готово</button>
+          <button type="button" class="btn ghost" data-work-delete>Удалить</button>
+        </div>
+      </article>`,
+            )
+            .join("")
+        : `<p class="empty" style="padding:0">Пока нет проектов — добавь ниже.</p>`
+    }
+    <form class="sp-form" id="work-form">
+      <strong>Новый проект</strong>
+      <label>Название <input name="title" required placeholder="Клиент / продукт" /></label>
+      <div class="row">
+        <label>Клиент <input name="client" placeholder="Компания" /></label>
+        <label>Бюджет <input name="budget" type="number" min="0" step="0.01" placeholder="0" /></label>
+      </div>
+      <label>Заметки <textarea name="notes" rows="2" placeholder="Срок, контакт, суть"></textarea></label>
+      <button class="btn" type="submit">Добавить</button>
+    </form>
+  `;
+}
+
+function bodySvg(body) {
+  const cls = (id) => {
+    const st = (body[id] && body[id].status) || "ok";
+    const active = state.healthSelected === id ? " active" : "";
+    const tone = st === "warn" ? " warn" : st === "bad" ? " bad" : "";
+    return `region${tone}${active}`;
+  };
+  return `
+  <svg class="body-svg" viewBox="0 0 120 220" role="img" aria-label="Тело">
+    <ellipse class="${cls("head")}" data-region="head" cx="60" cy="28" rx="22" ry="24"></ellipse>
+    <rect class="${cls("chest")}" data-region="chest" x="38" y="54" width="44" height="42" rx="12"></rect>
+    <rect class="${cls("arms")}" data-region="arms" x="12" y="58" width="18" height="58" rx="9"></rect>
+    <rect class="${cls("arms")}" data-region="arms" x="90" y="58" width="18" height="58" rx="9"></rect>
+    <rect class="${cls("stomach")}" data-region="stomach" x="40" y="98" width="40" height="34" rx="10"></rect>
+    <rect class="${cls("back")}" data-region="back" x="48" y="88" width="24" height="16" rx="6" opacity="0.85"></rect>
+    <rect class="${cls("legs")}" data-region="legs" x="40" y="134" width="16" height="70" rx="8"></rect>
+    <rect class="${cls("legs")}" data-region="legs" x="64" y="134" width="16" height="70" rx="8"></rect>
+  </svg>`;
+}
+
+async function renderHealthPanel(data) {
+  const profile = data || (await api("/api/health-profile"));
+  const metrics = profile.metrics || {};
+  const body = profile.body || {};
+  const selected = state.healthSelected;
+  const region = body[selected] || { note: "", status: "ok" };
+  const regionLabel = HEALTH_REGIONS.find((r) => r.id === selected)?.label || selected;
+  $("section-panel-inner").innerHTML = `
+    <h2>Здоровье</h2>
+    <p class="sp-sub">Тело и характеристики — клик по зоне</p>
+    <div class="health-layout">
+      ${bodySvg(body)}
+      <div class="health-region-edit" data-health-region="${escapeAttr(selected)}">
+        <strong>${escapeHtml(regionLabel)}</strong>
+        <label>Состояние
+          <select name="status">
+            <option value="ok"${region.status === "ok" ? " selected" : ""}>Норма</option>
+            <option value="warn"${region.status === "warn" ? " selected" : ""}>Внимание</option>
+            <option value="bad"${region.status === "bad" ? " selected" : ""}>Проблема</option>
+          </select>
+        </label>
+        <label>Заметка <textarea name="note" rows="3">${escapeHtml(region.note || "")}</textarea></label>
+        <button type="button" class="btn" id="health-save-region">Сохранить зону</button>
+      </div>
+    </div>
+    <form class="sp-form" id="health-metrics-form">
+      <strong>Характеристики</strong>
+      <div class="health-metrics">
+        ${HEALTH_METRIC_FIELDS.map(
+          (f) => `
+          <label>${escapeHtml(f.label)}
+            <input name="${escapeAttr(f.key)}" value="${escapeAttr(metrics[f.key] || "")}" />
+          </label>`,
+        ).join("")}
+      </div>
+      <button class="btn" type="submit">Сохранить характеристики</button>
+    </form>
+  `;
+}
+
+async function renderWorkoutPanel() {
+  const data = await api("/api/workout-panel");
+  const stats = data.stats || {};
+  const goals = data.goals || [];
+  const recent = data.recent || [];
+  $("section-panel-inner").innerHTML = `
+    <h2>Тренировки</h2>
+    <p class="sp-sub">Прогресс и цели</p>
+    <div class="sp-totals">
+      <div class="sp-stat"><span class="label">Сегодня</span><span class="value">${stats.workouts_today || 0}</span></div>
+      <div class="sp-stat"><span class="label">30 дней</span><span class="value">${stats.workouts_30d || 0}</span></div>
+      <div class="sp-stat"><span class="label">Целей</span><span class="value">${goals.length}</span></div>
+    </div>
+    ${
+      goals.length
+        ? goals
+            .map((g) => {
+              const target = Number(g.target) || 0;
+              const current = Number(g.current) || 0;
+              const pct = target > 0 ? Math.min(100, Math.round((current / target) * 100)) : 0;
+              return `
+      <article class="goal-item" data-goal-id="${g.id}">
+        <header>
+          <strong>${escapeHtml(g.title)}</strong>
+          <span class="status-pill">${escapeHtml(g.period === "week" ? "неделя" : g.period === "year" ? "год" : "месяц")}</span>
+        </header>
+        <div class="work-meta">${escapeHtml(String(current))} / ${escapeHtml(String(target))} ${escapeHtml(g.unit || "")}</div>
+        <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
+        <div class="sp-actions">
+          <button type="button" class="btn ghost" data-goal-inc>＋1</button>
+          <button type="button" class="btn ghost" data-goal-delete>Удалить</button>
+        </div>
+      </article>`;
+            })
+            .join("")
+        : `<p class="empty" style="padding:0">Целей пока нет.</p>`
+    }
+    <form class="sp-form" id="goal-form">
+      <strong>Новая цель</strong>
+      <label>Название <input name="title" required placeholder="Тренировок в месяц" /></label>
+      <div class="row">
+        <label>Цель <input name="target" type="number" min="0" step="1" value="12" /></label>
+        <label>Сейчас <input name="current" type="number" min="0" step="1" value="0" /></label>
+      </div>
+      <div class="row">
+        <label>Ед. <input name="unit" placeholder="раз" /></label>
+        <label>Период
+          <select name="period">
+            <option value="week">Неделя</option>
+            <option value="month" selected>Месяц</option>
+            <option value="year">Год</option>
+          </select>
+        </label>
+      </div>
+      <button class="btn" type="submit">Добавить цель</button>
+    </form>
+    <div>
+      <strong>Недавние</strong>
+      <div class="recent-list">
+        ${
+          recent.length
+            ? recent
+                .map(
+                  (r) => `
+          <div>
+            <span>${escapeHtml(r.title || "Тренировка")}</span>
+            <span>${escapeHtml((r.started_at || "").slice(0, 10))} · ${r.sets_count || 0} подх.</span>
+          </div>`,
+                )
+                .join("")
+            : `<div><span>Пока пусто</span></div>`
+        }
+      </div>
+    </div>
+  `;
+}
+
 function setView(view, opts = {}) {
   if (!opts.keepTaskForm) hideTaskForm();
   state.view = view;
@@ -692,6 +989,8 @@ function setView(view, opts = {}) {
   $("view-history").classList.toggle("hidden", view !== "history");
   $("view-stats").classList.toggle("hidden", view !== "stats");
 
+  if (!taskViews.includes(view) || !currentPanelKind()) hideSectionPanel();
+
   if (taskViews.includes(view)) $("task-kind").value = "task";
 
   const dueInput = $("task-due");
@@ -705,8 +1004,10 @@ function setView(view, opts = {}) {
 
 async function refresh() {
   const v = state.view;
-  if (["today", "project"].includes(v)) await loadTasks(v);
-  else if (v === "history") await loadHistory();
+  if (["today", "project"].includes(v)) {
+    await loadTasks(v);
+    await loadSectionPanel();
+  } else if (v === "history") await loadHistory();
   else if (v === "stats") await loadStats();
 }
 
@@ -1527,6 +1828,140 @@ $("workout-list").addEventListener("click", async (e) => {
   if (del) {
     await api(`/api/workouts/${del.dataset.delWo}`, { method: "DELETE" });
     await refresh();
+  }
+});
+
+$("section-panel").addEventListener("submit", async (e) => {
+  const financeForm = e.target.closest("[data-finance-month]");
+  if (financeForm) {
+    e.preventDefault();
+    const ym = financeForm.dataset.financeMonth;
+    const fd = new FormData(financeForm);
+    await api(`/api/finance/months/${ym}`, {
+      method: "PUT",
+      body: JSON.stringify({
+        income: Number(fd.get("income") || 0),
+        expense: Number(fd.get("expense") || 0),
+        notes: String(fd.get("notes") || ""),
+      }),
+    });
+    await renderFinancePanel();
+    return;
+  }
+  if (e.target.id === "work-form") {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const budgetRaw = fd.get("budget");
+    await api("/api/work-projects", {
+      method: "POST",
+      body: JSON.stringify({
+        title: String(fd.get("title") || "").trim(),
+        client: String(fd.get("client") || "").trim(),
+        budget: budgetRaw === "" || budgetRaw == null ? null : Number(budgetRaw),
+        notes: String(fd.get("notes") || ""),
+        status: "active",
+      }),
+    });
+    await renderWorkPanel();
+    return;
+  }
+  if (e.target.id === "health-metrics-form") {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const metrics = {};
+    for (const f of HEALTH_METRIC_FIELDS) metrics[f.key] = String(fd.get(f.key) || "");
+    await api("/api/health-profile", { method: "PUT", body: JSON.stringify({ metrics, body: {} }) });
+    await renderHealthPanel();
+    return;
+  }
+  if (e.target.id === "goal-form") {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    await api("/api/workout-goals", {
+      method: "POST",
+      body: JSON.stringify({
+        title: String(fd.get("title") || "").trim(),
+        target: Number(fd.get("target") || 0),
+        current: Number(fd.get("current") || 0),
+        unit: String(fd.get("unit") || ""),
+        period: String(fd.get("period") || "month"),
+      }),
+    });
+    await renderWorkoutPanel();
+  }
+});
+
+$("section-panel").addEventListener("click", async (e) => {
+  const regionEl = e.target.closest("[data-region]");
+  if (regionEl) {
+    state.healthSelected = regionEl.dataset.region;
+    await renderHealthPanel();
+    return;
+  }
+  if (e.target.id === "health-save-region") {
+    const box = e.target.closest("[data-health-region]");
+    if (!box) return;
+    const region = box.dataset.healthRegion;
+    const status = box.querySelector('[name="status"]')?.value || "ok";
+    const note = box.querySelector('[name="note"]')?.value || "";
+    await api("/api/health-profile", {
+      method: "PUT",
+      body: JSON.stringify({ metrics: {}, body: { [region]: { status, note } } }),
+    });
+    await renderHealthPanel();
+    return;
+  }
+  const workItem = e.target.closest("[data-work-id]");
+  if (workItem) {
+    const id = Number(workItem.dataset.workId);
+    if (e.target.closest("[data-work-delete]")) {
+      await api(`/api/work-projects/${id}`, { method: "DELETE" });
+      await renderWorkPanel();
+      return;
+    }
+    const statusBtn = e.target.closest("[data-work-status]");
+    if (statusBtn) {
+      const items = await api("/api/work-projects");
+      const cur = items.find((x) => x.id === id);
+      if (!cur) return;
+      await api(`/api/work-projects/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          title: cur.title,
+          status: statusBtn.dataset.workStatus,
+          client: cur.client || "",
+          budget: cur.budget,
+          notes: cur.notes || "",
+        }),
+      });
+      await renderWorkPanel();
+      return;
+    }
+  }
+  const goalItem = e.target.closest("[data-goal-id]");
+  if (goalItem) {
+    const id = Number(goalItem.dataset.goalId);
+    if (e.target.closest("[data-goal-delete]")) {
+      await api(`/api/workout-goals/${id}`, { method: "DELETE" });
+      await renderWorkoutPanel();
+      return;
+    }
+    if (e.target.closest("[data-goal-inc]")) {
+      const panel = await api("/api/workout-panel");
+      const g = (panel.goals || []).find((x) => x.id === id);
+      if (!g) return;
+      await api(`/api/workout-goals/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          title: g.title,
+          target: g.target,
+          unit: g.unit || "",
+          current: Number(g.current || 0) + 1,
+          period: g.period || "month",
+        }),
+      });
+      await renderWorkoutPanel();
+    }
   }
 });
 

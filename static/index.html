@@ -15,7 +15,7 @@
       window.NOTETASK_BASE = base === "/todo/" ? "/todo" : "";
     })();
   </script>
-  <link rel="stylesheet" href="assets/styles.css?v=26" />
+  <link rel="stylesheet" href="assets/styles.css?v=27" />
   <script src="assets/pwa.js?v=1"></script>
 </head>
 <body>
@@ -56,6 +56,7 @@
         </div>
       </div>
 
+      <div class="workspace" id="workspace">
       <section id="view-tasks" class="panel">
         <button type="button" class="task-add-trigger" id="task-add-trigger" aria-label="Добавить задачу">+</button>
         <form class="composer hidden" id="task-form">
@@ -178,6 +179,11 @@
         <div class="list" id="task-list"></div>
       </section>
 
+      <aside id="section-panel" class="section-panel hidden" aria-live="polite">
+        <div class="section-panel-inner" id="section-panel-inner"></div>
+      </aside>
+      </div>
+
       <section id="view-notes" class="panel hidden">
         <form class="composer" id="note-form">
           <input type="text" id="note-title" placeholder="Заголовок заметки" required />
@@ -220,6 +226,6 @@
   </div>
 
   <script src="assets/pwa-install.js?v=1"></script>
-  <script src="assets/app.js?v=31"></script>
+  <script src="assets/app.js?v=32"></script>
 </body>
 </html>

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -109,6 +110,33 @@ class EventIn(BaseModel):
     entity_type: str = Field(default="ui", min_length=1, max_length=32)
     entity_id: int | None = None
     payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class FinanceMonthIn(BaseModel):
+    income: float = 0
+    expense: float = 0
+    notes: str = ""
+
+
+class WorkProjectIn(BaseModel):
+    title: str
+    status: Literal["active", "paused", "done"] = "active"
+    client: str = ""
+    budget: float | None = None
+    notes: str = ""
+
+
+class HealthProfileIn(BaseModel):
+    metrics: dict[str, str] = Field(default_factory=dict)
+    body: dict[str, dict[str, str]] = Field(default_factory=dict)
+
+
+class WorkoutGoalIn(BaseModel):
+    title: str
+    target: float = 0
+    unit: str = ""
+    current: float = 0
+    period: Literal["week", "month", "year"] = "month"
 
 
 # ---------- helpers ----------
@@ -757,6 +785,344 @@ async def stats(db: aiosqlite.Connection = Depends(get_db), _: dict = Depends(re
     }
 
 
+# ---------- section panels ----------
+
+@app.get("/api/finance/months")
+async def list_finance_months(
+    months: int = 12,
+    db: aiosqlite.Connection = Depends(get_db),
+    _: dict = Depends(require_auth),
+):
+    today = date.today()
+    keys: list[str] = []
+    y, m = today.year, today.month
+    for _ in range(max(1, min(months, 36))):
+        keys.append(f"{y:04d}-{m:02d}")
+        m -= 1
+        if m == 0:
+            m = 12
+            y -= 1
+    cur = await db.execute(
+        f"SELECT * FROM finance_months WHERE year_month IN ({','.join('?' * len(keys))})",
+        keys,
+    )
+    saved = {row_to_dict(r)["year_month"]: row_to_dict(r) for r in await cur.fetchall()}
+    day_expr = "COALESCE(SUBSTR(completed_at,1,10), SUBSTR(due_at,1,10), SUBSTR(created_at,1,10))"
+    cur = await db.execute(
+        f"""
+        SELECT SUBSTR({day_expr},1,7) AS ym, cost_type, SUM(cost) AS total
+        FROM tasks
+        WHERE deleted_at IS NULL AND cost IS NOT NULL AND cost != 0
+          AND SUBSTR({day_expr},1,7) IN ({','.join('?' * len(keys))})
+        GROUP BY ym, cost_type
+        """,
+        keys,
+    )
+    from_tasks: dict[str, dict[str, float]] = {}
+    for row in await cur.fetchall():
+        d = row_to_dict(row)
+        bucket = from_tasks.setdefault(d["ym"], {"expense": 0.0, "income": 0.0})
+        if d["cost_type"] in ("expense", "income"):
+            bucket[d["cost_type"]] = float(d["total"] or 0)
+    out = []
+    for ym in keys:
+        row = saved.get(ym) or {"year_month": ym, "income": 0, "expense": 0, "notes": ""}
+        task_totals = from_tasks.get(ym, {"expense": 0.0, "income": 0.0})
+        income = float(row.get("income") or 0)
+        expense = float(row.get("expense") or 0)
+        out.append(
+            {
+                "year_month": ym,
+                "income": income,
+                "expense": expense,
+                "notes": row.get("notes") or "",
+                "balance": income - expense,
+                "task_income": task_totals["income"],
+                "task_expense": task_totals["expense"],
+            }
+        )
+    total_income = sum(x["income"] for x in out)
+    total_expense = sum(x["expense"] for x in out)
+    return {
+        "months": out,
+        "totals": {
+            "income": total_income,
+            "expense": total_expense,
+            "balance": total_income - total_expense,
+        },
+    }
+
+
+@app.put("/api/finance/months/{year_month}")
+async def upsert_finance_month(
+    year_month: str,
+    body: FinanceMonthIn,
+    db: aiosqlite.Connection = Depends(get_db),
+    _: dict = Depends(require_auth),
+):
+    if not re.fullmatch(r"\d{4}-\d{2}", year_month):
+        raise HTTPException(400, "year_month must be YYYY-MM")
+    now = utcnow()
+    await db.execute(
+        """
+        INSERT INTO finance_months(year_month, income, expense, notes, updated_at)
+        VALUES(?,?,?,?,?)
+        ON CONFLICT(year_month) DO UPDATE SET
+          income=excluded.income, expense=excluded.expense, notes=excluded.notes, updated_at=excluded.updated_at
+        """,
+        (year_month, body.income, body.expense, body.notes, now),
+    )
+    await log_action(
+        db,
+        "updated",
+        "finance_month",
+        None,
+        {"year_month": year_month, "income": body.income, "expense": body.expense},
+    )
+    await db.commit()
+    return {
+        "year_month": year_month,
+        "income": body.income,
+        "expense": body.expense,
+        "notes": body.notes,
+        "balance": body.income - body.expense,
+    }
+
+
+@app.get("/api/work-projects")
+async def list_work_projects(db: aiosqlite.Connection = Depends(get_db), _: dict = Depends(require_auth)):
+    cur = await db.execute(
+        "SELECT * FROM work_projects WHERE deleted_at IS NULL ORDER BY "
+        "CASE status WHEN 'active' THEN 0 WHEN 'paused' THEN 1 ELSE 2 END, updated_at DESC, id DESC"
+    )
+    return [row_to_dict(r) for r in await cur.fetchall()]
+
+
+@app.post("/api/work-projects")
+async def create_work_project(
+    body: WorkProjectIn,
+    db: aiosqlite.Connection = Depends(get_db),
+    _: dict = Depends(require_auth),
+):
+    now = utcnow()
+    cur = await db.execute(
+        """
+        INSERT INTO work_projects(title, status, client, budget, notes, created_at, updated_at)
+        VALUES(?,?,?,?,?,?,?)
+        """,
+        (body.title.strip(), body.status, body.client.strip(), body.budget, body.notes, now, now),
+    )
+    await log_action(db, "created", "work_project", cur.lastrowid, {"title": body.title})
+    await db.commit()
+    cur = await db.execute("SELECT * FROM work_projects WHERE id=?", (cur.lastrowid,))
+    return row_to_dict(await cur.fetchone())
+
+
+@app.patch("/api/work-projects/{item_id}")
+async def patch_work_project(
+    item_id: int,
+    body: WorkProjectIn,
+    db: aiosqlite.Connection = Depends(get_db),
+    _: dict = Depends(require_auth),
+):
+    cur = await db.execute("SELECT * FROM work_projects WHERE id=? AND deleted_at IS NULL", (item_id,))
+    old = row_to_dict(await cur.fetchone())
+    if not old:
+        raise HTTPException(404, "Work project not found")
+    await db.execute(
+        """
+        UPDATE work_projects SET title=?, status=?, client=?, budget=?, notes=?, updated_at=?
+        WHERE id=?
+        """,
+        (body.title.strip(), body.status, body.client.strip(), body.budget, body.notes, utcnow(), item_id),
+    )
+    await log_action(db, "updated", "work_project", item_id, {"title": body.title})
+    await db.commit()
+    cur = await db.execute("SELECT * FROM work_projects WHERE id=?", (item_id,))
+    return row_to_dict(await cur.fetchone())
+
+
+@app.delete("/api/work-projects/{item_id}")
+async def delete_work_project(
+    item_id: int,
+    db: aiosqlite.Connection = Depends(get_db),
+    _: dict = Depends(require_auth),
+):
+    now = utcnow()
+    await db.execute(
+        "UPDATE work_projects SET deleted_at=?, updated_at=? WHERE id=? AND deleted_at IS NULL",
+        (now, now, item_id),
+    )
+    await log_action(db, "deleted", "work_project", item_id, {})
+    await db.commit()
+    return {"ok": True}
+
+
+@app.get("/api/health-profile")
+async def get_health_profile(db: aiosqlite.Connection = Depends(get_db), _: dict = Depends(require_auth)):
+    cur = await db.execute("SELECT * FROM health_metrics")
+    metrics = {row_to_dict(r)["key"]: row_to_dict(r)["value"] for r in await cur.fetchall()}
+    cur = await db.execute("SELECT * FROM health_body")
+    body = {
+        row_to_dict(r)["region"]: {"note": row_to_dict(r)["note"], "status": row_to_dict(r)["status"]}
+        for r in await cur.fetchall()
+    }
+    defaults = {
+        "weight": "",
+        "height": "",
+        "sleep": "",
+        "pressure": "",
+        "pulse": "",
+        "mood": "",
+    }
+    for k, v in defaults.items():
+        metrics.setdefault(k, v)
+    for region in ("head", "chest", "arms", "stomach", "back", "legs"):
+        body.setdefault(region, {"note": "", "status": "ok"})
+    return {"metrics": metrics, "body": body}
+
+
+@app.put("/api/health-profile")
+async def put_health_profile(
+    body: HealthProfileIn,
+    db: aiosqlite.Connection = Depends(get_db),
+    _: dict = Depends(require_auth),
+):
+    now = utcnow()
+    for key, value in body.metrics.items():
+        await db.execute(
+            """
+            INSERT INTO health_metrics(key, value, updated_at) VALUES(?,?,?)
+            ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at
+            """,
+            (key[:32], str(value)[:200], now),
+        )
+    for region, data in body.body.items():
+        await db.execute(
+            """
+            INSERT INTO health_body(region, note, status, updated_at) VALUES(?,?,?,?)
+            ON CONFLICT(region) DO UPDATE SET
+              note=excluded.note, status=excluded.status, updated_at=excluded.updated_at
+            """,
+            (
+                region[:32],
+                str(data.get("note") or "")[:500],
+                str(data.get("status") or "ok")[:16],
+                now,
+            ),
+        )
+    await log_action(db, "updated", "health_profile", None, {"metrics": list(body.metrics.keys())})
+    await db.commit()
+    cur = await db.execute("SELECT * FROM health_metrics")
+    metrics = {row_to_dict(r)["key"]: row_to_dict(r)["value"] for r in await cur.fetchall()}
+    cur = await db.execute("SELECT * FROM health_body")
+    regions = {
+        row_to_dict(r)["region"]: {"note": row_to_dict(r)["note"], "status": row_to_dict(r)["status"]}
+        for r in await cur.fetchall()
+    }
+    return {"metrics": metrics, "body": regions}
+
+
+@app.get("/api/workout-panel")
+async def workout_panel(db: aiosqlite.Connection = Depends(get_db), _: dict = Depends(require_auth)):
+    cur = await db.execute(
+        "SELECT * FROM workout_goals WHERE deleted_at IS NULL ORDER BY id DESC"
+    )
+    goals = [row_to_dict(r) for r in await cur.fetchall()]
+    cur = await db.execute(
+        """
+        SELECT COUNT(*) AS c FROM workout_sessions
+        WHERE deleted_at IS NULL AND started_at >= ?
+        """,
+        ((date.today() - timedelta(days=29)).isoformat(),),
+    )
+    workouts_30d = (await cur.fetchone())["c"]
+    cur = await db.execute(
+        """
+        SELECT COUNT(*) AS c FROM workout_sessions
+        WHERE deleted_at IS NULL AND started_at >= ?
+        """,
+        (date.today().isoformat(),),
+    )
+    workouts_today = (await cur.fetchone())["c"]
+    cur = await db.execute(
+        """
+        SELECT ws.title, ws.started_at, COUNT(s.id) AS sets_count
+        FROM workout_sessions ws
+        LEFT JOIN workout_sets s ON s.session_id = ws.id
+        WHERE ws.deleted_at IS NULL
+        GROUP BY ws.id
+        ORDER BY ws.started_at DESC
+        LIMIT 8
+        """
+    )
+    recent = [row_to_dict(r) for r in await cur.fetchall()]
+    return {
+        "goals": goals,
+        "stats": {"workouts_30d": workouts_30d, "workouts_today": workouts_today},
+        "recent": recent,
+    }
+
+
+@app.post("/api/workout-goals")
+async def create_workout_goal(
+    body: WorkoutGoalIn,
+    db: aiosqlite.Connection = Depends(get_db),
+    _: dict = Depends(require_auth),
+):
+    now = utcnow()
+    cur = await db.execute(
+        """
+        INSERT INTO workout_goals(title, target, unit, current, period, created_at, updated_at)
+        VALUES(?,?,?,?,?,?,?)
+        """,
+        (body.title.strip(), body.target, body.unit, body.current, body.period, now, now),
+    )
+    await log_action(db, "created", "workout_goal", cur.lastrowid, {"title": body.title})
+    await db.commit()
+    cur = await db.execute("SELECT * FROM workout_goals WHERE id=?", (cur.lastrowid,))
+    return row_to_dict(await cur.fetchone())
+
+
+@app.patch("/api/workout-goals/{goal_id}")
+async def patch_workout_goal(
+    goal_id: int,
+    body: WorkoutGoalIn,
+    db: aiosqlite.Connection = Depends(get_db),
+    _: dict = Depends(require_auth),
+):
+    cur = await db.execute("SELECT id FROM workout_goals WHERE id=? AND deleted_at IS NULL", (goal_id,))
+    if not await cur.fetchone():
+        raise HTTPException(404, "Goal not found")
+    await db.execute(
+        """
+        UPDATE workout_goals SET title=?, target=?, unit=?, current=?, period=?, updated_at=?
+        WHERE id=?
+        """,
+        (body.title.strip(), body.target, body.unit, body.current, body.period, utcnow(), goal_id),
+    )
+    await log_action(db, "updated", "workout_goal", goal_id, {"title": body.title})
+    await db.commit()
+    cur = await db.execute("SELECT * FROM workout_goals WHERE id=?", (goal_id,))
+    return row_to_dict(await cur.fetchone())
+
+
+@app.delete("/api/workout-goals/{goal_id}")
+async def delete_workout_goal(
+    goal_id: int,
+    db: aiosqlite.Connection = Depends(get_db),
+    _: dict = Depends(require_auth),
+):
+    now = utcnow()
+    await db.execute(
+        "UPDATE workout_goals SET deleted_at=?, updated_at=? WHERE id=? AND deleted_at IS NULL",
+        (now, now, goal_id),
+    )
+    await log_action(db, "deleted", "workout_goal", goal_id, {})
+    await db.commit()
+    return {"ok": True}
+
+
 @app.get("/api/backup")
 async def backup(db: aiosqlite.Connection = Depends(get_db), _: dict = Depends(require_auth)):
     await log_action(db, "backup_exported", "system", None, {})
@@ -769,6 +1135,11 @@ async def backup(db: aiosqlite.Connection = Depends(get_db), _: dict = Depends(r
         "workout_sets",
         "action_log",
         "daily_stats",
+        "finance_months",
+        "work_projects",
+        "health_metrics",
+        "health_body",
+        "workout_goals",
     ]
     data: dict[str, Any] = {"exported_at": utcnow(), "tables": {}}
     for t in tables:

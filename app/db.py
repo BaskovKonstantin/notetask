@@ -93,6 +93,51 @@ CREATE TABLE IF NOT EXISTS daily_stats (
   completions INTEGER NOT NULL DEFAULT 0,
   workouts INTEGER NOT NULL DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS finance_months (
+  year_month TEXT PRIMARY KEY,
+  income REAL NOT NULL DEFAULT 0,
+  expense REAL NOT NULL DEFAULT 0,
+  notes TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS work_projects (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active',
+  client TEXT NOT NULL DEFAULT '',
+  budget REAL,
+  notes TEXT NOT NULL DEFAULT '',
+  deleted_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS health_metrics (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS health_body (
+  region TEXT PRIMARY KEY,
+  note TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'ok',
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS workout_goals (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  target REAL NOT NULL DEFAULT 0,
+  unit TEXT NOT NULL DEFAULT '',
+  current REAL NOT NULL DEFAULT 0,
+  period TEXT NOT NULL DEFAULT 'month',
+  deleted_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
 """
 
 
@@ -122,6 +167,50 @@ async def migrate(db: aiosqlite.Connection) -> None:
     await db.execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_projects_source_ext "
         "ON projects(source, external_id) WHERE external_id IS NOT NULL"
+    )
+    await db.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS finance_months (
+          year_month TEXT PRIMARY KEY,
+          income REAL NOT NULL DEFAULT 0,
+          expense REAL NOT NULL DEFAULT 0,
+          notes TEXT NOT NULL DEFAULT '',
+          updated_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS work_projects (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          title TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'active',
+          client TEXT NOT NULL DEFAULT '',
+          budget REAL,
+          notes TEXT NOT NULL DEFAULT '',
+          deleted_at TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS health_metrics (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL DEFAULT '',
+          updated_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS health_body (
+          region TEXT PRIMARY KEY,
+          note TEXT NOT NULL DEFAULT '',
+          status TEXT NOT NULL DEFAULT 'ok',
+          updated_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS workout_goals (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          title TEXT NOT NULL,
+          target REAL NOT NULL DEFAULT 0,
+          unit TEXT NOT NULL DEFAULT '',
+          current REAL NOT NULL DEFAULT 0,
+          period TEXT NOT NULL DEFAULT 'month',
+          deleted_at TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        """
     )
 
 
