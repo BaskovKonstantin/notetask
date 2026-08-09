@@ -123,10 +123,39 @@ const CHIP_ICON = {
 };
 
 const RU_MONTHS = {
-  янв: 0, январ: 0, фев: 1, феврал: 1, мар: 2, март: 2, апр: 3, апрел: 3,
-  май: 4, мая: 4, июн: 5, июн: 5, июл: 6, июл: 6, авг: 7, август: 7,
-  сен: 8, сент: 8, окт: 9, октябр: 9, ноя: 10, нояб: 10, дек: 11, декабр: 11,
+  янв: 0, январ: 0,
+  фев: 1, феврал: 1,
+  мар: 2, март: 2,
+  апр: 3, апрел: 3,
+  май: 4, мая: 4, мае: 4,
+  июн: 5, июнь: 5, июня: 5, июне: 5,
+  июл: 6, июль: 6, июля: 6, июле: 6,
+  авг: 7, август: 7,
+  сен: 8, сент: 8, сентябр: 8,
+  окт: 9, октябр: 9,
+  ноя: 10, нояб: 10,
+  дек: 11, декабр: 11,
 };
+
+const RU_WEEKDAYS = [
+  { re: /воскресен/, dow: 0 },
+  { re: /понедельник/, dow: 1 },
+  { re: /вторник/, dow: 2 },
+  { re: /сред/, dow: 3 },
+  { re: /четверг/, dow: 4 },
+  { re: /пятниц/, dow: 5 },
+  { re: /суббот/, dow: 6 },
+];
+
+const MONTH_NAME_RE =
+  "январ[ьяе]|феврал[ьяе]|март[ае]?|апрел[ьяе]|ма[йяе]|июн[ьяе]|июл[ьяе]|август[ае]?|сентябр[ьяе]|октябр[ьяе]|ноябр[ьяе]|декабр[ьяе]";
+const WEEKDAY_NAME_RE =
+  "понедельник|вторник|сред[ауые]|четверг|пятниц[ауые]|суббот[ауые]|воскресень[еяю]";
+
+function ruTokenRe(body, flags = "giu") {
+  const f = flags.includes("u") ? flags : `${flags}u`;
+  return new RegExp(`(?<![\p{L}\p{N}_])(?:${body})(?![\p{L}\p{N}_])`, f);
+}
 
 function addDays(base, days) {
   const d = new Date(base);
@@ -135,7 +164,36 @@ function addDays(base, days) {
 }
 
 function toIsoDate(d) {
-  return d.toISOString().slice(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function nextWeekdayDate(dow, from = new Date()) {
+  const now = new Date(from);
+  now.setHours(12, 0, 0, 0);
+  const add = (dow - now.getDay() + 7) % 7;
+  return toIsoDate(addDays(now, add));
+}
+
+function resolveMonthIndex(word) {
+  const w = String(word || "").toLowerCase();
+  const keys = Object.keys(RU_MONTHS).sort((a, b) => b.length - a.length);
+  const key = keys.find((k) => w === k || w.startsWith(k));
+  return key == null ? null : RU_MONTHS[key];
+}
+
+function nextMonthDate(monthIndex, day = 1, from = new Date()) {
+  const now = new Date(from);
+  now.setHours(12, 0, 0, 0);
+  let year = now.getFullYear();
+  let candidate = new Date(year, monthIndex, day, 12, 0, 0, 0);
+  if (candidate < now) {
+    year += 1;
+    candidate = new Date(year, monthIndex, day, 12, 0, 0, 0);
+  }
+  return toIsoDate(candidate);
 }
 
 function quickDueDate(kind) {
@@ -200,6 +258,12 @@ function parseDateToken(text) {
 
   if (/^через\s+неделю$/.test(lower)) return toIsoDate(addDays(now, 7));
 
+  const weekday = lower.match(new RegExp(`^(?:во?|к)?\\s*(${WEEKDAY_NAME_RE})$`));
+  if (weekday) {
+    const hit = RU_WEEKDAYS.find((w) => w.re.test(weekday[1]));
+    if (hit) return nextWeekdayDate(hit.dow, now);
+  }
+
   const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
 
@@ -209,19 +273,20 @@ function parseDateToken(text) {
     const month = Number(dmy[2]) - 1;
     let year = dmy[3] ? Number(dmy[3]) : now.getFullYear();
     if (year < 100) year += 2000;
-    return toIsoDate(new Date(year, month, day));
+    return toIsoDate(new Date(year, month, day, 12, 0, 0, 0));
   }
 
-  const named = lower.match(/^(\d{1,2})\s+([a-zа-яё]+)/);
+  const named = lower.match(/^(\d{1,2})\s+([a-zа-яё]+)$/);
   if (named) {
     const day = Number(named[1]);
-    const monthKey = Object.keys(RU_MONTHS).find((k) => named[2].startsWith(k));
-    if (monthKey) {
-      let year = now.getFullYear();
-      const candidate = new Date(year, RU_MONTHS[monthKey], day);
-      if (candidate < now) year += 1;
-      return toIsoDate(new Date(year, RU_MONTHS[monthKey], day));
-    }
+    const monthIndex = resolveMonthIndex(named[2]);
+    if (monthIndex != null) return nextMonthDate(monthIndex, day, now);
+  }
+
+  const bareMonth = lower.match(new RegExp(`^(?:во?|к)?\\s*(${MONTH_NAME_RE})$`));
+  if (bareMonth) {
+    const monthIndex = resolveMonthIndex(bareMonth[1]);
+    if (monthIndex != null) return nextMonthDate(monthIndex, 1, now);
   }
   return null;
 }
@@ -252,52 +317,70 @@ function findProjectId(name) {
 }
 
 function collectTaskTokens(text) {
-  const monthNames =
-    "янв(?:арь|аря|аре)?|фев(?:раль|раля|рале)?|мар(?:т|та|те)?|апр(?:ель|еля|еле)?|ма[йяе]|июн(?:ь|я|е)?|июл(?:ь|я|е)?|авг(?:уст|уста|усте)?|сен(?:тябрь|тября|тябре)?|окт(?:ябрь|ября|ябре)?|ноя(?:брь|бря|бре)?|дек(?:абрь|абря|абре)?";
   const patterns = [
     {
       type: "date",
-      re: /\b(?:сегодня|today|завтра|tomorrow|послезавтра)\b/gi,
+      re: ruTokenRe("сегодня|today|завтра|tomorrow|послезавтра"),
       meta: (m) => ({ due: parseDateToken(m[0]) }),
     },
     {
       type: "date",
-      re: /\bчерез\s+\d+\s*(?:дн(?:я|ей|ь)?|недел(?:ю|и|ь)?|нед\.?|месяц(?:а|ев)?|мес\.?|[dwm])\b/gi,
+      re: ruTokenRe("через\\s+\\d+\\s*(?:дн(?:я|ей|ь)?|недел(?:ю|и|ь)?|нед\\.?|месяц(?:а|ев)?|мес\\.?|[dwm])"),
       meta: (m) => ({ due: parseDateToken(m[0]) }),
     },
     {
       type: "date",
-      re: /\bчерез\s+(?:неделю|месяц)\b/gi,
+      re: ruTokenRe("через\\s+(?:неделю|месяц)"),
       meta: (m) => ({ due: parseDateToken(m[0]) }),
     },
     {
       type: "date",
-      re: /\bна\s+след(?:ующей|\.)?\s+неделе\b/gi,
+      re: ruTokenRe("на\\s+след(?:ующей|\\.)?\\s+неделе"),
       meta: (m) => ({ due: parseDateToken(m[0]) }),
     },
     {
       type: "date",
-      re: /\bна\s+след(?:ующий|\.)?\s+месяц\b/gi,
+      re: ruTokenRe("на\\s+след(?:ующий|\\.)?\\s+месяц"),
       meta: (m) => ({ due: parseDateToken(m[0]) }),
     },
     {
       type: "date",
-      re: /\b(?:на\s+выходн(?:ых|ой)|в\s+выходн(?:ые|ой))\b/gi,
+      re: ruTokenRe("на\\s+выходн(?:ых|ой)|в\\s+выходн(?:ые|ой)"),
       meta: (m) => ({ due: parseDateToken(m[0]) }),
     },
     {
       type: "date",
-      re: /\b\d{4}-\d{2}-\d{2}\b/g,
+      re: ruTokenRe("\\d{4}-\\d{2}-\\d{2}"),
       meta: (m) => ({ due: parseDateToken(m[0]) }),
     },
     {
       type: "date",
-      re: /\b\d{1,2}[./]\d{1,2}(?:[./]\d{2,4})?\b/g,
+      re: ruTokenRe("\\d{1,2}[./]\\d{1,2}(?:[./]\\d{2,4})?"),
       meta: (m) => ({ due: parseDateToken(m[0]) }),
     },
     {
       type: "date",
-      re: new RegExp(`\\b\\d{1,2}\\s+(?:${monthNames})\\b`, "gi"),
+      re: ruTokenRe(`\\d{1,2}\\s+(?:${MONTH_NAME_RE})`),
+      meta: (m) => ({ due: parseDateToken(m[0]) }),
+    },
+    {
+      type: "date",
+      re: ruTokenRe(`(?:во?|к)\\s+(?:${WEEKDAY_NAME_RE})`),
+      meta: (m) => ({ due: parseDateToken(m[0]) }),
+    },
+    {
+      type: "date",
+      re: ruTokenRe(WEEKDAY_NAME_RE),
+      meta: (m) => ({ due: parseDateToken(m[0]) }),
+    },
+    {
+      type: "date",
+      re: ruTokenRe(`(?:во?|к)\\s+(?:${MONTH_NAME_RE})`),
+      meta: (m) => ({ due: parseDateToken(m[0]) }),
+    },
+    {
+      type: "date",
+      re: ruTokenRe(MONTH_NAME_RE),
       meta: (m) => ({ due: parseDateToken(m[0]) }),
     },
     {
@@ -322,7 +405,7 @@ function collectTaskTokens(text) {
     },
     {
       type: "kind",
-      re: /\b(?:идея|idea|план|plan)\b/gi,
+      re: ruTokenRe("идея|idea|план|plan"),
       meta: (m) => ({ kind: parseKindToken(m[0]) }),
     },
   ];
