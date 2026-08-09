@@ -11,6 +11,7 @@ const state = {
   token: localStorage.getItem(TOKEN_KEY) || "",
   projects: [],
   projectId: null,
+  workProjects: [],
   panelKind: null,
   healthSelected: "chest",
 };
@@ -120,6 +121,7 @@ const CHIP_ICON = {
   time: '<svg viewBox="0 0 16 16" width="13" height="13"><path fill="currentColor" d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13zm0 1.2a5.3 5.3 0 1 1 0 10.6 5.3 5.3 0 0 1 0-10.6zm.6 2.5v3.2l2.4 1.4-.6 1-3-1.8V5.2h1.2z"/></svg>',
   location: '<svg viewBox="0 0 16 16" width="13" height="13"><path fill="currentColor" d="M8 1.2a4.8 4.8 0 0 0-4.8 4.8c0 3.6 4.8 8.8 4.8 8.8s4.8-5.2 4.8-8.8A4.8 4.8 0 0 0 8 1.2zm0 6.5a1.7 1.7 0 1 1 0-3.4 1.7 1.7 0 0 1 0 3.4z"/></svg>',
   cost: '<svg viewBox="0 0 16 16" width="13" height="13"><path fill="currentColor" d="M2.5 4.5h11v7h-11v-7zm1.5 1.5v4h8V6h-8zm2 3.5H5V7h1v2.5zm3 0H8V7h1.5v2.5z"/></svg>',
+  work: '<svg viewBox="0 0 16 16" width="13" height="13"><path fill="currentColor" d="M5 3.5h6l.8 1.5H14v8H2v-8h2.2L5 3.5zm1.2 1.5-.5 1H10.3l-.5-1H6.2zM3.5 7v4.5h9V7h-9z"/></svg>',
 };
 
 const RU_MONTHS = {
@@ -511,6 +513,8 @@ async function loadProjectsCache() {
     state.projects = [];
     renderProjectNav();
   }
+  await loadWorkProjectsCache();
+  syncWorkProjectChipVisibility();
 }
 
 function renderProjectNav() {
@@ -543,6 +547,68 @@ function leaveEmptyInboxIfNeeded() {
   setView("today", { keepTaskForm: true });
   return true;
 }
+
+function workSectionId() {
+  return state.projects.find((p) => p.name === "Работа")?.id ?? null;
+}
+
+function isWorkSectionId(projectId) {
+  const wid = workSectionId();
+  return wid != null && Number(projectId) === Number(wid);
+}
+
+async function loadWorkProjectsCache() {
+  try {
+    state.workProjects = await api("/api/work-projects");
+  } catch {
+    state.workProjects = [];
+  }
+  renderComposerWorkMenu();
+}
+
+function activeWorkProjects() {
+  return (state.workProjects || []).filter((p) => p.status !== "done");
+}
+
+function workProjectTitle(id) {
+  if (id == null || id === "") return "";
+  const hit = (state.workProjects || []).find((p) => Number(p.id) === Number(id));
+  return hit?.title || "";
+}
+
+function renderComposerWorkMenu() {
+  const menu = $("pop-work");
+  if (!menu) return;
+  const selected = $("task-work-project")?.value || "";
+  const items = activeWorkProjects();
+  menu.innerHTML = [
+    `<button type="button" class="chip-option${!selected ? " selected" : ""}" data-set-work-project="">Без проекта</button>`,
+    ...items.map(
+      (p) =>
+        `<button type="button" class="chip-option${String(p.id) === String(selected) ? " selected" : ""}" data-set-work-project="${p.id}">${escapeHtml(p.title)}</button>`,
+    ),
+    items.length
+      ? ""
+      : `<div class="empty" style="padding:8px">Сначала добавь проект справа</div>`,
+  ].join("");
+}
+
+function composerTargetProjectId() {
+  const parsed = parseTaskInput($("task-title")?.value || "");
+  if (parsed.meta.projectId) return parsed.meta.projectId;
+  if (state.view === "project") return state.projectId;
+  return null;
+}
+
+function syncWorkProjectChipVisibility() {
+  const wrap = $("chip-work-wrap");
+  if (!wrap) return;
+  const show = isWorkSectionId(composerTargetProjectId()) || !!$("task-work-project")?.value;
+  wrap.classList.toggle("hidden", !show);
+  if (!show && $("task-work-project")) $("task-work-project").value = "";
+  renderComposerWorkMenu();
+}
+
 
 function fmtShortDay(isoDate) {
   if (!isoDate) return "";
@@ -631,6 +697,16 @@ function updateTaskChips() {
   document.querySelectorAll("[data-set-cost-type]").forEach((btn) => {
     btn.classList.toggle("selected", btn.dataset.setCostType === costType);
   });
+
+  syncWorkProjectChipVisibility();
+  const workId = $("task-work-project")?.value || "";
+  const workTitle = workProjectTitle(workId);
+  if ($("chip-work-label")) {
+    $("chip-work-label").textContent = workTitle ? truncateText(workTitle, 14) : "Проект";
+  }
+  if ($("chip-work")) {
+    $("chip-work").classList.toggle("has-value", !!workId);
+  }
 }
 
 function initTaskMetaChips() {
@@ -696,6 +772,14 @@ function initTaskMetaChips() {
       updateTaskChips();
       closeTaskPopovers();
     });
+  });
+
+  $("pop-work")?.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-set-work-project]");
+    if (!btn) return;
+    $("task-work-project").value = btn.dataset.setWorkProject || "";
+    updateTaskChips();
+    closeTaskPopovers();
   });
 
   document.addEventListener("click", (e) => {
@@ -1096,6 +1180,7 @@ function setView(view, opts = {}) {
   else if (view === "project") dueInput.value = "";
 
   updateTaskChips();
+  syncWorkProjectChipVisibility();
   track("view_opened", "ui", null, { view, project_id: state.projectId });
   refresh();
 }
@@ -1162,14 +1247,29 @@ function renderTaskAttrs(t, projectMap) {
   const hasCost = t.cost != null && Number(t.cost) !== 0;
   const costType = t.cost_type === "income" ? "income" : "expense";
   const dueLabel = due.date ? fmtShortDay(due.date) : "Срок";
+  const showWork = isWorkSectionId(t.project_id) || t.work_project_id != null;
+  const workTitle = workProjectTitle(t.work_project_id);
+  const hasWork = !!t.work_project_id;
 
   const projects = [...state.projects].sort((a, b) => a.sort - b.sort || a.id - b.id);
   const projectOptions = [
-    `<button type="button" class="chip-option${!t.project_id ? " selected" : ""}" data-task-patch='{"project_id":null}'>Без раздела</button>`,
+    `<button type="button" class="chip-option${!t.project_id ? " selected" : ""}" data-task-patch='{"project_id":null,"work_project_id":null}'>Без раздела</button>`,
     ...projects.map(
       (p) =>
-        `<button type="button" class="chip-option${t.project_id === p.id ? " selected" : ""}" data-task-patch='{"project_id":${p.id}}'><span class="project-dot" style="background:${escapeAttr(p.color)}"></span>${escapeHtml(p.name)}</button>`,
+        `<button type="button" class="chip-option${t.project_id === p.id ? " selected" : ""}" data-task-patch='{"project_id":${p.id}${p.name === "Работа" ? "" : ',"work_project_id":null'}}'><span class="project-dot" style="background:${escapeAttr(p.color)}"></span>${escapeHtml(p.name)}</button>`,
     ),
+  ].join("");
+
+  const workOptions = [
+    `<button type="button" class="chip-option${!t.work_project_id ? " selected" : ""}" data-task-patch='{"work_project_id":null}'>Без проекта</button>`,
+    ...activeWorkProjects().map(
+      (p) =>
+        `<button type="button" class="chip-option${Number(t.work_project_id) === Number(p.id) ? " selected" : ""}" data-task-patch='{"work_project_id":${p.id}}'>${escapeHtml(p.title)}</button>`,
+    ),
+    // include current if done/deleted from active list
+    ...(t.work_project_id && !activeWorkProjects().some((p) => Number(p.id) === Number(t.work_project_id)) && workTitle
+      ? [`<button type="button" class="chip-option selected" data-task-patch='{"work_project_id":${t.work_project_id}}'>${escapeHtml(workTitle)}</button>`]
+      : []),
   ].join("");
 
   return `
@@ -1181,6 +1281,17 @@ function renderTaskAttrs(t, projectMap) {
         </button>
         <div class="chip-menu chip-menu-wide hidden" role="menu">${projectOptions}</div>
       </div>
+      ${
+        showWork
+          ? `<div class="chip-popover">
+        <button type="button" class="chip-btn${hasWork ? " has-value" : ""}" aria-expanded="false">
+          <span class="chip-icon">${CHIP_ICON.work}</span>
+          <span class="chip-label">${escapeHtml(truncateText(workTitle || "Проект", 12))}</span>
+        </button>
+        <div class="chip-menu chip-menu-wide hidden" role="menu">${workOptions}</div>
+      </div>`
+          : ""
+      }
       <div class="chip-popover">
         <button type="button" class="chip-btn${hasPriority ? " has-value" : ""}" aria-expanded="false">
           <span class="chip-icon">${CHIP_ICON.priority}</span>
@@ -1743,12 +1854,19 @@ $("task-form").addEventListener("submit", async (e) => {
       location,
       cost: costVal,
       cost_type: costType,
+      work_project_id: (() => {
+        const pid = parsed.meta.projectId || (state.view === "project" ? state.projectId : null) || null;
+        if (!isWorkSectionId(pid)) return null;
+        const raw = $("task-work-project").value;
+        return raw ? Number(raw) : null;
+      })(),
     }),
   });
   $("task-title").value = "";
   $("task-location").value = "";
   $("task-cost").value = "";
   $("task-cost-type-value").value = "expense";
+  $("task-work-project").value = "";
   syncTaskTitleHighlight();
   updateTaskChips();
   hideTaskForm();
@@ -1962,6 +2080,7 @@ $("section-panel").addEventListener("submit", async (e) => {
         status: "active",
       }),
     });
+    await loadWorkProjectsCache();
     await renderWorkPanel();
     return;
   }
@@ -2016,6 +2135,7 @@ $("section-panel").addEventListener("click", async (e) => {
     const id = Number(workItem.dataset.workId);
     if (e.target.closest("[data-work-delete]")) {
       await api(`/api/work-projects/${id}`, { method: "DELETE" });
+      await loadWorkProjectsCache();
       await renderWorkPanel();
       return;
     }
@@ -2034,6 +2154,7 @@ $("section-panel").addEventListener("click", async (e) => {
           notes: cur.notes || "",
         }),
       });
+      await loadWorkProjectsCache();
       await renderWorkPanel();
       return;
     }

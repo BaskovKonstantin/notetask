@@ -68,6 +68,7 @@ class TaskIn(BaseModel):
     location: str | None = None
     cost: float | None = None
     cost_type: Literal["expense", "income"] | None = None
+    work_project_id: int | None = None
 
 
 class TaskPatchIn(BaseModel):
@@ -82,6 +83,7 @@ class TaskPatchIn(BaseModel):
     location: str | None = None
     cost: float | None = None
     cost_type: Literal["expense", "income"] | None = None
+    work_project_id: int | None = None
 
 
 class NoteIn(BaseModel):
@@ -195,6 +197,31 @@ async def login(body: LoginIn, db: aiosqlite.Connection = Depends(get_db)):
     return {"token": make_token()}
 
 
+
+async def normalize_work_project_id(
+    db: aiosqlite.Connection,
+    project_id: int | None,
+    work_project_id: int | None,
+) -> int | None:
+    if work_project_id is None:
+        return None
+    if project_id is not None:
+        cur = await db.execute(
+            "SELECT name FROM projects WHERE id=? AND deleted_at IS NULL",
+            (project_id,),
+        )
+        row = await cur.fetchone()
+        if not row or row["name"] != "Работа":
+            return None
+    cur = await db.execute(
+        "SELECT id FROM work_projects WHERE id=? AND deleted_at IS NULL",
+        (work_project_id,),
+    )
+    if not await cur.fetchone():
+        return None
+    return work_project_id
+
+
 # ---------- projects ----------
 
 @app.get("/api/projects")
@@ -298,13 +325,14 @@ async def create_task(
     _: dict = Depends(require_auth),
 ):
     now = utcnow()
+    work_project_id = await normalize_work_project_id(db, body.project_id, body.work_project_id)
     cur = await db.execute(
         """
         INSERT INTO tasks(
           project_id, title, notes, kind, priority, due_at, remind_at,
-          status, created_at, updated_at, location, cost, cost_type
+          status, created_at, updated_at, location, cost, cost_type, work_project_id
         )
-        VALUES(?,?,?,?,?,?,?,'open',?,?,?,?,?)
+        VALUES(?,?,?,?,?,?,?,'open',?,?,?,?,?,?)
         """,
         (
             body.project_id,
@@ -319,6 +347,7 @@ async def create_task(
             body.location,
             body.cost,
             body.cost_type,
+            work_project_id,
         ),
     )
     tid = cur.lastrowid
@@ -377,10 +406,15 @@ async def patch_task(
                 {"title": next_values["title"], "changes": changes},
             )
 
+    next_values["work_project_id"] = await normalize_work_project_id(
+        db, next_values.get("project_id"), next_values.get("work_project_id")
+    )
+
     await db.execute(
         """
         UPDATE tasks SET project_id=?, title=?, notes=?, kind=?, priority=?, due_at=?, remind_at=?,
-          status=?, completed_at=?, updated_at=?, location=?, cost=?, cost_type=? WHERE id=?
+          status=?, completed_at=?, updated_at=?, location=?, cost=?, cost_type=?, work_project_id=?
+        WHERE id=?
         """,
         (
             next_values["project_id"],
@@ -396,6 +430,7 @@ async def patch_task(
             next_values.get("location"),
             next_values.get("cost"),
             next_values.get("cost_type"),
+            next_values.get("work_project_id"),
             task_id,
         ),
     )
@@ -425,7 +460,11 @@ async def update_task(
         "location": body.location,
         "cost": body.cost,
         "cost_type": body.cost_type,
+        "work_project_id": body.work_project_id,
     }
+    next_values["work_project_id"] = await normalize_work_project_id(
+        db, next_values.get("project_id"), next_values.get("work_project_id")
+    )
     if status == "done" and old["status"] != "done":
         completed_at = utcnow()
         await bump_completions(db)
@@ -459,7 +498,8 @@ async def update_task(
     await db.execute(
         """
         UPDATE tasks SET project_id=?, title=?, notes=?, kind=?, priority=?, due_at=?, remind_at=?,
-          status=?, completed_at=?, updated_at=?, location=?, cost=?, cost_type=? WHERE id=?
+          status=?, completed_at=?, updated_at=?, location=?, cost=?, cost_type=?, work_project_id=?
+        WHERE id=?
         """,
         (
             next_values["project_id"],
@@ -475,6 +515,7 @@ async def update_task(
             next_values["location"],
             next_values["cost"],
             next_values["cost_type"],
+            next_values["work_project_id"],
             task_id,
         ),
     )

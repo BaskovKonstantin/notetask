@@ -154,6 +154,18 @@
                   </div>
                 </div>
 
+
+                <div class="chip-popover hidden" id="chip-work-wrap">
+                  <button type="button" class="chip-btn" id="chip-work" aria-expanded="false" aria-controls="pop-work">
+                    <span class="chip-icon" aria-hidden="true">
+                      <svg viewBox="0 0 16 16" width="14" height="14"><path fill="currentColor" d="M5 3.5h6l.8 1.5H14v8H2v-8h2.2L5 3.5zm1.2 1.5-.5 1H10.3l-.5-1H6.2zM3.5 7v4.5h9V7h-9z"/></svg>
+                    </span>
+                    <span class="chip-label" id="chip-work-label">Проект</span>
+                  </button>
+                  <div class="chip-menu chip-menu-wide hidden" id="pop-work" role="menu"></div>
+                  <input type="hidden" id="task-work-project" value="" />
+                </div>
+
                 <div class="chip-popover">
                   <button type="button" class="chip-btn" id="chip-cost" aria-expanded="false" aria-controls="pop-cost">
                     <span class="chip-icon" aria-hidden="true">
@@ -226,6 +238,6 @@
   </div>
 
   <script src="assets/pwa-install.js?v=1"></script>
-  <script src="assets/app.js?v=34"></script>
+  <script src="assets/app.js?v=35"></script>
 </body>
 </html>
