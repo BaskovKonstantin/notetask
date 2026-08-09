@@ -154,7 +154,7 @@ const WEEKDAY_NAME_RE =
 
 function ruTokenRe(body, flags = "giu") {
   const f = flags.includes("u") ? flags : `${flags}u`;
-  return new RegExp(`(?<![\p{L}\p{N}_])(?:${body})(?![\p{L}\p{N}_])`, f);
+  return new RegExp(`(?<![\\p{L}\\p{N}_])(?:${body})(?![\\p{L}\\p{N}_])`, f);
 }
 
 function addDays(base, days) {
