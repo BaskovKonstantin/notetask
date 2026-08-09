@@ -1,6 +1,5 @@
 const TOKEN_KEY = "notetask_token";
 const SIDEBAR_KEY = "notetask_sidebar_collapsed";
-const SOUND_KEY = "notetask_complete_sound";
 const BASE = window.NOTETASK_BASE ?? (() => {
   const path = window.location.pathname;
   if (path === "/todo" || path.startsWith("/todo/")) return "/todo";
@@ -855,227 +854,58 @@ function renderTaskItem(t, view, projectMap) {
 
 let completeAudioCtx;
 
-const COMPLETE_SOUNDS = [
-  { id: "classic", name: "Классика" },
-  { id: "soft", name: "Мягкий пинг" },
-  { id: "double", name: "Двойной звон" },
-  { id: "wood", name: "Дерево" },
-  { id: "glass", name: "Стекло" },
-  { id: "bubble", name: "Пузырь" },
-  { id: "coin", name: "Монета" },
-  { id: "pop", name: "Поп" },
-  { id: "bell", name: "Колокол" },
-  { id: "marimba", name: "Маримба" },
-  { id: "digital", name: "Цифровой" },
-  { id: "sparkle", name: "Искры" },
-  { id: "thud", name: "Глухой удар" },
-  { id: "rise", name: "Восходящий" },
-  { id: "fall", name: "Нисходящий" },
-  { id: "chirp", name: "Чирик" },
-  { id: "pluck", name: "Щипок" },
-  { id: "whoosh", name: "Свист" },
-  { id: "fanfare", name: "Успех" },
-  { id: "silence", name: "Без звука" },
-];
-
-function getCompleteSoundId() {
-  const saved = localStorage.getItem(SOUND_KEY);
-  if (COMPLETE_SOUNDS.some((s) => s.id === saved)) return saved;
-  return "classic";
-}
-
-function setCompleteSoundId(id) {
-  localStorage.setItem(SOUND_KEY, id);
-  renderSoundPicker();
-}
-
-function ensureAudioCtx() {
-  completeAudioCtx = completeAudioCtx || new AudioContext();
-  if (completeAudioCtx.state === "suspended") void completeAudioCtx.resume();
-  return completeAudioCtx;
-}
-
-function playTone(ctx, dest, type, start, stop, freqStart, freqEnd, peak, attack = 0.005) {
-  const osc = ctx.createOscillator();
-  osc.type = type;
-  osc.frequency.setValueAtTime(freqStart, start);
-  if (freqEnd !== freqStart) {
-    osc.frequency.exponentialRampToValueAtTime(Math.max(20, freqEnd), Math.max(start + 0.01, stop - 0.01));
-  }
-  const gain = ctx.createGain();
-  gain.gain.setValueAtTime(0.0001, start);
-  gain.gain.linearRampToValueAtTime(peak, start + attack);
-  gain.gain.exponentialRampToValueAtTime(0.0001, stop);
-  osc.connect(gain);
-  gain.connect(dest);
-  osc.start(start);
-  osc.stop(stop + 0.01);
-}
-
-function playNoise(ctx, dest, start, dur, freq, peak, q = 1) {
-  const buffer = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * dur), ctx.sampleRate);
-  const data = buffer.getChannelData(0);
-  for (let i = 0; i < data.length; i += 1) {
-    const env = 1 - i / data.length;
-    data[i] = (Math.random() * 2 - 1) * env * env;
-  }
-  const noise = ctx.createBufferSource();
-  noise.buffer = buffer;
-  const filter = ctx.createBiquadFilter();
-  filter.type = "bandpass";
-  filter.frequency.value = freq;
-  filter.Q.value = q;
-  const gain = ctx.createGain();
-  gain.gain.setValueAtTime(peak, start);
-  gain.gain.exponentialRampToValueAtTime(0.0001, start + dur);
-  noise.connect(filter);
-  filter.connect(gain);
-  gain.connect(dest);
-  noise.start(start);
-  noise.stop(start + dur + 0.01);
-}
-
-function playSoundById(id) {
-  if (id === "silence") return;
+function playCompleteSound() {
   try {
-    const ctx = ensureAudioCtx();
+    completeAudioCtx = completeAudioCtx || new AudioContext();
+    const ctx = completeAudioCtx;
+    if (ctx.state === "suspended") void ctx.resume();
     const t0 = ctx.currentTime + 0.001;
     const master = ctx.createGain();
     master.gain.setValueAtTime(0.85, t0);
     master.connect(ctx.destination);
-    const warm = ctx.createBiquadFilter();
-    warm.type = "lowpass";
-    warm.Q.value = 0.85;
-    warm.frequency.setValueAtTime(4200, t0);
-    warm.frequency.exponentialRampToValueAtTime(1400, t0 + 0.35);
-    warm.connect(master);
-    const dest = warm;
-    const tone = (...args) => playTone(ctx, dest, ...args);
-    const noise = (...args) => playNoise(ctx, master, ...args);
 
-    switch (id) {
-      case "classic":
-        tone("sine", t0, t0 + 0.07, 196, 98, 0.42, 0.004);
-        tone("sine", t0 + 0.008, t0 + 0.34, 880, 659.25, 0.52, 0.006);
-        tone("sine", t0 + 0.01, t0 + 0.22, 1318.5, 987.77, 0.22, 0.004);
-        tone("triangle", t0 + 0.014, t0 + 0.12, 1760, 1567.98, 0.08, 0.003);
-        noise(t0, 0.018, 2200, 0.16, 0.9);
-        break;
-      case "soft":
-        tone("sine", t0, t0 + 0.28, 660, 524, 0.35, 0.02);
-        tone("sine", t0 + 0.02, t0 + 0.18, 990, 784, 0.12, 0.01);
-        break;
-      case "double":
-        tone("sine", t0, t0 + 0.18, 784, 784, 0.4, 0.004);
-        tone("sine", t0 + 0.14, t0 + 0.36, 1046.5, 1046.5, 0.38, 0.004);
-        break;
-      case "wood":
-        tone("triangle", t0, t0 + 0.08, 420, 180, 0.55, 0.002);
-        tone("sine", t0, t0 + 0.05, 180, 90, 0.3, 0.002);
-        noise(t0, 0.012, 900, 0.12, 2);
-        break;
-      case "glass":
-        tone("sine", t0, t0 + 0.45, 1568, 1568, 0.28, 0.002);
-        tone("sine", t0, t0 + 0.35, 2349, 2349, 0.12, 0.002);
-        tone("sine", t0 + 0.01, t0 + 0.25, 3136, 3136, 0.08, 0.002);
-        break;
-      case "bubble":
-        tone("sine", t0, t0 + 0.16, 280, 720, 0.4, 0.01);
-        tone("sine", t0 + 0.05, t0 + 0.22, 360, 900, 0.22, 0.01);
-        break;
-      case "coin":
-        tone("square", t0, t0 + 0.06, 1800, 1400, 0.18, 0.001);
-        tone("sine", t0 + 0.04, t0 + 0.28, 2400, 1800, 0.25, 0.002);
-        break;
-      case "pop":
-        tone("sine", t0, t0 + 0.09, 320, 80, 0.55, 0.001);
-        noise(t0, 0.03, 600, 0.2, 0.7);
-        break;
-      case "bell":
-        tone("sine", t0, t0 + 0.7, 523.25, 523.25, 0.4, 0.002);
-        tone("sine", t0, t0 + 0.5, 1046.5, 1046.5, 0.18, 0.002);
-        tone("sine", t0, t0 + 0.35, 1568, 1568, 0.1, 0.002);
-        break;
-      case "marimba":
-        tone("sine", t0, t0 + 0.28, 523.25, 523.25, 0.45, 0.003);
-        tone("sine", t0 + 0.09, t0 + 0.38, 659.25, 659.25, 0.4, 0.003);
-        tone("sine", t0 + 0.18, t0 + 0.5, 783.99, 783.99, 0.35, 0.003);
-        break;
-      case "digital":
-        tone("square", t0, t0 + 0.05, 880, 880, 0.18, 0.001);
-        tone("square", t0 + 0.06, t0 + 0.11, 1175, 1175, 0.16, 0.001);
-        tone("square", t0 + 0.12, t0 + 0.2, 1480, 1480, 0.14, 0.001);
-        break;
-      case "sparkle":
-        tone("triangle", t0, t0 + 0.1, 2093, 2637, 0.14, 0.002);
-        tone("triangle", t0 + 0.05, t0 + 0.16, 2349, 3136, 0.12, 0.002);
-        tone("triangle", t0 + 0.1, t0 + 0.22, 2637, 3520, 0.1, 0.002);
-        noise(t0 + 0.02, 0.04, 4000, 0.08, 3);
-        break;
-      case "thud":
-        tone("sine", t0, t0 + 0.18, 110, 55, 0.7, 0.004);
-        tone("triangle", t0, t0 + 0.1, 80, 40, 0.35, 0.003);
-        noise(t0, 0.04, 180, 0.25, 0.5);
-        break;
-      case "rise":
-        tone("sine", t0, t0 + 0.12, 392, 523.25, 0.35, 0.01);
-        tone("sine", t0 + 0.1, t0 + 0.24, 523.25, 659.25, 0.35, 0.01);
-        tone("sine", t0 + 0.2, t0 + 0.38, 659.25, 880, 0.4, 0.01);
-        break;
-      case "fall":
-        tone("sine", t0, t0 + 0.14, 880, 659.25, 0.4, 0.008);
-        tone("sine", t0 + 0.1, t0 + 0.28, 659.25, 392, 0.35, 0.01);
-        break;
-      case "chirp":
-        tone("sine", t0, t0 + 0.08, 1400, 2200, 0.28, 0.004);
-        tone("sine", t0 + 0.07, t0 + 0.16, 1600, 2600, 0.22, 0.004);
-        break;
-      case "pluck":
-        tone("triangle", t0, t0 + 0.22, 740, 740, 0.45, 0.001);
-        tone("sine", t0, t0 + 0.14, 1480, 1480, 0.12, 0.001);
-        break;
-      case "whoosh":
-        noise(t0, 0.12, 1200, 0.22, 0.4);
-        tone("sine", t0 + 0.08, t0 + 0.2, 660, 880, 0.3, 0.01);
-        break;
-      case "fanfare":
-        tone("sine", t0, t0 + 0.12, 523.25, 523.25, 0.35, 0.004);
-        tone("sine", t0 + 0.1, t0 + 0.22, 659.25, 659.25, 0.35, 0.004);
-        tone("sine", t0 + 0.2, t0 + 0.45, 783.99, 1046.5, 0.45, 0.006);
-        break;
-      default:
-        playSoundById("classic");
+    const playTone = (type, start, stop, freqStart, freqEnd, peak, attack) => {
+      const osc = ctx.createOscillator();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freqStart, start);
+      osc.frequency.exponentialRampToValueAtTime(Math.max(20, freqEnd), Math.max(start + 0.01, stop - 0.01));
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.linearRampToValueAtTime(peak, start + attack);
+      gain.gain.exponentialRampToValueAtTime(0.0001, stop);
+      osc.connect(gain);
+      gain.connect(master);
+      osc.start(start);
+      osc.stop(stop + 0.01);
+    };
+
+    playTone("sine", t0, t0 + 0.18, 110, 55, 0.7, 0.004);
+    playTone("triangle", t0, t0 + 0.1, 80, 40, 0.35, 0.003);
+
+    const dur = 0.04;
+    const buffer = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * dur), ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i += 1) {
+      const env = 1 - i / data.length;
+      data[i] = (Math.random() * 2 - 1) * env * env;
     }
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+    const filter = ctx.createBiquadFilter();
+    filter.type = "bandpass";
+    filter.frequency.value = 180;
+    filter.Q.value = 0.5;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.25, t0);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(master);
+    noise.start(t0);
+    noise.stop(t0 + dur + 0.01);
   } catch {
     /* audio optional */
   }
-}
-
-function playCompleteSound() {
-  playSoundById(getCompleteSoundId());
-}
-
-function renderSoundPicker() {
-  const root = $("sound-list");
-  if (!root) return;
-  const current = getCompleteSoundId();
-  root.innerHTML = COMPLETE_SOUNDS.map(
-    (s) => `
-    <button type="button" class="sound-option${s.id === current ? " selected" : ""}" data-sound="${s.id}">
-      <span>${escapeHtml(s.name)}</span>
-      <span class="sound-play" aria-hidden="true">▶</span>
-    </button>`,
-  ).join("");
-}
-
-function initSoundPicker() {
-  renderSoundPicker();
-  $("sound-list")?.addEventListener("click", (e) => {
-    const btn = e.target.closest("[data-sound]");
-    if (!btn) return;
-    setCompleteSoundId(btn.dataset.sound);
-    playSoundById(btn.dataset.sound);
-  });
 }
 
 async function completeTaskItem(completeBtn) {
@@ -1570,7 +1400,6 @@ async function boot() {
   initTaskMetaChips();
   initTaskTitleHighlight();
   initSidebarToggle();
-  initSoundPicker();
   hideTaskForm();
   if (!state.token) {
     showLogin();
