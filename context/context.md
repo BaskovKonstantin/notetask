@@ -30,6 +30,7 @@ Personal tracker (not TreckBas):
 - **PWA / мобильное:** баннер «Скачать» на телефоне; manifest + service worker
 - **Виджет:** https://todo.baski.pro/widget — компакт «Сегодня», после установки PWA открывается как приложение
 - **Звук выполнения:** «Глухой удар» (Web Audio)
+- **Тема раздела:** при открытии раздела UI плавно перекрашивается в `project.color` (CSS vars `--accent`, `--theme-glow*`)
 
 ## Stack
 

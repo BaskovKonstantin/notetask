@@ -629,6 +629,41 @@ function showTaskForm() {
   window.setTimeout(() => $("task-title").focus(), 30);
 }
 
+const DEFAULT_THEME = "#1f6b4a";
+
+function hexToRgb(hex) {
+  const raw = String(hex || "").replace("#", "").trim();
+  if (raw.length !== 6) return { r: 31, g: 107, b: 74 };
+  return {
+    r: parseInt(raw.slice(0, 2), 16),
+    g: parseInt(raw.slice(2, 4), 16),
+    b: parseInt(raw.slice(4, 6), 16),
+  };
+}
+
+function mixHex(hex, toward, amount) {
+  const a = hexToRgb(hex);
+  const t = hexToRgb(toward);
+  const mix = (x, y) => Math.round(x + (y - x) * amount);
+  const r = mix(a.r, t.r);
+  const g = mix(a.g, t.g);
+  const b = mix(a.b, t.b);
+  return `#${[r, g, b].map((n) => n.toString(16).padStart(2, "0")).join("")}`;
+}
+
+function applySectionTheme(hex) {
+  const color = hex || DEFAULT_THEME;
+  const { r, g, b } = hexToRgb(color);
+  const root = document.documentElement;
+  root.style.setProperty("--accent", color);
+  root.style.setProperty("--ok", color);
+  root.style.setProperty("--accent-rgb", `${r}, ${g}, ${b}`);
+  root.style.setProperty("--theme-glow", mixHex(color, "#ffffff", 0.78));
+  root.style.setProperty("--theme-glow-2", mixHex(color, "#f7f4ec", 0.72));
+  root.style.setProperty("--theme-wash", mixHex(color, "#ebe6da", 0.82));
+  document.body.dataset.theme = color;
+}
+
 function setView(view, opts = {}) {
   if (!opts.keepTaskForm) hideTaskForm();
   state.view = view;
@@ -644,8 +679,10 @@ function setView(view, opts = {}) {
   if (view === "project") {
     const proj = state.projects.find((p) => p.id === state.projectId);
     $("view-title").textContent = proj?.name === "Inbox" ? "Разобрать" : (proj?.name || titles.project);
+    applySectionTheme(proj?.color || DEFAULT_THEME);
   } else {
     $("view-title").textContent = titles[view] || "";
+    applySectionTheme(DEFAULT_THEME);
   }
 
   const taskViews = ["today", "project"];

@@ -1,3 +1,24 @@
+@property --accent {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #1f6b4a;
+}
+@property --theme-glow {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #dce8df;
+}
+@property --theme-glow-2 {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #f0d8c4;
+}
+@property --theme-wash {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #e4efe8;
+}
+
 :root {
   --bg: #f3f0e8;
   --bg-2: #e8e4d8;
@@ -6,14 +27,19 @@
   --line: #c9c3b2;
   --panel: rgba(255, 252, 245, 0.92);
   --accent: #1f6b4a;
+  --accent-rgb: 31, 107, 74;
   --accent-2: #c45c26;
   --danger: #9b2c2c;
   --ok: #1f6b4a;
   --on-accent: #f3f0e8;
+  --theme-glow: #dce8df;
+  --theme-glow-2: #f0d8c4;
+  --theme-wash: #e4efe8;
   --shadow: 0 18px 50px rgba(26, 34, 24, 0.12);
   --radius: 18px;
   --font-display: "Fraunces", Georgia, serif;
   --font-body: "Manrope", system-ui, sans-serif;
+  --theme-ease: 0.55s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 * { box-sizing: border-box; }
@@ -23,9 +49,15 @@ body {
   font-family: var(--font-body);
   color: var(--ink);
   background:
-    radial-gradient(900px 500px at 10% -10%, #dce8df 0%, transparent 55%),
-    radial-gradient(700px 420px at 100% 0%, #f0d8c4 0%, transparent 50%),
-    linear-gradient(160deg, #f7f4ec, #ebe6da 60%, #e4efe8);
+    radial-gradient(900px 500px at 10% -10%, var(--theme-glow) 0%, transparent 55%),
+    radial-gradient(700px 420px at 100% 0%, var(--theme-glow-2) 0%, transparent 50%),
+    linear-gradient(160deg, #f7f4ec, #ebe6da 60%, var(--theme-wash));
+  transition:
+    --accent var(--theme-ease),
+    --theme-glow var(--theme-ease),
+    --theme-glow-2 var(--theme-ease),
+    --theme-wash var(--theme-ease),
+    background var(--theme-ease);
 }
 
 button, input, select, textarea {
@@ -47,11 +79,11 @@ button, input, select, textarea {
 .sidebar {
   padding: 28px 18px;
   border-right: 1px solid var(--line);
-  background: rgba(255,255,255,0.35);
+  background: color-mix(in srgb, var(--accent) 6%, rgba(255,255,255,0.4));
   backdrop-filter: blur(10px);
   overflow: hidden;
   min-width: 0;
-  transition: opacity 0.18s ease;
+  transition: opacity 0.18s ease, background var(--theme-ease);
 }
 
 .app-shell.sidebar-collapsed .sidebar {
@@ -91,7 +123,8 @@ button, input, select, textarea {
   color: var(--muted);
 }
 
-.nav button:hover { background: rgba(31,107,74,0.08); color: var(--ink); }
+.nav button { transition: background var(--theme-ease), color 0.2s ease; }
+.nav button:hover { background: rgba(var(--accent-rgb), 0.08); color: var(--ink); }
 .nav button.active {
   background: var(--accent);
   color: var(--on-accent);
@@ -174,11 +207,12 @@ button, input, select, textarea {
 .topbar p { margin: 6px 0 0; color: var(--muted); }
 
 .panel {
-  background: var(--panel);
+  background: color-mix(in srgb, var(--accent) 4%, var(--panel));
   border: 1px solid var(--line);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   padding: 18px;
+  transition: background var(--theme-ease), box-shadow var(--theme-ease);
 }
 
 .composer {
@@ -207,7 +241,7 @@ button, input, select, textarea {
 .task-add-trigger:hover {
   border-color: var(--accent);
   color: var(--accent);
-  background: rgba(31, 107, 74, 0.06);
+  background: rgba(var(--accent-rgb), 0.06);
 }
 
 #task-form:not(.hidden) {
@@ -257,7 +291,7 @@ button, input, select, textarea {
   opacity: 1;
 }
 .task-title-input:focus {
-  outline: 2px solid rgba(31, 107, 74, 0.35);
+  outline: 2px solid rgba(var(--accent-rgb), 0.35);
   outline-offset: 0;
 }
 .task-title-input:-webkit-autofill,
@@ -331,7 +365,7 @@ button, input, select, textarea {
 }
 .chip-option:hover,
 .chip-option.selected {
-  background: rgba(31, 107, 74, 0.1);
+  background: rgba(var(--accent-rgb), 0.1);
   color: var(--accent);
 }
 
@@ -390,7 +424,7 @@ button, input, select, textarea {
   margin-bottom: 6px;
 }
 .cost-type-toggle .cost-expense.selected { background: rgba(155, 44, 44, 0.12); color: #9b2c2c; }
-.cost-type-toggle .cost-income.selected { background: rgba(31, 107, 74, 0.12); color: var(--accent); }
+.cost-type-toggle .cost-income.selected { background: rgba(var(--accent-rgb), 0.12); color: var(--accent); }
 
 .chip-menu input[type="text"],
 .chip-menu input[type="number"] {
@@ -426,7 +460,7 @@ button, input, select, textarea {
   z-index: 43;
 }
 .task-attrs .chip-btn.cost-expense.has-value { color: #9b2c2c; border-color: rgba(155, 44, 44, 0.35); }
-.task-attrs .chip-btn.cost-income.has-value { color: var(--accent); border-color: rgba(31, 107, 74, 0.35); }
+.task-attrs .chip-btn.cost-income.has-value { color: var(--accent); border-color: rgba(var(--accent-rgb), 0.35); }
 
 .finance-list {
   display: flex;
@@ -503,6 +537,7 @@ textarea { min-height: 90px; resize: vertical; }
   cursor: pointer;
   font-weight: 650;
   white-space: nowrap;
+  transition: background var(--theme-ease), filter 0.15s ease;
 }
 .btn:hover { filter: brightness(1.05); }
 .btn.ghost {
@@ -532,7 +567,8 @@ textarea { min-height: 90px; resize: vertical; }
   border-radius: 14px;
   border: 1px solid transparent;
 }
-.item:hover { background: rgba(31,107,74,0.05); border-color: rgba(31,107,74,0.12); }
+.item { transition: background var(--theme-ease), border-color var(--theme-ease); }
+.item:hover { background: rgba(var(--accent-rgb), 0.05); border-color: rgba(var(--accent-rgb), 0.12); }
 .item.is-done { opacity: 0.62; }
 .item.is-done:hover { opacity: 0.78; }
 
@@ -545,7 +581,7 @@ textarea { min-height: 90px; resize: vertical; }
 
 @keyframes complete-pop {
   0% { transform: scale(1); }
-  35% { transform: scale(1.015); background: rgba(31, 107, 74, 0.14); }
+  35% { transform: scale(1.015); background: rgba(var(--accent-rgb), 0.14); }
   100% { transform: scale(1); }
 }
 
@@ -578,8 +614,8 @@ textarea { min-height: 90px; resize: vertical; }
 }
 
 .badge.time {
-  background: rgba(31, 107, 74, 0.1);
-  border-color: rgba(31, 107, 74, 0.18);
+  background: rgba(var(--accent-rgb), 0.1);
+  border-color: rgba(var(--accent-rgb), 0.18);
   color: var(--accent);
   font-weight: 650;
 }
@@ -597,7 +633,7 @@ textarea { min-height: 90px; resize: vertical; }
   background: transparent;
   cursor: pointer;
   margin-top: 2px;
-  transition: transform 0.15s ease, background 0.2s ease, box-shadow 0.2s ease;
+  transition: border-color var(--theme-ease), background var(--theme-ease), transform 0.15s ease, box-shadow 0.2s ease;
 }
 .check:active { transform: scale(0.88); }
 .check.done {
@@ -670,7 +706,7 @@ textarea { min-height: 90px; resize: vertical; }
   margin-top: 10px;
 }
 .bar {
-  background: rgba(31,107,74,0.2);
+  background: rgba(var(--accent-rgb), 0.2);
   border-radius: 4px 4px 0 0;
   min-height: 4px;
 }
@@ -738,7 +774,7 @@ textarea { min-height: 90px; resize: vertical; }
 .panel.capture-focus {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
-  box-shadow: 0 0 0 4px rgba(31, 107, 74, 0.18), var(--shadow);
+  box-shadow: 0 0 0 4px rgba(var(--accent-rgb), 0.18), var(--shadow);
 }
 
 @media (max-width: 860px) {
