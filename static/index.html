@@ -15,7 +15,7 @@
       window.NOTETASK_BASE = base === "/todo/" ? "/todo" : "";
     })();
   </script>
-  <link rel="stylesheet" href="assets/styles.css?v=20" />
+  <link rel="stylesheet" href="assets/styles.css?v=21" />
   <script src="assets/pwa.js?v=1"></script>
 </head>
 <body>
@@ -38,13 +38,13 @@
         <button data-view="history">История</button>
         <button data-view="stats">Статистика</button>
       </nav>
+      <details class="sound-picker" id="sound-picker">
+        <summary>Звук выполнения</summary>
+        <div class="sound-list" id="sound-list"></div>
+      </details>
       <p class="nav-label">Разделы</p>
       <nav class="nav nav-projects" id="project-nav"></nav>
       <div style="margin-top:28px">
-        <details class="sound-picker" id="sound-picker">
-          <summary>Звук выполнения</summary>
-          <div class="sound-list" id="sound-list"></div>
-        </details>
         <button class="btn ghost" id="backup-btn" style="width:100%">Экспорт JSON</button>
         <button class="btn ghost" id="logout-btn" style="width:100%;margin-top:8px">Выйти</button>
       </div>
@@ -218,6 +218,6 @@
   </div>
 
   <script src="assets/pwa-install.js?v=1"></script>
-  <script src="assets/app.js?v=24"></script>
+  <script src="assets/app.js?v=25"></script>
 </body>
 </html>
