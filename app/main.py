@@ -202,7 +202,26 @@ async def list_projects(db: aiosqlite.Connection = Depends(get_db), _: dict = De
     cur = await db.execute(
         "SELECT * FROM projects WHERE deleted_at IS NULL ORDER BY sort, id"
     )
-    return [row_to_dict(r) for r in await cur.fetchall()]
+    projects = [row_to_dict(r) for r in await cur.fetchall()]
+    cur = await db.execute(
+        """
+        SELECT project_id, COUNT(*) AS c FROM tasks
+        WHERE deleted_at IS NULL AND status='open'
+        GROUP BY project_id
+        """
+    )
+    counts: dict[Any, int] = {}
+    for r in await cur.fetchall():
+        d = row_to_dict(r)
+        counts[d["project_id"]] = int(d["c"] or 0)
+    null_open = counts.get(None, 0)
+    for p in projects:
+        own = counts.get(p["id"], 0)
+        if p["name"] == "Inbox":
+            p["open_count"] = own + null_open
+        else:
+            p["open_count"] = own
+    return projects
 
 
 @app.post("/api/projects")

@@ -24,6 +24,7 @@ Personal tracker (not TreckBas):
 - **Ctrl+Space** → Today + task form (`#view-tasks`), focus input
 - Default view on open: **Today** (not Inbox)
 - **Разделы (projects):** Inbox, Личные дела, Развлечения, Работа, Здоровье, Тренировки, Питание, Идеи — sidebar + `@название` в задаче
+- **Разобрать (Inbox):** в сайдбаре только если есть open-задачи (`open_count` в `/api/projects`); пустой — скрыт
 - **Sidebar:** кнопка «←» в topbar — сворачивает меню, состояние в `localStorage` (`notetask_sidebar_collapsed`)
 - **Плашка задачи:** под каждой задачей чипы — раздел, P, срок/время, место, сумма (расход/доход)
 - **Финансы:** суммы в задачах; сводка в «Статистика» — расходы/доходы/баланс за 30д + список операций
@@ -37,7 +38,7 @@ Personal tracker (not TreckBas):
   - Здоровье → SVG тела + метрики (`/api/health-profile`, `health_metrics` / `health_body`)
   - Тренировки → цели и прогресс (`/api/workout-panel`, `workout_goals`)
   - Остальные разделы / Сегодня — панель скрыта
-  - UI: `#section-panel`, CSS `main.with-section-panel`, `app.js` v32 / `styles.css` v27
+  - UI: `#section-panel`, CSS `main.with-section-panel`, `app.js` v33 / `styles.css` v27
 
 ## Stack
 

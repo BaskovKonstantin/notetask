@@ -433,7 +433,9 @@ async function loadProjectsCache() {
 function renderProjectNav() {
   const nav = $("project-nav");
   if (!nav) return;
-  const sections = [...state.projects].sort((a, b) => a.sort - b.sort || a.id - b.id);
+  const sections = [...state.projects]
+    .filter((p) => p.name !== "Inbox" || (p.open_count || 0) > 0)
+    .sort((a, b) => a.sort - b.sort || a.id - b.id);
   nav.innerHTML = sections
     .map((p) => {
       const label = p.name === "Inbox" ? "Разобрать" : p.name;
@@ -444,6 +446,19 @@ function renderProjectNav() {
     </button>`;
     })
     .join("");
+}
+
+function inboxProject() {
+  return state.projects.find((p) => p.name === "Inbox") || null;
+}
+
+function leaveEmptyInboxIfNeeded() {
+  if (state.view !== "project" || !state.projectId) return false;
+  const inbox = inboxProject();
+  if (!inbox || inbox.id !== state.projectId) return false;
+  if ((inbox.open_count || 0) > 0) return false;
+  setView("today", { keepTaskForm: true });
+  return true;
 }
 
 function fmtShortDay(isoDate) {
@@ -1005,6 +1020,8 @@ function setView(view, opts = {}) {
 async function refresh() {
   const v = state.view;
   if (["today", "project"].includes(v)) {
+    await loadProjectsCache();
+    if (leaveEmptyInboxIfNeeded()) return;
     await loadTasks(v);
     await loadSectionPanel();
   } else if (v === "history") await loadHistory();
