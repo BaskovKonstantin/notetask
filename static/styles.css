@@ -468,6 +468,65 @@ button, input, select, textarea {
 
 .stats-grid-finance { grid-template-columns: repeat(3, 1fr); }
 
+.sound-picker {
+  margin-bottom: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.55);
+  overflow: hidden;
+}
+.sound-picker summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 10px 12px;
+  font-size: 0.85rem;
+  font-weight: 650;
+  color: var(--ink);
+  user-select: none;
+}
+.sound-picker summary::-webkit-details-marker { display: none; }
+.sound-picker summary::after {
+  content: "▾";
+  float: right;
+  color: var(--muted);
+  font-weight: 400;
+}
+.sound-picker[open] summary::after { content: "▴"; }
+.sound-list {
+  display: grid;
+  gap: 4px;
+  padding: 0 8px 10px;
+  max-height: 260px;
+  overflow: auto;
+}
+.sound-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  padding: 8px 10px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.82rem;
+  color: var(--ink);
+  text-align: left;
+}
+.sound-option:hover { background: rgba(31, 107, 74, 0.08); }
+.sound-option.selected {
+  background: rgba(31, 107, 74, 0.14);
+  color: var(--accent);
+  font-weight: 650;
+}
+.sound-option .sound-play {
+  flex-shrink: 0;
+  opacity: 0.55;
+  font-size: 0.75rem;
+}
+
 .pwa-install {
   position: fixed;
   left: 16px;
