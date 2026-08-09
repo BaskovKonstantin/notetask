@@ -1,8 +1,8 @@
-const CACHE = "notetask-v2";
+const CACHE = "notetask-v3";
 
 self.addEventListener("install", (event) => {
   const base = self.registration.scope;
-  const shell = ["", "widget", "assets/widget.css", "assets/icons/icon-192.png", "assets/icons/icon-512.png"].map(
+  const shell = ["widget", "assets/widget.css", "assets/icons/icon-192.png", "assets/icons/icon-512.png"].map(
     (p) => new URL(p, base).href,
   );
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(shell)).then(() => self.skipWaiting()));
@@ -24,6 +24,24 @@ self.addEventListener("fetch", (event) => {
     return;
   }
   if (event.request.method !== "GET") return;
+
+  // HTML / navigations: network first so UI updates aren't stuck behind old cache
+  const isNav = event.request.mode === "navigate" || (event.request.headers.get("accept") || "").includes("text/html");
+  if (isNav) {
+    event.respondWith(
+      fetch(event.request)
+        .then((res) => {
+          if (res.ok) {
+            const copy = res.clone();
+            caches.open(CACHE).then((cache) => cache.put(event.request, copy));
+          }
+          return res;
+        })
+        .catch(() => caches.match(event.request)),
+    );
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request).then((cached) => {
       const network = fetch(event.request)
