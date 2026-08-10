@@ -972,10 +972,13 @@ async function renderWorkPanel() {
               (p) => `
       <article class="work-item" data-work-id="${p.id}">
         <header>
-          <strong>${escapeHtml(p.title)}</strong>
-          <span class="status-pill ${escapeAttr(p.status)}">${escapeHtml(
+          <div class="work-item-title">
+            <strong>${escapeHtml(p.title)}</strong>
+            <span class="status-pill ${escapeAttr(p.status)}">${escapeHtml(
                 p.status === "active" ? "в работе" : p.status === "paused" ? "пауза" : "готово",
               )}</span>
+          </div>
+          <button type="button" class="btn ghost small btn-del" data-work-delete title="Удалить проект" aria-label="Удалить проект">×</button>
         </header>
         <div class="work-meta">
           ${p.client ? escapeHtml(p.client) : "без клиента"}
@@ -986,7 +989,6 @@ async function renderWorkPanel() {
           <button type="button" class="btn ghost" data-work-status="active">В работе</button>
           <button type="button" class="btn ghost" data-work-status="paused">Пауза</button>
           <button type="button" class="btn ghost" data-work-status="done">Готово</button>
-          <button type="button" class="btn ghost" data-work-delete>Удалить</button>
         </div>
       </article>`,
             )
@@ -2134,9 +2136,21 @@ $("section-panel").addEventListener("click", async (e) => {
   if (workItem) {
     const id = Number(workItem.dataset.workId);
     if (e.target.closest("[data-work-delete]")) {
-      await api(`/api/work-projects/${id}`, { method: "DELETE" });
+      e.preventDefault();
+      e.stopPropagation();
+      const title = workItem.querySelector("strong")?.textContent?.trim() || "проект";
+      if (!confirm(`Удалить проект «${title}»?`)) return;
+      try {
+        await api(`/api/work-projects/${id}`, { method: "DELETE" });
+      } catch (err) {
+        alert(err.message || "Не удалось удалить");
+        return;
+      }
       await loadWorkProjectsCache();
       await renderWorkPanel();
+      if (state.view === "project" && isWorkSectionId(state.projectId)) {
+        await loadTasks(state.view);
+      }
       return;
     }
     const statusBtn = e.target.closest("[data-work-status]");

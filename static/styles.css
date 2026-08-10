@@ -322,6 +322,24 @@ button, input, select, textarea {
   align-items: start;
 }
 
+.work-item-title {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+
+.work-item .btn-del {
+  flex-shrink: 0;
+  font-size: 1.1rem;
+  line-height: 1;
+  color: var(--muted);
+}
+.work-item .btn-del:hover {
+  color: var(--danger, #b33);
+}
+
 .work-meta {
   font-size: 0.84rem;
   color: var(--muted);

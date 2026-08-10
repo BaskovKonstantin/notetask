@@ -1008,12 +1008,23 @@ async def delete_work_project(
     db: aiosqlite.Connection = Depends(get_db),
     _: dict = Depends(require_auth),
 ):
+    cur = await db.execute(
+        "SELECT id, title FROM work_projects WHERE id=? AND deleted_at IS NULL",
+        (item_id,),
+    )
+    row = await cur.fetchone()
+    if not row:
+        raise HTTPException(404, "Work project not found")
     now = utcnow()
     await db.execute(
         "UPDATE work_projects SET deleted_at=?, updated_at=? WHERE id=? AND deleted_at IS NULL",
         (now, now, item_id),
     )
-    await log_action(db, "deleted", "work_project", item_id, {})
+    await db.execute(
+        "UPDATE tasks SET work_project_id=NULL, updated_at=? WHERE work_project_id=? AND deleted_at IS NULL",
+        (now, item_id),
+    )
+    await log_action(db, "deleted", "work_project", item_id, {"title": row["title"]})
     await db.commit()
     return {"ok": True}
 
