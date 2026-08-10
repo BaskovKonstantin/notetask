@@ -554,26 +554,59 @@ button, input, select, textarea {
 .task-title-wrap {
   position: relative;
   width: 100%;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: #fffcf5;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.task-title-wrap:focus-within {
+  outline: 2px solid rgba(var(--accent-rgb), 0.35);
+  outline-offset: 0;
+  border-color: transparent;
 }
 
 .task-title-highlight {
-  display: none;
+  display: block;
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 11px 12px;
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 500;
+  line-height: 1.35;
+  white-space: pre;
+  overflow: hidden;
+  pointer-events: none;
+  color: var(--ink);
+  z-index: 0;
+  box-sizing: border-box;
 }
 
 .task-title-input {
+  position: relative;
+  z-index: 1;
   display: block;
   font: inherit;
   font-size: 1rem;
+  font-weight: 500;
   line-height: 1.35;
   padding: 11px 12px;
   border-radius: 12px;
-  border: 1px solid var(--line);
+  border: 0;
   width: 100%;
   box-sizing: border-box;
-  background: #fffcf5;
+  background: transparent;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  caret-color: var(--ink);
+}
+.task-title-wrap:not(.has-value) .task-title-input {
   color: var(--ink);
   -webkit-text-fill-color: var(--ink);
-  caret-color: var(--ink);
+}
+.task-title-wrap:not(.has-value) .task-title-highlight {
+  visibility: hidden;
 }
 .task-title-input::placeholder {
   color: var(--muted);
@@ -581,15 +614,46 @@ button, input, select, textarea {
   opacity: 1;
 }
 .task-title-input:focus {
-  outline: 2px solid rgba(var(--accent-rgb), 0.35);
-  outline-offset: 0;
+  outline: none;
 }
 .task-title-input:-webkit-autofill,
 .task-title-input:-webkit-autofill:hover,
 .task-title-input:-webkit-autofill:focus {
-  -webkit-text-fill-color: var(--ink);
+  -webkit-text-fill-color: transparent;
   caret-color: var(--ink);
   box-shadow: 0 0 0 1000px #fffcf5 inset;
+  transition: background-color 99999s ease-out;
+}
+
+.hl-date {
+  color: #1f6b8a;
+  background: rgba(31, 107, 138, 0.12);
+  border-radius: 5px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+.hl-priority {
+  color: #b45309;
+  background: rgba(180, 83, 9, 0.14);
+  border-radius: 5px;
+  font-weight: 700;
+}
+.hl-project {
+  color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.14);
+  border-radius: 5px;
+  font-weight: 650;
+}
+.hl-label {
+  color: #6b3fa0;
+  background: rgba(107, 63, 160, 0.12);
+  border-radius: 5px;
+}
+.hl-kind {
+  color: #0f766e;
+  background: rgba(15, 118, 110, 0.12);
+  border-radius: 5px;
+  font-weight: 650;
 }
 
 .task-chips {

@@ -511,16 +511,40 @@ function cleanTitleFromTokens(text, tokens) {
   return out.replace(/\s+/g, " ").trim();
 }
 
+function highlightableTokens(tokens) {
+  return tokens.filter((token) => {
+    const m = token.meta || {};
+    switch (token.type) {
+      case "date":
+        return !!m.due;
+      case "priority":
+        return m.priority != null;
+      case "project":
+        return !!m.projectName;
+      case "label":
+        return !!m.label;
+      case "kind":
+        return !!m.kind;
+      default: {
+        const _exhaustive = token.type;
+        return false;
+      }
+    }
+  });
+}
+
 function buildTaskHighlightHtml(text, tokens) {
   if (!text) return "";
+  const marks = highlightableTokens(tokens);
   let html = "";
   let pos = 0;
-  for (const token of tokens) {
+  for (const token of marks) {
     if (token.start > pos) html += escapeHtml(text.slice(pos, token.start));
     html += `<span class="hl-${token.type}">${escapeHtml(text.slice(token.start, token.end))}</span>`;
     pos = token.end;
   }
   if (pos < text.length) html += escapeHtml(text.slice(pos));
+  if (text.endsWith(" ")) html += "&nbsp;";
   return html;
 }
 
@@ -542,14 +566,25 @@ function applyParsedMeta(meta) {
 
 function syncTaskTitleHighlight() {
   const input = $("task-title");
+  const layer = $("task-title-highlight");
   if (!input) return;
-  applyParsedMeta(parseTaskInput(input.value).meta);
+  const parsed = parseTaskInput(input.value);
+  applyParsedMeta(parsed.meta);
+  if (layer) {
+    layer.innerHTML = buildTaskHighlightHtml(input.value, parsed.tokens) || "";
+    layer.scrollLeft = input.scrollLeft;
+  }
+  input.closest(".task-title-wrap")?.classList.toggle("has-value", !!input.value);
 }
 
 function initTaskTitleHighlight() {
   const input = $("task-title");
   if (!input) return;
   input.addEventListener("input", syncTaskTitleHighlight);
+  input.addEventListener("scroll", () => {
+    const layer = $("task-title-highlight");
+    if (layer) layer.scrollLeft = input.scrollLeft;
+  });
   syncTaskTitleHighlight();
 }
 
