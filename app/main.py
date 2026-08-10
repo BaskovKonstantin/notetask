@@ -886,19 +886,27 @@ async def list_finance_months(
             bucket[d["cost_type"]] = float(d["total"] or 0)
     out = []
     for ym in keys:
+        has_row = ym in saved
         row = saved.get(ym) or {"year_month": ym, "income": 0, "expense": 0, "notes": ""}
         task_totals = from_tasks.get(ym, {"expense": 0.0, "income": 0.0})
-        income = float(row.get("income") or 0)
-        expense = float(row.get("expense") or 0)
+        manual_income = float(row.get("income") or 0) if has_row else 0.0
+        manual_expense = float(row.get("expense") or 0) if has_row else 0.0
+        task_income = float(task_totals["income"])
+        task_expense = float(task_totals["expense"])
+        income = manual_income + task_income
+        expense = manual_expense + task_expense
         out.append(
             {
                 "year_month": ym,
+                "manual_income": manual_income,
+                "manual_expense": manual_expense,
+                "task_income": task_income,
+                "task_expense": task_expense,
                 "income": income,
                 "expense": expense,
                 "notes": row.get("notes") or "",
                 "balance": income - expense,
-                "task_income": task_totals["income"],
-                "task_expense": task_totals["expense"],
+                "saved": has_row,
             }
         )
     total_income = sum(x["income"] for x in out)
@@ -909,6 +917,10 @@ async def list_finance_months(
             "income": total_income,
             "expense": total_expense,
             "balance": total_income - total_expense,
+            "task_income": sum(x["task_income"] for x in out),
+            "task_expense": sum(x["task_expense"] for x in out),
+            "manual_income": sum(x["manual_income"] for x in out),
+            "manual_expense": sum(x["manual_expense"] for x in out),
         },
     }
 
@@ -942,11 +954,28 @@ async def upsert_finance_month(
     await db.commit()
     return {
         "year_month": year_month,
-        "income": body.income,
-        "expense": body.expense,
+        "manual_income": body.income,
+        "manual_expense": body.expense,
         "notes": body.notes,
-        "balance": body.income - body.expense,
+        "saved": True,
     }
+
+
+@app.delete("/api/finance/months/{year_month}")
+async def delete_finance_month(
+    year_month: str,
+    db: aiosqlite.Connection = Depends(get_db),
+    _: dict = Depends(require_auth),
+):
+    if not re.fullmatch(r"\d{4}-\d{2}", year_month):
+        raise HTTPException(400, "year_month must be YYYY-MM")
+    cur = await db.execute("SELECT year_month FROM finance_months WHERE year_month=?", (year_month,))
+    if not await cur.fetchone():
+        raise HTTPException(404, "Finance month not found")
+    await db.execute("DELETE FROM finance_months WHERE year_month=?", (year_month,))
+    await log_action(db, "deleted", "finance_month", None, {"year_month": year_month})
+    await db.commit()
+    return {"ok": True}
 
 
 @app.get("/api/work-projects")

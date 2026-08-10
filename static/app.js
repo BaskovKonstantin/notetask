@@ -1013,28 +1013,43 @@ async function renderFinancePanel() {
   const months = data.months || [];
   $("section-panel-inner").innerHTML = `
     <h2>Финансы</h2>
-    <p class="sp-sub">По месяцам — ввод и расчёт баланса</p>
+    <p class="sp-sub">Суммы из задач + ручные доп. по месяцам</p>
     <div class="sp-totals">
       <div class="sp-stat"><span class="label">Доход</span><span class="value pos">${escapeHtml(moneyPlain(totals.income))}</span></div>
       <div class="sp-stat"><span class="label">Расход</span><span class="value neg">${escapeHtml(moneyPlain(totals.expense))}</span></div>
       <div class="sp-stat"><span class="label">Баланс</span><span class="value ${bal >= 0 ? "pos" : "neg"}">${escapeHtml(moneyPlain(bal))}</span></div>
     </div>
+    <p class="sp-sub">из задач: +${escapeHtml(moneyPlain(totals.task_income))} / −${escapeHtml(moneyPlain(totals.task_expense))}</p>
     ${months
       .map((m) => {
-        const b = Number(m.income || 0) - Number(m.expense || 0);
+        const b = Number(m.balance) || 0;
+        const hasManual =
+          !!m.saved &&
+          (Number(m.manual_income) || Number(m.manual_expense) || (m.notes || "").trim());
         return `
       <form class="finance-month" data-finance-month="${escapeAttr(m.year_month)}">
         <header>
-          <span class="ym">${escapeHtml(monthLabel(m.year_month))}</span>
+          <div class="finance-month-head">
+            <span class="ym">${escapeHtml(monthLabel(m.year_month))}</span>
+            ${
+              m.saved
+                ? `<button type="button" class="btn ghost small btn-del" data-finance-delete title="Удалить ручные данные" aria-label="Удалить">×</button>`
+                : ""
+            }
+          </div>
           <span class="hint">из задач: −${escapeHtml(moneyPlain(m.task_expense))} / +${escapeHtml(moneyPlain(m.task_income))}</span>
         </header>
+        <div class="finance-sync-row">
+          <span>Итого: <strong class="${b >= 0 ? "pos" : "neg"}">${escapeHtml(moneyPlain(b))}</strong></span>
+          <button type="button" class="btn ghost small" data-finance-sync>Только из задач</button>
+        </div>
         <div class="finance-fields">
-          <label>Доход <input type="number" name="income" min="0" step="0.01" value="${escapeAttr(String(m.income ?? 0))}" /></label>
-          <label>Расход <input type="number" name="expense" min="0" step="0.01" value="${escapeAttr(String(m.expense ?? 0))}" /></label>
+          <label>Ещё доход <input type="number" name="income" min="0" step="0.01" value="${escapeAttr(String(m.manual_income ?? 0))}" /></label>
+          <label>Ещё расход <input type="number" name="expense" min="0" step="0.01" value="${escapeAttr(String(m.manual_expense ?? 0))}" /></label>
         </div>
         <label>Заметки <textarea name="notes" rows="2">${escapeHtml(m.notes || "")}</textarea></label>
         <footer>
-          <strong class="${b >= 0 ? "pos" : "neg"}">${escapeHtml(moneyPlain(b))}</strong>
+          <span class="hint">${hasManual ? "есть ручные правки" : "только задачи"}</span>
           <button class="btn" type="submit">Сохранить</button>
         </footer>
       </form>`;
@@ -2235,6 +2250,44 @@ $("section-panel").addEventListener("submit", async (e) => {
 });
 
 $("section-panel").addEventListener("click", async (e) => {
+  const financeMonth = e.target.closest("[data-finance-month]");
+  if (financeMonth) {
+    const ym = financeMonth.dataset.financeMonth;
+    if (e.target.closest("[data-finance-delete]")) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!confirm(`Удалить ручные данные за ${monthLabel(ym)}? Суммы из задач останутся.`)) return;
+      await animateLeave(financeMonth, "out");
+      try {
+        await api(`/api/finance/months/${ym}`, { method: "DELETE" });
+      } catch (err) {
+        const msg = String(err.message || "");
+        if (!/404|not found/i.test(msg)) {
+          alert(msg || "Не удалось удалить");
+          await renderFinancePanel();
+          return;
+        }
+      }
+      await renderFinancePanel();
+      return;
+    }
+    if (e.target.closest("[data-finance-sync]")) {
+      e.preventDefault();
+      e.stopPropagation();
+      const fd = new FormData(financeMonth);
+      await api(`/api/finance/months/${ym}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          income: 0,
+          expense: 0,
+          notes: String(fd.get("notes") || ""),
+        }),
+      });
+      await renderFinancePanel();
+      return;
+    }
+  }
+
   const regionEl = e.target.closest("[data-region]");
   if (regionEl) {
     state.healthSelected = regionEl.dataset.region;
