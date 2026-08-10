@@ -925,6 +925,84 @@ async def list_finance_months(
     }
 
 
+
+@app.get("/api/finance/months/{year_month}")
+async def get_finance_month(
+    year_month: str,
+    db: aiosqlite.Connection = Depends(get_db),
+    _: dict = Depends(require_auth),
+):
+    if not re.fullmatch(r"\d{4}-\d{2}", year_month):
+        raise HTTPException(400, "year_month must be YYYY-MM")
+    day_expr = "COALESCE(SUBSTR(completed_at,1,10), SUBSTR(due_at,1,10), SUBSTR(created_at,1,10))"
+    cur = await db.execute(
+        f"""
+        SELECT cost_type, SUM(cost) AS total
+        FROM tasks
+        WHERE deleted_at IS NULL AND cost IS NOT NULL AND cost != 0
+          AND SUBSTR({day_expr},1,7) = ?
+        GROUP BY cost_type
+        """,
+        (year_month,),
+    )
+    task_income = 0.0
+    task_expense = 0.0
+    for row in await cur.fetchall():
+        d = row_to_dict(row)
+        if d["cost_type"] == "income":
+            task_income = float(d["total"] or 0)
+        elif d["cost_type"] == "expense":
+            task_expense = float(d["total"] or 0)
+
+    cur = await db.execute(
+        "SELECT income, expense, notes FROM finance_months WHERE year_month=?",
+        (year_month,),
+    )
+    saved = await cur.fetchone()
+    manual_income = float(saved["income"] or 0) if saved else 0.0
+    manual_expense = float(saved["expense"] or 0) if saved else 0.0
+    notes = (saved["notes"] if saved else "") or ""
+
+    # panel shows task-driven totals (manual kept for API compatibility, not primary UI)
+    income = task_income
+    expense = task_expense
+    cur = await db.execute(
+        f"""
+        SELECT id, title, cost, cost_type, due_at, completed_at, created_at, location, project_id, status
+        FROM tasks
+        WHERE deleted_at IS NULL AND cost IS NOT NULL AND cost != 0
+          AND SUBSTR({day_expr},1,7) = ?
+        ORDER BY {day_expr} DESC, id DESC
+        LIMIT 100
+        """,
+        (year_month,),
+    )
+    entries = []
+    for row in await cur.fetchall():
+        d = row_to_dict(row)
+        day = None
+        for key in ("completed_at", "due_at", "created_at"):
+            if d.get(key):
+                day = str(d[key])[:10]
+                break
+        d["day"] = day
+        entries.append(d)
+
+    return {
+        "year_month": year_month,
+        "task_income": task_income,
+        "task_expense": task_expense,
+        "manual_income": manual_income,
+        "manual_expense": manual_expense,
+        "income": income,
+        "expense": expense,
+        "balance": income - expense,
+        "notes": notes,
+        "saved": saved is not None,
+        "entries": entries,
+    }
+
+
 @app.put("/api/finance/months/{year_month}")
 async def upsert_finance_month(
     year_month: str,

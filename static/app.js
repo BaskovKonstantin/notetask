@@ -15,6 +15,7 @@ const state = {
   panelKind: null,
   healthSelected: "chest",
   motion: { enterId: null, completeId: null, pulseId: null },
+  financeYm: null,
 };
 
 const SECTION_PANELS = {
@@ -979,6 +980,32 @@ function monthLabel(ym) {
   return d.toLocaleDateString("ru-RU", { month: "long", year: "numeric" });
 }
 
+function currentYearMonth(from = new Date()) {
+  const d = new Date(from);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function shiftYearMonth(ym, delta) {
+  const [y, m] = ym.split("-").map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function moneySigned(amount, type = "expense") {
+  const n = Number(amount) || 0;
+  const formatted = Math.abs(n).toLocaleString("ru-RU", { maximumFractionDigits: 2 });
+  if (type === "income") return `+${formatted} ₽`;
+  return `−${formatted} ₽`;
+}
+
+function financeBarPct(income, expense) {
+  const inc = Number(income) || 0;
+  const exp = Number(expense) || 0;
+  if (inc <= 0 && exp <= 0) return 0;
+  if (inc <= 0) return 100;
+  return Math.min(100, Math.round((exp / inc) * 100));
+}
+
 function moneyPlain(amount) {
   const n = Number(amount) || 0;
   return `${n.toLocaleString("ru-RU", { maximumFractionDigits: 2 })} ₽`;
@@ -993,6 +1020,7 @@ async function loadSectionPanel() {
     return;
   }
   state.panelKind = kind;
+  if (kind === "finance" && !state.financeYm) state.financeYm = currentYearMonth();
   panel.classList.remove("hidden");
   main.classList.add("with-section-panel");
   $("section-panel-inner").innerHTML = `<p class="sp-sub">Загрузка…</p>`;
@@ -1007,54 +1035,75 @@ async function loadSectionPanel() {
 }
 
 async function renderFinancePanel() {
-  const data = await api("/api/finance/months?months=6");
-  const totals = data.totals || {};
-  const bal = Number(totals.balance) || 0;
-  const months = data.months || [];
+  if (!state.financeYm) state.financeYm = currentYearMonth();
+  const ym = state.financeYm;
+  const data = await api(`/api/finance/months/${ym}`);
+  const income = Number(data.income) || 0;
+  const expense = Number(data.expense) || 0;
+  const bal = Number(data.balance) || 0;
+  const pct = financeBarPct(income, expense);
+  const entries = data.entries || [];
+  const balClass = bal > 0 ? "pos" : bal < 0 ? "neg" : "";
+
   $("section-panel-inner").innerHTML = `
-    <h2>Финансы</h2>
-    <p class="sp-sub">Суммы из задач + ручные доп. по месяцам</p>
-    <div class="sp-totals">
-      <div class="sp-stat"><span class="label">Доход</span><span class="value pos">${escapeHtml(moneyPlain(totals.income))}</span></div>
-      <div class="sp-stat"><span class="label">Расход</span><span class="value neg">${escapeHtml(moneyPlain(totals.expense))}</span></div>
-      <div class="sp-stat"><span class="label">Баланс</span><span class="value ${bal >= 0 ? "pos" : "neg"}">${escapeHtml(moneyPlain(bal))}</span></div>
+    <div class="fin-panel">
+      <div class="fin-top">
+        <h2>Финансы</h2>
+        <div class="fin-month-nav" role="group" aria-label="Месяц">
+          <button type="button" class="btn ghost small fin-nav-btn" data-finance-shift="-1" aria-label="Предыдущий месяц">‹</button>
+          <span class="fin-month-label">${escapeHtml(monthLabel(ym))}</span>
+          <button type="button" class="btn ghost small fin-nav-btn" data-finance-shift="1" aria-label="Следующий месяц">›</button>
+        </div>
+      </div>
+
+      <div class="fin-hero">
+        <span class="fin-hero-label">Баланс</span>
+        <div class="fin-hero-value ${balClass}">${escapeHtml(moneyPlain(bal))}</div>
+      </div>
+
+      <div class="fin-split">
+        <div class="fin-split-card income">
+          <span class="label">Доход</span>
+          <span class="value">${escapeHtml(moneySigned(income, "income"))}</span>
+        </div>
+        <div class="fin-split-card expense">
+          <span class="label">Расход</span>
+          <span class="value">${escapeHtml(moneySigned(expense, "expense"))}</span>
+        </div>
+      </div>
+
+      <div class="fin-bar" title="Расход относительно дохода">
+        <div class="fin-bar-track">
+          <div class="fin-bar-fill" style="width:${pct}%"></div>
+        </div>
+        <div class="fin-bar-meta">${pct}% расхода от дохода</div>
+      </div>
+
+      <div class="fin-ops-head">
+        <h3>Операции</h3>
+        <span class="hint">${entries.length}</span>
+      </div>
+      <div class="fin-ops">
+        ${
+          entries.length
+            ? entries
+                .map((e) => {
+                  const type = e.cost_type === "income" ? "income" : "expense";
+                  const day = e.day ? fmtShortDay(e.day) : "";
+                  return `
+            <button type="button" class="fin-op" data-finance-task="${e.id}">
+              <div class="fin-op-main">
+                <span class="fin-op-title">${escapeHtml(e.title || "Без названия")}</span>
+                <span class="fin-op-day">${escapeHtml(day)}</span>
+              </div>
+              <span class="fin-op-amount ${type}">${escapeHtml(moneySigned(e.cost, type))}</span>
+            </button>`;
+                })
+                .join("")
+            : `<p class="fin-empty">Нет операций с суммой в этом месяце. Добавь сумму в задаче.</p>`
+        }
+      </div>
     </div>
-    <p class="sp-sub">из задач: +${escapeHtml(moneyPlain(totals.task_income))} / −${escapeHtml(moneyPlain(totals.task_expense))}</p>
-    ${months
-      .map((m) => {
-        const b = Number(m.balance) || 0;
-        const hasManual =
-          !!m.saved &&
-          (Number(m.manual_income) || Number(m.manual_expense) || (m.notes || "").trim());
-        return `
-      <form class="finance-month" data-finance-month="${escapeAttr(m.year_month)}">
-        <header>
-          <div class="finance-month-head">
-            <span class="ym">${escapeHtml(monthLabel(m.year_month))}</span>
-            ${
-              m.saved
-                ? `<button type="button" class="btn ghost small btn-del" data-finance-delete title="Удалить ручные данные" aria-label="Удалить">×</button>`
-                : ""
-            }
-          </div>
-          <span class="hint">из задач: −${escapeHtml(moneyPlain(m.task_expense))} / +${escapeHtml(moneyPlain(m.task_income))}</span>
-        </header>
-        <div class="finance-sync-row">
-          <span>Итого: <strong class="${b >= 0 ? "pos" : "neg"}">${escapeHtml(moneyPlain(b))}</strong></span>
-          <button type="button" class="btn ghost small" data-finance-sync>Только из задач</button>
-        </div>
-        <div class="finance-fields">
-          <label>Ещё доход <input type="number" name="income" min="0" step="0.01" value="${escapeAttr(String(m.manual_income ?? 0))}" /></label>
-          <label>Ещё расход <input type="number" name="expense" min="0" step="0.01" value="${escapeAttr(String(m.manual_expense ?? 0))}" /></label>
-        </div>
-        <label>Заметки <textarea name="notes" rows="2">${escapeHtml(m.notes || "")}</textarea></label>
-        <footer>
-          <span class="hint">${hasManual ? "есть ручные правки" : "только задачи"}</span>
-          <button class="btn" type="submit">Сохранить</button>
-        </footer>
-      </form>`;
-      })
-      .join("")}
   `;
 }
 
@@ -2187,22 +2236,6 @@ $("workout-list").addEventListener("click", async (e) => {
 });
 
 $("section-panel").addEventListener("submit", async (e) => {
-  const financeForm = e.target.closest("[data-finance-month]");
-  if (financeForm) {
-    e.preventDefault();
-    const ym = financeForm.dataset.financeMonth;
-    const fd = new FormData(financeForm);
-    await api(`/api/finance/months/${ym}`, {
-      method: "PUT",
-      body: JSON.stringify({
-        income: Number(fd.get("income") || 0),
-        expense: Number(fd.get("expense") || 0),
-        notes: String(fd.get("notes") || ""),
-      }),
-    });
-    await renderFinancePanel();
-    return;
-  }
   if (e.target.id === "work-form") {
     e.preventDefault();
     const fd = new FormData(e.target);
@@ -2250,42 +2283,24 @@ $("section-panel").addEventListener("submit", async (e) => {
 });
 
 $("section-panel").addEventListener("click", async (e) => {
-  const financeMonth = e.target.closest("[data-finance-month]");
-  if (financeMonth) {
-    const ym = financeMonth.dataset.financeMonth;
-    if (e.target.closest("[data-finance-delete]")) {
-      e.preventDefault();
-      e.stopPropagation();
-      if (!confirm(`Удалить ручные данные за ${monthLabel(ym)}? Суммы из задач останутся.`)) return;
-      await animateLeave(financeMonth, "out");
-      try {
-        await api(`/api/finance/months/${ym}`, { method: "DELETE" });
-      } catch (err) {
-        const msg = String(err.message || "");
-        if (!/404|not found/i.test(msg)) {
-          alert(msg || "Не удалось удалить");
-          await renderFinancePanel();
-          return;
-        }
-      }
-      await renderFinancePanel();
-      return;
+  const shiftBtn = e.target.closest("[data-finance-shift]");
+  if (shiftBtn) {
+    e.preventDefault();
+    const delta = Number(shiftBtn.dataset.financeShift) || 0;
+    state.financeYm = shiftYearMonth(state.financeYm || currentYearMonth(), delta);
+    await renderFinancePanel();
+    return;
+  }
+  const finTask = e.target.closest("[data-finance-task]");
+  if (finTask) {
+    e.preventDefault();
+    const taskId = Number(finTask.dataset.financeTask);
+    const item = document.querySelector(`.item[data-id="${taskId}"]`);
+    if (item) {
+      item.classList.add("anim-pulse");
+      item.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "center" });
     }
-    if (e.target.closest("[data-finance-sync]")) {
-      e.preventDefault();
-      e.stopPropagation();
-      const fd = new FormData(financeMonth);
-      await api(`/api/finance/months/${ym}`, {
-        method: "PUT",
-        body: JSON.stringify({
-          income: 0,
-          expense: 0,
-          notes: String(fd.get("notes") || ""),
-        }),
-      });
-      await renderFinancePanel();
-      return;
-    }
+    return;
   }
 
   const regionEl = e.target.closest("[data-region]");
