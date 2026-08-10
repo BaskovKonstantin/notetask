@@ -14,6 +14,7 @@ const state = {
   workProjects: [],
   panelKind: null,
   healthSelected: "chest",
+  motion: { enterId: null, completeId: null, pulseId: null },
 };
 
 const SECTION_PANELS = {
@@ -93,6 +94,53 @@ async function track(action, entityType = "ui", entityId = null, payload = {}) {
 
 function $(id) {
   return document.getElementById(id);
+}
+
+const MOTION = {
+  out: 220,
+  move: 240,
+  enter: 320,
+  complete: 340,
+  pulse: 360,
+};
+
+function prefersReducedMotion() {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function waitMs(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+async function animateLeave(el, kind = "out") {
+  if (!el) return;
+  if (prefersReducedMotion()) {
+    el.classList.add("anim-gone");
+    return;
+  }
+  el.classList.remove("anim-enter", "anim-pulse", "item-completing", "item-slide-down");
+  el.classList.add(`anim-${kind}`);
+  await waitMs(MOTION[kind] || MOTION.out);
+  el.classList.add("anim-gone");
+}
+
+function applyListMotion(root, selector = ".item, .note-card, .work-item, .goal-item") {
+  const { enterId, completeId, pulseId } = state.motion;
+  state.motion.enterId = null;
+  state.motion.completeId = null;
+  state.motion.pulseId = null;
+  if (!root || prefersReducedMotion()) return;
+  if (enterId == null && completeId == null && pulseId == null) return;
+  root.querySelectorAll(selector).forEach((el) => {
+    const id = el.dataset.id || el.dataset.workId || el.dataset.goalId || el.dataset.noteId;
+    if (enterId != null && String(id) === String(enterId)) el.classList.add("anim-enter-strong");
+    if (completeId != null && String(id) === String(completeId)) el.classList.add("item-slide-down");
+    if (pulseId != null && String(id) === String(pulseId)) el.classList.add("anim-pulse");
+  });
+}
+
+function findTaskItem(taskId) {
+  return document.querySelector(`.item[data-id="${taskId}"]`);
 }
 
 function logout(reload = true) {
@@ -1006,6 +1054,7 @@ async function renderWorkPanel() {
       <button class="btn" type="submit">Добавить</button>
     </form>
   `;
+  applyListMotion($("section-panel-inner"), ".work-item");
 }
 
 function bodySvg(body) {
@@ -1143,6 +1192,7 @@ async function renderWorkoutPanel() {
       </div>
     </div>
   `;
+  applyListMotion($("section-panel-inner"), ".goal-item");
 }
 
 function setView(view, opts = {}) {
@@ -1183,6 +1233,12 @@ function setView(view, opts = {}) {
 
   updateTaskChips();
   syncWorkProjectChipVisibility();
+  const main = document.querySelector(".main");
+  if (main && !prefersReducedMotion()) {
+    main.classList.remove("view-swap");
+    void main.offsetWidth;
+    main.classList.add("view-swap");
+  }
   track("view_opened", "ui", null, { view, project_id: state.projectId });
   refresh();
 }
@@ -1235,6 +1291,16 @@ function mergeTaskDue(date, time) {
 }
 
 async function patchTask(taskId, patch) {
+  const item = findTaskItem(taskId);
+  const leavesView =
+    item &&
+    state.view === "project" &&
+    patch.project_id !== undefined &&
+    Number(patch.project_id) !== Number(state.projectId);
+  if (leavesView) await animateLeave(item, "move");
+  else if (item && (patch.priority != null || patch.due_at !== undefined || patch.work_project_id !== undefined)) {
+    state.motion.pulseId = taskId;
+  }
   await api(`/api/tasks/${taskId}`, { method: "PATCH", body: JSON.stringify(patch) });
   await refresh();
 }
@@ -1459,6 +1525,7 @@ async function loadTasks(view) {
   }
 
   root.innerHTML = html;
+  applyListMotion(root, ".item");
 }
 
 function renderTaskItem(t, view, projectMap) {
@@ -1553,19 +1620,19 @@ async function completeTaskItem(completeBtn) {
 
   playCompleteSound();
   completeBtn.classList.add("done");
-  item.classList.add("item-completing");
+  if (item) item.classList.add("item-completing");
 
   try {
     await api(`/api/tasks/${id}/complete`, { method: "POST" });
   } catch {
     completeBtn.classList.remove("done");
-    item.classList.remove("item-completing");
+    item?.classList.remove("item-completing");
     return;
   }
 
-  window.setTimeout(async () => {
-    await loadTasks(state.view);
-  }, 320);
+  state.motion.completeId = id;
+  if (item) await animateLeave(item, "complete");
+  await loadTasks(state.view);
 }
 
 async function loadNotes() {
@@ -1588,6 +1655,11 @@ async function loadNotes() {
     </article>`
     )
     .join("");
+  root.querySelectorAll(".note-card").forEach((el, i) => {
+    const btn = el.querySelector("[data-del-note]");
+    if (btn) el.dataset.noteId = btn.dataset.delNote;
+  });
+  applyListMotion(root, ".note-card");
 }
 
 function addWorkoutSetRow(data = {}) {
@@ -1628,6 +1700,7 @@ async function loadWorkouts() {
       </div>`;
     })
     .join("");
+  applyListMotion(root, ".item");
 }
 
 const actionLabels = {
@@ -1843,7 +1916,7 @@ $("task-form").addEventListener("submit", async (e) => {
   const location = $("task-location").value.trim() || null;
   const costVal = $("task-cost").value ? Number($("task-cost").value) : null;
   const costType = costVal ? $("task-cost-type-value").value || "expense" : null;
-  await api("/api/tasks", {
+    const created = await api("/api/tasks", {
     method: "POST",
     body: JSON.stringify({
       title,
@@ -1864,6 +1937,8 @@ $("task-form").addEventListener("submit", async (e) => {
       })(),
     }),
   });
+  if (created?.id) state.motion.enterId = created.id;
+
   $("task-title").value = "";
   $("task-location").value = "";
   $("task-cost").value = "";
@@ -1960,9 +2035,14 @@ $("task-list").addEventListener("click", async (e) => {
   if (complete) {
     await completeTaskItem(complete);
   } else if (del) {
+    const item = del.closest(".item");
+    await animateLeave(item, "out");
     await api(`/api/tasks/${del.dataset.delTask}`, { method: "DELETE" });
     await refresh();
   } else if (promote) {
+    const item = promote.closest(".item");
+    state.motion.pulseId = promote.dataset.promote;
+    if (item) item.classList.add("anim-pulse");
     await api(`/api/tasks/${promote.dataset.promote}/promote`, { method: "POST" });
     await refresh();
   }
@@ -2010,6 +2090,8 @@ $("note-form").addEventListener("submit", async (e) => {
 $("note-list").addEventListener("click", async (e) => {
   const del = e.target.closest("[data-del-note]");
   if (del) {
+    const card = del.closest(".note-card");
+    await animateLeave(card, "out");
     await api(`/api/notes/${del.dataset.delNote}`, { method: "DELETE" });
     await refresh();
   }
@@ -2046,6 +2128,8 @@ $("workout-form").addEventListener("submit", async (e) => {
 $("workout-list").addEventListener("click", async (e) => {
   const del = e.target.closest("[data-del-wo]");
   if (del) {
+    const item = del.closest(".item");
+    await animateLeave(item, "out");
     await api(`/api/workouts/${del.dataset.delWo}`, { method: "DELETE" });
     await refresh();
   }
@@ -2140,10 +2224,12 @@ $("section-panel").addEventListener("click", async (e) => {
       e.stopPropagation();
       const title = workItem.querySelector("strong")?.textContent?.trim() || "проект";
       if (!confirm(`Удалить проект «${title}»?`)) return;
+      await animateLeave(workItem, "out");
       try {
         await api(`/api/work-projects/${id}`, { method: "DELETE" });
       } catch (err) {
         alert(err.message || "Не удалось удалить");
+        await renderWorkPanel();
         return;
       }
       await loadWorkProjectsCache();
@@ -2177,6 +2263,7 @@ $("section-panel").addEventListener("click", async (e) => {
   if (goalItem) {
     const id = Number(goalItem.dataset.goalId);
     if (e.target.closest("[data-goal-delete]")) {
+      await animateLeave(goalItem, "out");
       await api(`/api/workout-goals/${id}`, { method: "DELETE" });
       await renderWorkoutPanel();
       return;

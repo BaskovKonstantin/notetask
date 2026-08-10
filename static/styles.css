@@ -880,6 +880,103 @@ textarea { min-height: 90px; resize: vertical; }
   to { transform: translateY(0); opacity: 0.62; }
 }
 
+/* --- motion: user actions --- */
+.anim-out,
+.anim-move,
+.anim-complete {
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+.anim-out {
+  animation: anim-out 0.22s ease forwards;
+}
+.anim-move {
+  animation: anim-move 0.24s ease forwards;
+}
+.anim-complete {
+  animation: anim-complete 0.34s ease forwards;
+}
+.anim-gone {
+  display: none !important;
+}
+
+@keyframes anim-out {
+  to {
+    opacity: 0;
+    transform: translateX(18px) scale(0.98);
+  }
+}
+@keyframes anim-move {
+  to {
+    opacity: 0;
+    transform: translateX(-22px);
+  }
+}
+@keyframes anim-complete {
+  0% { opacity: 1; transform: translateY(0) scale(1); }
+  40% { opacity: 1; transform: translateY(4px) scale(0.99); background: rgba(var(--accent-rgb), 0.12); }
+  100% { opacity: 0; transform: translateY(16px) scale(0.97); }
+}
+
+.anim-enter-strong {
+  animation: anim-enter-strong 0.32s ease both;
+}
+@keyframes anim-enter-strong {
+  from {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.98);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(2px) scale(1.01);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.anim-pulse {
+  animation: anim-pulse 0.36s ease;
+}
+@keyframes anim-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0); }
+  35% {
+    box-shadow: 0 0 0 4px rgba(var(--accent-rgb), 0.22);
+    background: rgba(var(--accent-rgb), 0.08);
+  }
+  100% { box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0); }
+}
+
+.view-swap {
+  animation: view-swap 0.22s ease;
+}
+@keyframes view-swap {
+  from { opacity: 0.72; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+.work-item.anim-out,
+.goal-item.anim-out,
+.note-card.anim-out {
+  animation: anim-out 0.22s ease forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .anim-out,
+  .anim-move,
+  .anim-complete,
+  .anim-enter-strong,
+  .anim-pulse,
+  .item-completing,
+  .item-slide-down,
+  .view-swap,
+  .panel-in,
+  .check.done {
+    animation: none !important;
+  }
+}
+
 .list-divider {
   margin: 10px 4px 6px;
   font-size: 0.72rem;
