@@ -31,7 +31,8 @@ Personal tracker (not TreckBas):
 - **PWA / мобильное:** баннер «Скачать» на телефоне; manifest + service worker
 - **Виджет:** https://todo.baski.pro/widget — компакт «Сегодня», после установки PWA открывается как приложение
 - **Звук выполнения:** «Глухой удар» (Web Audio)
-- **NLP срока:** дни недели (в понедельник…), месяцы (сентябрь / 15 октября), относительные даты; кириллица через unicode word-boundary (`app.js` v36)
+- **NLP срока:** дни недели (в понедельник…), месяцы (сентябрь / 15 октября), относительные даты; кириллица через unicode word-boundary (`app.js` v37)
+- **Микроанимации:** удаление/перемещение/выполнение/создание задач (+ заметки, проекты, цели); смена экрана; уважает `prefers-reduced-motion`
 - **Тема раздела:** при открытии раздела UI плавно перекрашивается в `project.color` (CSS vars `--accent`, `--theme-glow*`)
 - **Рабочий проект у задачи:** в разделе Работа — чип «Проект» (composer + плашка задачи), поле `work_project_id` → `work_projects`; удаление проекта: × справа + confirm, отвязка задач
 - **Правая панель раздела** (клик по разделу → workspace split):
@@ -40,7 +41,7 @@ Personal tracker (not TreckBas):
   - Здоровье → SVG тела + метрики (`/api/health-profile`, `health_metrics` / `health_body`)
   - Тренировки → цели и прогресс (`/api/workout-panel`, `workout_goals`)
   - Остальные разделы / Сегодня — панель скрыта
-  - UI: `#section-panel`, CSS `main.with-section-panel`, `app.js` v36 / `styles.css` v28
+  - UI: `#section-panel`, CSS `main.with-section-panel`, `app.js` v37 / `styles.css` v29
 
 ## Stack
 

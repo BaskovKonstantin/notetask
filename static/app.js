@@ -1916,7 +1916,7 @@ $("task-form").addEventListener("submit", async (e) => {
   const location = $("task-location").value.trim() || null;
   const costVal = $("task-cost").value ? Number($("task-cost").value) : null;
   const costType = costVal ? $("task-cost-type-value").value || "expense" : null;
-    const created = await api("/api/tasks", {
+  const created = await api("/api/tasks", {
     method: "POST",
     body: JSON.stringify({
       title,
@@ -2075,13 +2075,14 @@ $("task-list").addEventListener("change", async (e) => {
 
 $("note-form").addEventListener("submit", async (e) => {
   e.preventDefault();
-  await api("/api/notes", {
+  const createdNote = await api("/api/notes", {
     method: "POST",
     body: JSON.stringify({
       title: $("note-title").value.trim(),
       body: $("note-body").value,
     }),
   });
+  if (createdNote?.id) state.motion.enterId = createdNote.id;
   $("note-title").value = "";
   $("note-body").value = "";
   await refresh();
@@ -2156,7 +2157,7 @@ $("section-panel").addEventListener("submit", async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
     const budgetRaw = fd.get("budget");
-    await api("/api/work-projects", {
+    const createdWp = await api("/api/work-projects", {
       method: "POST",
       body: JSON.stringify({
         title: String(fd.get("title") || "").trim(),
@@ -2166,6 +2167,7 @@ $("section-panel").addEventListener("submit", async (e) => {
         status: "active",
       }),
     });
+    if (createdWp?.id) state.motion.enterId = createdWp.id;
     await loadWorkProjectsCache();
     await renderWorkPanel();
     return;
@@ -2182,7 +2184,7 @@ $("section-panel").addEventListener("submit", async (e) => {
   if (e.target.id === "goal-form") {
     e.preventDefault();
     const fd = new FormData(e.target);
-    await api("/api/workout-goals", {
+    const createdGoal = await api("/api/workout-goals", {
       method: "POST",
       body: JSON.stringify({
         title: String(fd.get("title") || "").trim(),
@@ -2192,6 +2194,7 @@ $("section-panel").addEventListener("submit", async (e) => {
         period: String(fd.get("period") || "month"),
       }),
     });
+    if (createdGoal?.id) state.motion.enterId = createdGoal.id;
     await renderWorkoutPanel();
   }
 });
