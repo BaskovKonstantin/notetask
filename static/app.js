@@ -1482,13 +1482,13 @@ function renderTaskAttrs(t, projectMap) {
   const hasDue = !!due.date || !!due.time;
   const repeatRule = t.repeat_rule || "";
   const hasRepeat = !!repeatRule;
+  const dueLabel = due.date ? fmtShortDay(due.date) : "Срок";
   const dueChipLabel = hasRepeat
     ? `${due.time || dueLabel} · ${repeatLabel(repeatRule)}`
     : due.time || dueLabel;
   const hasLocation = !!t.location;
   const hasCost = t.cost != null && Number(t.cost) !== 0;
   const costType = t.cost_type === "income" ? "income" : "expense";
-  const dueLabel = due.date ? fmtShortDay(due.date) : "Срок";
   const showWork = isWorkSectionId(t.project_id) || t.work_project_id != null;
   const workTitle = workProjectTitle(t.work_project_id);
   const hasWork = !!t.work_project_id;
