@@ -15,6 +15,16 @@
 
   if (!isMobile() || isStandalone()) return;
 
+  function onLoginScreen() {
+    const login = document.getElementById("login");
+    return login && !login.classList.contains("hidden");
+  }
+
+  function showBanner() {
+    if (onLoginScreen()) return;
+    banner.classList.remove("hidden");
+  }
+
   let deferredPrompt = null;
   const banner = document.createElement("div");
   banner.className = "pwa-install hidden";
@@ -36,17 +46,17 @@
   window.addEventListener("beforeinstallprompt", (e) => {
     e.preventDefault();
     deferredPrompt = e;
-    banner.classList.remove("hidden");
+    showBanner();
   });
 
   const isIos = /iPhone|iPad|iPod/i.test(navigator.userAgent);
   if (isIos && !deferredPrompt) {
-    banner.classList.remove("hidden");
+    showBanner();
     banner.querySelector("#pwa-install-btn").textContent = "Как установить";
     banner.querySelector("#pwa-ios-hint").classList.remove("hidden");
   } else if (!isIos) {
     window.setTimeout(() => {
-      if (!deferredPrompt && !isStandalone()) banner.classList.remove("hidden");
+      if (!deferredPrompt && !isStandalone()) showBanner();
     }, 1500);
   }
 

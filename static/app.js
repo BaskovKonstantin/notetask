@@ -65,8 +65,11 @@ async function api(path, opts = {}) {
   const url = path.startsWith("http") ? path : `${BASE}${path}`;
   const res = await fetch(url, { ...opts, headers });
   if (res.status === 401) {
-    logout(false);
-    throw new Error("auth");
+    const err = await res.json().catch(() => ({}));
+    const detail = err.detail || "auth";
+    // login 401 = wrong password; do not wipe UI mid-submit
+    if (!String(path).includes("/api/login")) logout(false);
+    throw new Error(typeof detail === "string" ? detail : "auth");
   }
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -2037,7 +2040,11 @@ document.addEventListener("keydown", (e) => {
 // events
 $("login-form").addEventListener("submit", async (e) => {
   e.preventDefault();
-  $("login-error").classList.add("hidden");
+  const errEl = $("login-error");
+  const btn = e.submitter || $("login-form").querySelector('button[type="submit"]');
+  errEl.classList.add("hidden");
+  errEl.textContent = "Неверный пароль";
+  if (btn) btn.disabled = true;
   try {
     const data = await api("/api/login", {
       method: "POST",
@@ -2048,8 +2055,15 @@ $("login-form").addEventListener("submit", async (e) => {
     showApp();
     await loadProjectsCache();
     setView("today");
-  } catch {
-    $("login-error").classList.remove("hidden");
+    await refresh();
+  } catch (ex) {
+    showLogin();
+    const msg = String(ex?.message || "");
+    errEl.textContent =
+      /wrong password|auth/i.test(msg) ? "Неверный пароль" : "Не удалось войти. Обнови страницу (Ctrl+F5).";
+    errEl.classList.remove("hidden");
+  } finally {
+    if (btn) btn.disabled = false;
   }
 });
 
