@@ -1430,7 +1430,21 @@ textarea { min-height: 90px; resize: vertical; }
 }
 .login-card p { color: var(--muted); margin: 0 0 20px; }
 .login-card .btn { width: 100%; margin-top: 12px; }
-.error { color: var(--danger); font-size: 0.9rem; margin-top: 8px; }
+.login-card .btn:disabled { opacity: 0.7; cursor: wait; }
+.error {
+  color: var(--danger);
+  font-size: 0.95rem;
+  font-weight: 650;
+  margin-top: 12px;
+  min-height: 1.3em;
+}
+.error:not(.hidden) {
+  display: block;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--danger) 12%, #fff);
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--line));
+}
 .empty { color: var(--muted); padding: 20px 8px; }
 
 .workout-set-row {

@@ -2038,34 +2038,41 @@ document.addEventListener("keydown", (e) => {
 });
 
 // events
-$("login-form").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const errEl = $("login-error");
-  const btn = e.submitter || $("login-form").querySelector('button[type="submit"]');
-  errEl.classList.add("hidden");
-  errEl.textContent = "Неверный пароль";
-  if (btn) btn.disabled = true;
-  try {
-    const data = await api("/api/login", {
-      method: "POST",
-      body: JSON.stringify({ password: $("password").value }),
-    });
-    state.token = data.token;
-    localStorage.setItem(TOKEN_KEY, state.token);
-    showApp();
-    await loadProjectsCache();
-    setView("today");
-    await refresh();
-  } catch (ex) {
-    showLogin();
-    const msg = String(ex?.message || "");
-    errEl.textContent =
-      /wrong password|auth/i.test(msg) ? "Неверный пароль" : "Не удалось войти. Обнови страницу (Ctrl+F5).";
-    errEl.classList.remove("hidden");
-  } finally {
-    if (btn) btn.disabled = false;
-  }
-});
+if (!window.__notetaskLoginBound) {
+  $("login-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const errEl = $("login-error");
+    const btn = e.submitter || $("login-btn") || $("login-form").querySelector('button[type="submit"]');
+    errEl.classList.add("hidden");
+    errEl.textContent = "Неверный пароль";
+    if (btn) btn.disabled = true;
+    try {
+      const password = String($("password").value || "");
+      if (!password) throw new Error("empty");
+      const data = await api("/api/login", {
+        method: "POST",
+        body: JSON.stringify({ password }),
+      });
+      state.token = data.token;
+      localStorage.setItem(TOKEN_KEY, state.token);
+      showApp();
+      await loadProjectsCache();
+      setView("today");
+      await refresh();
+    } catch (ex) {
+      showLogin();
+      const msg = String(ex?.message || "");
+      errEl.textContent = /empty/i.test(msg)
+        ? "Введи пароль (кликни в поле, если браузер подставил сам)"
+        : /wrong password|auth/i.test(msg)
+          ? "Неверный пароль"
+          : "Не удалось войти. Обнови страницу (Ctrl+F5).";
+      errEl.classList.remove("hidden");
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  });
+}
 
 $("nav").addEventListener("click", (e) => {
   const btn = e.target.closest("button[data-view]");
