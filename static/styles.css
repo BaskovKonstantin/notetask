@@ -670,6 +670,32 @@ button, input, select, textarea {
   background: rgba(107, 63, 160, 0.12);
   border-radius: 5px;
 }
+
+.due-section-label {
+  margin: 8px 2px 4px;
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.due-repeat {
+  display: grid;
+  gap: 2px;
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px dashed var(--line);
+}
+.due-repeat .chip-option {
+  text-align: left;
+}
+.hl-repeat {
+  color: #0f766e;
+  background: rgba(15, 118, 110, 0.14);
+  border-radius: 5px;
+  font-weight: 650;
+}
+
 .hl-kind {
   color: #0f766e;
   background: rgba(15, 118, 110, 0.12);

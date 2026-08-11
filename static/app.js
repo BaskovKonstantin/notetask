@@ -273,6 +273,21 @@ function quickDueDate(kind) {
   }
 }
 
+const REPEAT_OPTIONS = [
+  { id: "", label: "Без повтора" },
+  { id: "daily", label: "Каждый день" },
+  { id: "every_2_days", label: "Каждые 2 дня" },
+  { id: "every_3_days", label: "Каждые 3 дня" },
+  { id: "weekdays", label: "По будням" },
+  { id: "weekly", label: "Каждую неделю" },
+  { id: "monthly", label: "Каждый месяц" },
+];
+
+function repeatLabel(rule) {
+  const hit = REPEAT_OPTIONS.find((o) => o.id === (rule || ""));
+  return hit ? hit.label : "Без повтора";
+}
+
 function quickDueButtonsHtml() {
   return `
     <div class="due-quick">
@@ -280,6 +295,18 @@ function quickDueButtonsHtml() {
       <button type="button" class="chip-option" data-quick-due="weekend">На выходных</button>
       <button type="button" class="chip-option" data-quick-due="next_week">На след. неделе</button>
       <button type="button" class="chip-option" data-quick-due="next_month">Через месяц</button>
+    </div>`;
+}
+
+function repeatButtonsHtml(selected) {
+  const cur = selected || "";
+  return `
+    <div class="due-repeat">
+      <div class="due-section-label">Расписание</div>
+      ${REPEAT_OPTIONS.map(
+        (o) =>
+          `<button type="button" class="chip-option${o.id === cur ? " selected" : ""}" data-task-repeat="${escapeAttr(o.id)}">${escapeHtml(o.label)}</button>`,
+      ).join("")}
     </div>`;
 }
 
@@ -339,6 +366,18 @@ function parseDateToken(text) {
     const monthIndex = resolveMonthIndex(bareMonth[1]);
     if (monthIndex != null) return nextMonthDate(monthIndex, 1, now);
   }
+  return null;
+}
+
+
+function parseRepeatToken(text) {
+  const lower = text.toLowerCase().trim().replace(/\s+/g, " ");
+  if (/^(?:каждый\s+день|ежедневно|daily)$/.test(lower)) return "daily";
+  if (/^(?:каждые\s+2\s+дня|every\s*2\s*days?)$/.test(lower)) return "every_2_days";
+  if (/^(?:каждые\s+3\s+дня|every\s*3\s*days?)$/.test(lower)) return "every_3_days";
+  if (/^(?:каждую\s+неделю|еженедельно|weekly)$/.test(lower)) return "weekly";
+  if (/^(?:по\s+будням|будни|weekdays)$/.test(lower)) return "weekdays";
+  if (/^(?:каждый\s+месяц|ежемесячно|monthly)$/.test(lower)) return "monthly";
   return null;
 }
 
@@ -435,6 +474,11 @@ function collectTaskTokens(text) {
       meta: (m) => ({ due: parseDateToken(m[0]) }),
     },
     {
+      type: "repeat",
+      re: ruTokenRe("каждый\\s+день|ежедневно|каждые\\s+[23]\\s+дня|каждую\\s+неделю|еженедельно|по\\s+будням|будни|каждый\\s+месяц|ежемесячно|daily|weekly|monthly|weekdays|every\\s*[23]\\s*days?"),
+      meta: (m) => ({ repeat: parseRepeatToken(m[0]) }),
+    },
+    {
       type: "priority",
       re: /!{1,4}\b/g,
       meta: (m) => ({ priority: parsePriorityToken(m[0]) }),
@@ -497,6 +541,7 @@ function mergeTaskMeta(tokens) {
       if (m.projectId) meta.projectId = m.projectId;
     }
     if (m.label) meta.labels.push(m.label);
+    if (m.repeat) meta.repeat = m.repeat;
   }
   return meta;
 }
@@ -526,6 +571,8 @@ function highlightableTokens(tokens) {
         return !!m.label;
       case "kind":
         return !!m.kind;
+      case "repeat":
+        return !!m.repeat;
       default: {
         const _exhaustive = token.type;
         return false;
@@ -562,6 +609,10 @@ function applyParsedMeta(meta) {
   if (meta.due) $("task-due").value = meta.due;
   if (meta.priority) $("task-priority").value = String(meta.priority);
   if (meta.kind) $("task-kind").value = meta.kind;
+  if (meta.repeat !== undefined && $("task-repeat")) {
+    $("task-repeat").value = meta.repeat || "";
+    if (meta.repeat && !$("task-due").value) $("task-due").value = todayIso();
+  }
   updateTaskChips();
 }
 
@@ -760,8 +811,18 @@ function updateTaskChips() {
   });
 
   const due = $("task-due").value;
-  $("chip-due-label").textContent = due ? fmtShortDay(due) : "Срок";
-  $("chip-due").classList.toggle("has-value", !!due);
+  const repeat = $("task-repeat")?.value || "";
+  if (repeat) {
+    $("chip-due-label").textContent = due
+      ? `${fmtShortDay(due)} · ${repeatLabel(repeat)}`
+      : repeatLabel(repeat);
+  } else {
+    $("chip-due-label").textContent = due ? fmtShortDay(due) : "Срок";
+  }
+  $("chip-due").classList.toggle("has-value", !!due || !!repeat);
+  document.querySelectorAll("#composer-repeat [data-set-repeat]").forEach((btn) => {
+    btn.classList.toggle("selected", (btn.dataset.setRepeat || "") === repeat);
+  });
 
   const remind = $("task-remind").value;
   $("chip-remind-label").textContent = remind ? fmtShortDateTime(remind) : "Напомн.";
@@ -853,9 +914,18 @@ function initTaskMetaChips() {
     btn.addEventListener("click", () => {
       const el = $(btn.dataset.clear);
       if (el) el.value = "";
+      if (btn.dataset.clear === "task-due" && $("task-repeat")) $("task-repeat").value = "";
       updateTaskChips();
       closeTaskPopovers();
     });
+  });
+
+  $("composer-repeat")?.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-set-repeat]");
+    if (!btn) return;
+    $("task-repeat").value = btn.dataset.setRepeat || "";
+    if ($("task-repeat").value && !$("task-due").value) $("task-due").value = todayIso();
+    updateTaskChips();
   });
 
   $("pop-work")?.addEventListener("click", (e) => {
@@ -1410,6 +1480,11 @@ function renderTaskAttrs(t, projectMap) {
   const hasProject = !!t.project_id;
   const hasPriority = t.priority !== 4;
   const hasDue = !!due.date || !!due.time;
+  const repeatRule = t.repeat_rule || "";
+  const hasRepeat = !!repeatRule;
+  const dueChipLabel = hasRepeat
+    ? `${due.time || dueLabel} · ${repeatLabel(repeatRule)}`
+    : due.time || dueLabel;
   const hasLocation = !!t.location;
   const hasCost = t.cost != null && Number(t.cost) !== 0;
   const costType = t.cost_type === "income" ? "income" : "expense";
@@ -1476,14 +1551,15 @@ function renderTaskAttrs(t, projectMap) {
         </div>
       </div>
       <div class="chip-popover">
-        <button type="button" class="chip-btn${hasDue ? " has-value" : ""}" aria-expanded="false">
+        <button type="button" class="chip-btn${hasDue || hasRepeat ? " has-value" : ""}" aria-expanded="false">
           <span class="chip-icon">${CHIP_ICON.time}</span>
-          <span class="chip-label">${due.time || dueLabel}</span>
+          <span class="chip-label">${escapeHtml(dueChipLabel)}</span>
         </button>
         <div class="chip-menu chip-menu-wide hidden" role="dialog" aria-label="Срок и время">
           <input type="date" data-task-field="due-date" value="${escapeAttr(due.date)}" />
           <input type="time" data-task-field="due-time" value="${escapeAttr(due.time)}" />
           ${quickDueButtonsHtml()}
+          ${repeatButtonsHtml(repeatRule)}
           <button type="button" class="chip-clear" data-task-clear-due>Без срока</button>
         </div>
       </div>
@@ -1722,7 +1798,14 @@ async function completeTaskItem(completeBtn) {
   if (item) item.classList.add("item-completing");
 
   try {
-    await api(`/api/tasks/${id}/complete`, { method: "POST" });
+    const result = await api(`/api/tasks/${id}/complete`, { method: "POST" });
+    if (result?.rescheduled || result?.repeat_rule) {
+      completeBtn.classList.remove("done");
+      item?.classList.remove("item-completing");
+      state.motion.pulseId = id;
+      await loadTasks(state.view);
+      return;
+    }
   } catch {
     completeBtn.classList.remove("done");
     item?.classList.remove("item-completing");
@@ -2034,6 +2117,7 @@ $("task-form").addEventListener("submit", async (e) => {
         const raw = $("task-work-project").value;
         return raw ? Number(raw) : null;
       })(),
+      repeat_rule: $("task-repeat")?.value || parsed.meta.repeat || null,
     }),
   });
   if (created?.id) state.motion.enterId = created.id;
@@ -2043,6 +2127,7 @@ $("task-form").addEventListener("submit", async (e) => {
   $("task-cost").value = "";
   $("task-cost-type-value").value = "expense";
   $("task-work-project").value = "";
+  if ($("task-repeat")) $("task-repeat").value = "";
   syncTaskTitleHighlight();
   updateTaskChips();
   hideTaskForm();
@@ -2099,7 +2184,23 @@ $("task-list").addEventListener("click", async (e) => {
     }
     if (e.target.closest("[data-task-clear-due]")) {
       e.stopPropagation();
-      await patchTask(Number(attrsRoot.dataset.taskId), { due_at: null });
+      await patchTask(Number(attrsRoot.dataset.taskId), { due_at: null, repeat_rule: null });
+      closeTaskPopovers();
+      return;
+    }
+    const repeatBtn = e.target.closest("[data-task-repeat]");
+    if (repeatBtn) {
+      e.stopPropagation();
+      const rule = repeatBtn.dataset.taskRepeat || null;
+      const patch = { repeat_rule: rule || null };
+      if (rule) {
+        const dateInput = attrsRoot.querySelector('[data-task-field="due-date"]');
+        const timeInput = attrsRoot.querySelector('[data-task-field="due-time"]');
+        if (!dateInput?.value) {
+          patch.due_at = mergeTaskDue(todayIso(), timeInput?.value || "");
+        }
+      }
+      await patchTask(Number(attrsRoot.dataset.taskId), patch);
       closeTaskPopovers();
       return;
     }

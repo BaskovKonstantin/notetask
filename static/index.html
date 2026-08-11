@@ -15,7 +15,7 @@
       window.NOTETASK_BASE = base === "/todo/" ? "/todo" : "";
     })();
   </script>
-  <link rel="stylesheet" href="assets/styles.css?v=32" />
+  <link rel="stylesheet" href="assets/styles.css?v=33" />
   <script src="assets/pwa.js?v=1"></script>
 </head>
 <body>
@@ -124,6 +124,17 @@
                       <button type="button" class="chip-option" data-composer-quick-due="next_week">На след. неделе</button>
                       <button type="button" class="chip-option" data-composer-quick-due="next_month">Через месяц</button>
                     </div>
+                    <div class="due-repeat" id="composer-repeat">
+                      <div class="due-section-label">Расписание</div>
+                      <button type="button" class="chip-option selected" data-set-repeat="">Без повтора</button>
+                      <button type="button" class="chip-option" data-set-repeat="daily">Каждый день</button>
+                      <button type="button" class="chip-option" data-set-repeat="every_2_days">Каждые 2 дня</button>
+                      <button type="button" class="chip-option" data-set-repeat="every_3_days">Каждые 3 дня</button>
+                      <button type="button" class="chip-option" data-set-repeat="weekdays">По будням</button>
+                      <button type="button" class="chip-option" data-set-repeat="weekly">Каждую неделю</button>
+                      <button type="button" class="chip-option" data-set-repeat="monthly">Каждый месяц</button>
+                    </div>
+                    <input type="hidden" id="task-repeat" value="" />
                     <button type="button" class="chip-clear" data-clear="task-due">Без срока</button>
                   </div>
                 </div>
@@ -238,6 +249,6 @@
   </div>
 
   <script src="assets/pwa-install.js?v=1"></script>
-  <script src="assets/app.js?v=40"></script>
+  <script src="assets/app.js?v=41"></script>
 </body>
 </html>

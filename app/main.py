@@ -45,6 +45,87 @@ async def get_db(request: Request) -> aiosqlite.Connection:
     return request.app.state.db
 
 
+
+REPEAT_RULES = {
+    "daily",
+    "every_2_days",
+    "every_3_days",
+    "weekly",
+    "weekdays",
+    "monthly",
+}
+
+
+def parse_due_base(due_at: str | None) -> datetime:
+    if due_at:
+        raw = due_at.replace("Z", "+00:00")
+        try:
+            dt = datetime.fromisoformat(raw)
+            if dt.tzinfo is None:
+                return dt.replace(hour=12, minute=0, second=0, microsecond=0)
+            return dt.astimezone(timezone.utc).replace(tzinfo=None)
+        except ValueError:
+            try:
+                d = date.fromisoformat(due_at[:10])
+                return datetime(d.year, d.month, d.day, 12, 0, 0)
+            except ValueError:
+                pass
+    today = date.today()
+    return datetime(today.year, today.month, today.day, 12, 0, 0)
+
+
+def add_months(dt: datetime, months: int) -> datetime:
+    y = dt.year
+    m = dt.month + months
+    while m > 12:
+        m -= 12
+        y += 1
+    while m < 1:
+        m += 12
+        y -= 1
+    # clamp day
+    for day in range(dt.day, 0, -1):
+        try:
+            return dt.replace(year=y, month=m, day=day)
+        except ValueError:
+            continue
+    return dt.replace(year=y, month=m, day=1)
+
+
+def next_due_from_rule(due_at: str | None, rule: str | None) -> str | None:
+    if not rule or rule not in REPEAT_RULES:
+        return due_at
+    base = parse_due_base(due_at)
+    had_time = bool(due_at and "T" in due_at)
+    if rule == "daily":
+        nxt = base + timedelta(days=1)
+    elif rule == "every_2_days":
+        nxt = base + timedelta(days=2)
+    elif rule == "every_3_days":
+        nxt = base + timedelta(days=3)
+    elif rule == "weekly":
+        nxt = base + timedelta(days=7)
+    elif rule == "weekdays":
+        nxt = base + timedelta(days=1)
+        while nxt.weekday() >= 5:
+            nxt += timedelta(days=1)
+    elif rule == "monthly":
+        nxt = add_months(base, 1)
+    else:
+        return due_at
+    if had_time:
+        return nxt.replace(microsecond=0).isoformat()
+    return nxt.date().isoformat()
+
+
+def normalize_repeat_rule(rule: str | None) -> str | None:
+    if rule is None or rule == "" or rule == "none":
+        return None
+    if rule not in REPEAT_RULES:
+        raise HTTPException(400, f"Invalid repeat_rule: {rule}")
+    return rule
+
+
 # ---------- schemas ----------
 
 class LoginIn(BaseModel):
@@ -69,6 +150,7 @@ class TaskIn(BaseModel):
     cost: float | None = None
     cost_type: Literal["expense", "income"] | None = None
     work_project_id: int | None = None
+    repeat_rule: str | None = None
 
 
 class TaskPatchIn(BaseModel):
@@ -84,6 +166,7 @@ class TaskPatchIn(BaseModel):
     cost: float | None = None
     cost_type: Literal["expense", "income"] | None = None
     work_project_id: int | None = None
+    repeat_rule: str | None = None
 
 
 class NoteIn(BaseModel):
@@ -330,9 +413,9 @@ async def create_task(
         """
         INSERT INTO tasks(
           project_id, title, notes, kind, priority, due_at, remind_at,
-          status, created_at, updated_at, location, cost, cost_type, work_project_id
+          status, created_at, updated_at, location, cost, cost_type, work_project_id, repeat_rule
         )
-        VALUES(?,?,?,?,?,?,?,'open',?,?,?,?,?,?)
+        VALUES(?,?,?,?,?,?,?,'open',?,?,?,?,?,?,?)
         """,
         (
             body.project_id,
@@ -348,6 +431,7 @@ async def create_task(
             body.cost,
             body.cost_type,
             work_project_id,
+            normalize_repeat_rule(body.repeat_rule),
         ),
     )
     tid = cur.lastrowid
@@ -413,7 +497,8 @@ async def patch_task(
     await db.execute(
         """
         UPDATE tasks SET project_id=?, title=?, notes=?, kind=?, priority=?, due_at=?, remind_at=?,
-          status=?, completed_at=?, updated_at=?, location=?, cost=?, cost_type=?, work_project_id=?
+          status=?, completed_at=?, updated_at=?, location=?, cost=?, cost_type=?, work_project_id=?,
+          repeat_rule=?
         WHERE id=?
         """,
         (
@@ -431,6 +516,7 @@ async def patch_task(
             next_values.get("cost"),
             next_values.get("cost_type"),
             next_values.get("work_project_id"),
+            normalize_repeat_rule(next_values.get("repeat_rule")),
             task_id,
         ),
     )
@@ -461,6 +547,7 @@ async def update_task(
         "cost": body.cost,
         "cost_type": body.cost_type,
         "work_project_id": body.work_project_id,
+        "repeat_rule": body.repeat_rule,
     }
     next_values["work_project_id"] = await normalize_work_project_id(
         db, next_values.get("project_id"), next_values.get("work_project_id")
@@ -498,7 +585,8 @@ async def update_task(
     await db.execute(
         """
         UPDATE tasks SET project_id=?, title=?, notes=?, kind=?, priority=?, due_at=?, remind_at=?,
-          status=?, completed_at=?, updated_at=?, location=?, cost=?, cost_type=?, work_project_id=?
+          status=?, completed_at=?, updated_at=?, location=?, cost=?, cost_type=?, work_project_id=?,
+          repeat_rule=?
         WHERE id=?
         """,
         (
@@ -516,6 +604,7 @@ async def update_task(
             next_values["cost"],
             next_values["cost_type"],
             next_values["work_project_id"],
+            normalize_repeat_rule(next_values.get("repeat_rule")),
             task_id,
         ),
     )
@@ -533,6 +622,28 @@ async def complete_task(
     if old["status"] == "done":
         return old
     now = utcnow()
+    rule = normalize_repeat_rule(old.get("repeat_rule"))
+    if rule:
+        new_due = next_due_from_rule(old.get("due_at"), rule)
+        await db.execute(
+            """
+            UPDATE tasks SET due_at=?, status='open', completed_at=NULL, updated_at=?
+            WHERE id=?
+            """,
+            (new_due, now, task_id),
+        )
+        await bump_completions(db)
+        await log_action(
+            db,
+            "completed",
+            "task",
+            task_id,
+            {"title": old["title"], "recurring": True, "repeat_rule": rule, "next_due": new_due},
+        )
+        await db.commit()
+        task = await fetch_task(db, task_id)
+        task["rescheduled"] = True
+        return task
     await db.execute(
         "UPDATE tasks SET status='done', completed_at=?, updated_at=? WHERE id=?",
         (now, now, task_id),
