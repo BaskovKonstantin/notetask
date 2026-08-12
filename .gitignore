@@ -6,3 +6,9 @@ data/*.db
 data/*.db-*
 *.egg-info/
 .pytest_cache/
+desktop/node_modules/
+desktop/src-tauri/target/
+mobile/.dart_tool/
+mobile/build/
+mobile/.flutter-plugins-dependencies
+mobile/.packages

@@ -1,8 +1,9 @@
 # NoteTask / todo.baski.pro — context
 
-Updated: 2026-08-11
+Updated: 2026-08-12
 
 ## Live
+- **LAN caveat:** с той же сети публичный IP `5.144.98.126` часто не открывается (нет NAT hairpin). В LAN DNS (`dnsmasq` @ `192.168.0.6`) `todo.baski.pro` → `192.168.0.6`. Если ПК берёт 8.8.8.8 — будет таймаут. Фикс: DNS `192.168.0.6` или hosts.
 
 - **Primary URL:** https://todo.baski.pro/ (Let's Encrypt, A `todo` → 5.144.98.126)
 - **Legacy path:** https://baski.pro/todo/
@@ -28,13 +29,15 @@ Personal tracker (not TreckBas):
 - **Sidebar:** кнопка «←» в topbar — сворачивает меню, состояние в `localStorage` (`notetask_sidebar_collapsed`)
 - **Плашка задачи:** под каждой задачей чипы — раздел, P, срок/время, место, сумма (расход/доход)
 - **Финансы:** суммы в задачах; сводка в «Статистика» — расходы/доходы/баланс за 30д + список операций
+- **Desktop (Tauri):** `desktop/` — WebView → todo.baski.pro; трей; Ctrl+Space глобально; autostart; close→tray. Build: `cd desktop && npm run build` (Windows)
+- **Android (Flutter):** `mobile/` — Today + виджет `TodayWidgetProvider`; API JWT. Build APK: see `mobile/README.md`
 - **PWA / мобильное:** баннер «Скачать» на телефоне; manifest + service worker
 - **Виджет:** https://todo.baski.pro/widget — компакт «Сегодня», после установки PWA открывается как приложение
 - **Звук выполнения:** «Глухой удар» (Web Audio)
 - **Логин:** отдельный `login.js` (autofill/пустой value); без HTML required; ошибка заметная; SW `notetask-v4`
 - **Расписание (repeat):** в поповере срока — каждый день / 2–3 дня / будни / неделя / месяц; `repeat_rule`; выполнение → следующий срок (Todoist-style)
 - **Подсветка ввода:** распознанные токены (срок, p1–p4, @раздел, #метка, идея/план) цветные в поле задачи
-- **NLP срока:** дни недели (в понедельник…), месяцы (сентябрь / 15 октября), относительные даты; кириллица через unicode word-boundary (`app.js` v44)
+- **NLP срока:** дни недели (в понедельник…), месяцы (сентябрь / 15 октября), относительные даты; кириллица через unicode word-boundary (`app.js` v45)
 - **Микроанимации:** удаление/перемещение/выполнение/создание задач (+ заметки, проекты, цели); смена экрана; уважает `prefers-reduced-motion`
 - **Тема раздела:** при открытии раздела UI плавно перекрашивается в `project.color` (CSS vars `--accent`, `--theme-glow*`)
 - **Рабочий проект у задачи:** в разделе Работа — чип «Проект» (composer + плашка задачи), поле `work_project_id` → `work_projects`; удаление проекта: × справа + confirm, отвязка задач
@@ -44,7 +47,7 @@ Personal tracker (not TreckBas):
   - Здоровье → SVG тела + метрики (`/api/health-profile`, `health_metrics` / `health_body`)
   - Тренировки → цели и прогресс (`/api/workout-panel`, `workout_goals`)
   - Остальные разделы / Сегодня — панель скрыта
-  - UI: `#section-panel`, CSS `main.with-section-panel`, `app.js` v44 / `styles.css` v34
+  - UI: `#section-panel`, CSS `main.with-section-panel`, `app.js` v45 / `styles.css` v34
 
 ## Stack
 

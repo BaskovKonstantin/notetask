@@ -2019,6 +2019,16 @@ function openTaskCapture() {
   window.setTimeout(() => panel.classList.remove("capture-focus"), 1400);
 }
 
+function handleCaptureHash() {
+  if (location.hash === "#capture") {
+    openTaskCapture();
+    // clear hash without reload so repeat hotkeys still fire
+    history.replaceState(null, "", location.pathname + location.search);
+  }
+}
+
+window.addEventListener("hashchange", handleCaptureHash);
+
 function isTypingTarget(el) {
   if (!el) return false;
   const tag = el.tagName;
@@ -2534,6 +2544,7 @@ async function boot() {
     showApp();
     track("app_opened", "ui", null, { path: location.pathname });
     setView("today");
+    handleCaptureHash();
   } catch {
     showLogin();
   }
