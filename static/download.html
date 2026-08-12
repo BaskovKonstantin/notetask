@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Скачать NoteTask</title>
+  <script>
+    (function () {
+      var p = location.pathname;
+      var base = (p === "/todo" || p.startsWith("/todo/")) ? "/todo/" : "/";
+      document.write('<base href="' + base + '" id="app-base" />');
+      window.NOTETASK_BASE = base === "/todo/" ? "/todo" : "";
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/styles.css?v=35" />
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="login-card download-card">
+      <h1>Скачать NoteTask</h1>
+      <p>Приложения для Windows и Android. Сайт и данные те же — https://todo.baski.pro/</p>
+      <div id="download-list" class="download-list">Загрузка…</div>
+      <p class="download-note">Android: разреши установку из неизвестных источников. Windows: WebView2 ставится при необходимости.</p>
+      <p class="download-note">В домашней Wi‑Fi добавь в hosts: <code>192.168.0.6 todo.baski.pro</code></p>
+      <a class="btn ghost" href="./" style="width:100%;margin-top:16px;display:inline-block;text-align:center">← На сайт</a>
+    </div>
+  </div>
+  <script src="assets/download.js?v=1"></script>
+</body>
+</html>

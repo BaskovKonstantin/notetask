@@ -29,6 +29,7 @@ Personal tracker (not TreckBas):
 - **Sidebar:** кнопка «←» в topbar — сворачивает меню, состояние в `localStorage` (`notetask_sidebar_collapsed`)
 - **Плашка задачи:** под каждой задачей чипы — раздел, P, срок/время, место, сумма (расход/доход)
 - **Финансы:** суммы в задачах; сводка в «Статистика» — расходы/доходы/баланс за 30д + список операций
+- **Downloads:** https://todo.baski.pro/download — Windows `.exe` + Android `.apk` (`data/downloads/`, `scripts/publish-downloads.sh`)
 - **Desktop (Tauri):** `desktop/` — WebView → todo.baski.pro; трей; Ctrl+Space глобально; autostart; close→tray. Build: `cd desktop && npm run build` (Windows)
 - **Android (Flutter):** `mobile/` — Today + виджет `TodayWidgetProvider`; API JWT. Build APK: see `mobile/README.md`
 - **PWA / мобильное:** баннер «Скачать» на телефоне; manifest + service worker
@@ -47,7 +48,7 @@ Personal tracker (not TreckBas):
   - Здоровье → SVG тела + метрики (`/api/health-profile`, `health_metrics` / `health_body`)
   - Тренировки → цели и прогресс (`/api/workout-panel`, `workout_goals`)
   - Остальные разделы / Сегодня — панель скрыта
-  - UI: `#section-panel`, CSS `main.with-section-panel`, `app.js` v45 / `styles.css` v34
+  - UI: `#section-panel`, CSS `main.with-section-panel`, `app.js` v45 / `styles.css` v35
 
 ## Stack
 

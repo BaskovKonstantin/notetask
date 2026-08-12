@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from .auth import make_token, require_auth, verify_password
-from .config import PORT
+from .config import DATA_DIR, PORT
 from .db import (
     bump_completions,
     bump_workouts,
@@ -26,6 +26,22 @@ from .db import (
 )
 
 STATIC = Path(__file__).resolve().parents[1] / "static"
+DOWNLOADS_DIR = DATA_DIR / "downloads"
+
+DOWNLOAD_CATALOG = (
+    {
+        "id": "windows",
+        "label": "Windows",
+        "filename": "NoteTask-Setup.exe",
+        "hint": "Портативный .exe (Photino). Ctrl+Space глобально, автозапуск в Startup.",
+    },
+    {
+        "id": "android",
+        "label": "Android",
+        "filename": "NoteTask.apk",
+        "hint": "APK. После установки: виджет «NoteTask · Сегодня» на рабочий стол.",
+    },
+)
 
 
 @asynccontextmanager
@@ -1440,6 +1456,50 @@ async def backup(db: aiosqlite.Connection = Depends(get_db), _: dict = Depends(r
 @app.get("/widget")
 async def widget_page():
     return FileResponse(STATIC / "widget.html")
+
+
+def _download_entries() -> list[dict[str, Any]]:
+    DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    out: list[dict[str, Any]] = []
+    for item in DOWNLOAD_CATALOG:
+        path = DOWNLOADS_DIR / item["filename"]
+        available = path.is_file() and path.stat().st_size > 0
+        entry = {
+            **item,
+            "available": available,
+            "url": f"/downloads/{item['filename']}" if available else None,
+            "size": path.stat().st_size if available else 0,
+        }
+        out.append(entry)
+    return out
+
+
+@app.get("/api/downloads")
+async def list_downloads():
+    return {"items": _download_entries()}
+
+
+@app.get("/downloads/{filename}")
+async def get_download(filename: str):
+    # only catalog filenames
+    allowed = {item["filename"] for item in DOWNLOAD_CATALOG}
+    if filename not in allowed:
+        raise HTTPException(404, "Unknown file")
+    path = DOWNLOADS_DIR / filename
+    if not path.is_file():
+        raise HTTPException(404, "File not ready yet")
+    media = "application/vnd.android.package-archive" if filename.endswith(".apk") else "application/octet-stream"
+    return FileResponse(
+        path,
+        media_type=media,
+        filename=filename,
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
+@app.get("/download")
+async def download_page():
+    return FileResponse(STATIC / "download.html")
 
 
 @app.get("/manifest.webmanifest")

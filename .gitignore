@@ -4,6 +4,8 @@ __pycache__/
 .env
 data/*.db
 data/*.db-*
+data/downloads/*
+!data/downloads/.gitkeep
 *.egg-info/
 .pytest_cache/
 desktop/node_modules/
@@ -12,3 +14,6 @@ mobile/.dart_tool/
 mobile/build/
 mobile/.flutter-plugins-dependencies
 mobile/.packages
+desktop-win/**/bin/
+desktop-win/**/obj/
+desktop-win/**/publish/

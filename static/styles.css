@@ -1431,6 +1431,29 @@ textarea { min-height: 90px; resize: vertical; }
 .login-card p { color: var(--muted); margin: 0 0 20px; }
 .login-card .btn { width: 100%; margin-top: 12px; }
 .login-card .btn:disabled { opacity: 0.7; cursor: wait; }
+.download-card .download-list {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 4px;
+}
+.download-btn { width: 100%; text-align: center; text-decoration: none; box-sizing: border-box; }
+.download-btn[disabled] { opacity: 0.55; cursor: not-allowed; filter: none; }
+.download-hint {
+  margin: -2px 0 10px;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+.download-note {
+  margin: 8px 0 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.download-note code {
+  font-size: 0.78rem;
+  background: rgba(0,0,0,0.05);
+  padding: 1px 6px;
+  border-radius: 6px;
+}
 .error {
   color: var(--danger);
   font-size: 0.95rem;
