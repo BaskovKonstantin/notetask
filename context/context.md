@@ -3,7 +3,7 @@
 Updated: 2026-08-12
 
 ## Live
-- **LAN caveat:** с той же сети публичный IP `5.144.98.126` часто не открывается (нет NAT hairpin). В LAN DNS (`dnsmasq` @ `192.168.0.6`) `todo.baski.pro` → `192.168.0.6`. Если ПК берёт 8.8.8.8 — будет таймаут. Фикс: DNS `192.168.0.6` или hosts.
+- **LAN caveat:** с той же сети публичный IP `5.144.98.126` часто не открывается (нет NAT hairpin). В LAN DNS (`dnsmasq` @ `192.168.0.6`) `todo.baski.pro` → `192.168.0.6`. Если ПК берёт 8.8.8.8 — будет таймаут. Фикс: DNS `192.168.0.6` или hosts `192.168.0.6 todo.baski.pro`. Аварийный вход без DNS: `http://192.168.0.6:8100/` (порт на LAN в docker-compose).
 
 - **Primary URL:** https://todo.baski.pro/ (Let's Encrypt, A `todo` → 5.144.98.126)
 - **Legacy path:** https://baski.pro/todo/

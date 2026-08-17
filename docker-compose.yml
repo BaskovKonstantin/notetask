@@ -15,4 +15,6 @@ services:
       - ./app:/app/app:ro
       - ./scripts:/app/scripts:ro
     ports:
+      # localhost for Caddy; LAN IP for home Wi‑Fi when public DNS hits hairpin dead-end
       - "127.0.0.1:8100:8100"
+      - "192.168.0.6:8100:8100"
