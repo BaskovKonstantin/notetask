@@ -63,7 +63,25 @@ async function api(path, opts = {}) {
   const headers = { "Content-Type": "application/json", ...(opts.headers || {}) };
   if (state.token) headers.Authorization = `Bearer ${state.token}`;
   const url = path.startsWith("http") ? path : `${BASE}${path}`;
-  const res = await fetch(url, { ...opts, headers });
+  const loginCall = String(path).includes("/api/login");
+  let signal = opts.signal;
+  let timer = null;
+  if (loginCall && !signal && typeof AbortController !== "undefined") {
+    const ctrl = new AbortController();
+    signal = ctrl.signal;
+    timer = setTimeout(() => ctrl.abort(), 8000);
+  }
+  let res;
+  try {
+    res = await fetch(url, { ...opts, headers, signal });
+  } catch (ex) {
+    if (loginCall && (ex?.name === "AbortError" || /Failed to fetch|NetworkError/i.test(String(ex?.message || "")))) {
+      throw new Error("network");
+    }
+    throw ex;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
   if (res.status === 401) {
     const err = await res.json().catch(() => ({}));
     const detail = err.detail || "auth";
@@ -2076,7 +2094,9 @@ if (!window.__notetaskLoginBound) {
         ? "Введи пароль (кликни в поле, если браузер подставил сам)"
         : /wrong password|auth/i.test(msg)
           ? "Неверный пароль"
-          : "Не удалось войти. Обнови страницу (Ctrl+F5).";
+          : /network|AbortError|Failed to fetch/i.test(msg)
+            ? "Сеть не отвечает (домашний Wi‑Fi). Открой http://192.168.0.6:8100/ или в hosts: 192.168.0.6 todo.baski.pro"
+            : "Не удалось войти. Обнови страницу (Ctrl+F5).";
       errEl.classList.remove("hidden");
     } finally {
       if (btn) btn.disabled = false;
