@@ -138,7 +138,7 @@
         err.textContent = "Неверный пароль";
       } else if (isNetworkError(ex)) {
         err.textContent =
-          "Сеть не отвечает (домашний Wi‑Fi). DNS: 192.168.0.6 или в hosts: 192.168.0.6 todo.baski.pro — потом открой https://todo.baski.pro/";
+          "Сеть не отвечает. С домашнего Wi‑Fi нужен DNS 192.168.0.6 (или hosts: 192.168.0.6 todo.baski.pro), сайт — только https://todo.baski.pro/";
       } else {
         err.textContent = "Не удалось войти. Обнови страницу (Ctrl+F5).";
       }

@@ -3,10 +3,8 @@
 Updated: 2026-08-12
 
 ## Live
-- **LAN caveat:** с домашней сети публичный IP `5.144.98.126` не открывается (нет NAT hairpin). Split-DNS (`dnsmasq` @ `192.168.0.6`): `todo.baski.pro` → `192.168.0.6` → Caddy HTTPS. **Не использовать** сырой `http://192.168.0.6:8100/` в UI — только домен.
-  - Клиент с 8.8.8.8: DNS `192.168.0.6` или hosts `192.168.0.6 todo.baski.pro`
-  - **Desktop Photino:** при старте, если DNS даёт публичный IP — дописывает hosts (нужен admin один раз), грузит только `https://todo.baski.pro/?client=desktop`
-- **Логин:** `login.js` v7 — без LAN-редиректа; soft-boot; SW `notetask-v7`
+- **LAN caveat:** с домашней сети публичный IP без hairpin. Split-DNS: `todo.baski.pro` → `192.168.0.6` → **Caddy HTTPS**. Порт `:8100` только на `127.0.0.1` (не в LAN). Клиент всегда `https://todo.baski.pro/`.
+- **Логин:** `login.js` v8 — домен only; soft-boot; SW `notetask-v7`
 
 - **Primary URL:** https://todo.baski.pro/ (Let's Encrypt, A `todo` → 5.144.98.126)
 - **Legacy path:** https://baski.pro/todo/
