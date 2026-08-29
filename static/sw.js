@@ -1,4 +1,4 @@
-const CACHE = "notetask-v5";
+const CACHE = "notetask-v6";
 
 self.addEventListener("install", (event) => {
   const base = self.registration.scope;

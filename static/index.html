@@ -15,7 +15,7 @@
       window.NOTETASK_BASE = base === "/todo/" ? "/todo" : "";
     })();
   </script>
-  <link rel="stylesheet" href="assets/styles.css?v=35" />
+  <link rel="stylesheet" href="assets/styles.css?v=36" />
   <script src="assets/pwa.js?v=2"></script>
 </head>
 <body>
@@ -26,10 +26,15 @@
       <input type="password" id="password" name="password" placeholder="Пароль" autocomplete="current-password" />
       <button class="btn" type="submit" id="login-btn">Войти</button>
       <div class="error hidden" id="login-error" role="alert">Неверный пароль</div>
-      <a class="btn ghost" href="download" style="width:100%;margin-top:12px;display:inline-block;text-align:center;text-decoration:none">Скачать для Windows / Android</a>
     </form>
+    <a
+      class="btn ghost login-download"
+      id="login-download"
+      href="/download"
+      style="width:100%;max-width:400px;margin:12px auto 0;display:block;text-align:center;text-decoration:none;box-sizing:border-box"
+    >Скачать для Windows / Android</a>
   </div>
-  <script src="assets/login.js?v=2"></script>
+  <script src="assets/login.js?v=3"></script>
 
   <div id="app" class="app-shell hidden">
     <aside class="sidebar">
@@ -44,7 +49,7 @@
       <nav class="nav nav-projects" id="project-nav"></nav>
       <div style="margin-top:28px">
         <button class="btn ghost" id="backup-btn" style="width:100%">Экспорт JSON</button>
-        <a class="btn ghost" href="download" id="download-apps-btn" style="width:100%;margin-top:8px;display:inline-block;text-align:center;text-decoration:none">Скачать приложения</a>
+        <a class="btn ghost" href="/download" id="download-apps-btn" style="width:100%;margin-top:8px;display:inline-block;text-align:center;text-decoration:none">Скачать приложения</a>
         <button class="btn ghost" id="logout-btn" style="width:100%;margin-top:8px">Выйти</button>
       </div>
     </aside>

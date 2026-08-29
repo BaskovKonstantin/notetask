@@ -1431,6 +1431,7 @@ textarea { min-height: 90px; resize: vertical; }
 .login-card p { color: var(--muted); margin: 0 0 20px; }
 .login-card .btn { width: 100%; margin-top: 12px; }
 .login-card .btn:disabled { opacity: 0.7; cursor: wait; }
+.login-wrap .login-download { max-width: 400px; }
 .download-card .download-list {
   display: grid;
   gap: 8px;

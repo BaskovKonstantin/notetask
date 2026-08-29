@@ -2,13 +2,43 @@
 (function () {
   const TOKEN_KEY = "notetask_token";
   const LOGIN_TIMEOUT_MS = 8000;
+  const LAN_ORIGIN = "http://192.168.0.6:8100";
   const form = document.getElementById("login-form");
   const pass = document.getElementById("password");
   const err = document.getElementById("login-error");
   const btn = document.getElementById("login-btn");
+  const base = window.NOTETASK_BASE || "";
+
+  function goDownload(e) {
+    if (e) e.preventDefault();
+    const path = `${base}/download` || "/download";
+    const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+    const timer = ctrl ? setTimeout(() => ctrl.abort(), 2500) : null;
+    const probe = fetch(`${base}/api/health`, { signal: ctrl ? ctrl.signal : undefined, cache: "no-store" })
+      .then((r) => {
+        if (timer) clearTimeout(timer);
+        if (r.ok) {
+          location.assign(path.startsWith("/") ? path : `/${path}`);
+          return;
+        }
+        throw new Error("health");
+      })
+      .catch(() => {
+        if (timer) clearTimeout(timer);
+        // home Wi‑Fi hairpin: public host hangs — jump to LAN download page
+        location.assign(`${LAN_ORIGIN}/download`);
+      });
+    return probe;
+  }
+
+  const dl = document.getElementById("login-download");
+  if (dl) {
+    dl.setAttribute("href", `${base}/download` || "/download");
+    dl.addEventListener("click", goDownload);
+  }
+
   if (!form || !pass || !err || !btn) return;
 
-  const base = window.NOTETASK_BASE || "";
   window.__notetaskLoginBound = true;
 
   // Autofill often shows dots while .value is still empty until focus.
