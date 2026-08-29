@@ -24,10 +24,8 @@
         .map((item) => {
           if (item.available) {
             const href = `${base}${item.url}`;
-            const lan = `http://192.168.0.6:8100${item.url}`;
             return `<a class="btn download-btn" href="${href}" download="${item.filename}">${item.label} — скачать (${fmtSize(item.size)})</a>
-              <p class="download-hint">${item.hint}</p>
-              <p class="download-hint">Домашний Wi‑Fi не тянет? <a href="${lan}">Прямая ссылка LAN</a></p>`;
+              <p class="download-hint">${item.hint}</p>`;
           }
           return `<button type="button" class="btn download-btn" disabled>${item.label} — скоро</button>
             <p class="download-hint">${item.hint}</p>`;
@@ -36,6 +34,6 @@
     })
     .catch(() => {
       root.innerHTML =
-        'Не удалось получить список. С домашнего Wi‑Fi открой <a href="http://192.168.0.6:8100/download">http://192.168.0.6:8100/download</a>';
+        'Не удалось получить список. Открой <a href="https://todo.baski.pro/download">https://todo.baski.pro/download</a> (домашний Wi‑Fi: DNS 192.168.0.6 или hosts → todo.baski.pro).';
     });
 })();

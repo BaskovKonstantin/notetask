@@ -3,11 +3,10 @@
 Updated: 2026-08-12
 
 ## Live
-- **LAN caveat:** с той же сети публичный IP `5.144.98.126` часто не открывается (нет NAT hairpin). В LAN DNS (`dnsmasq` @ `192.168.0.6`) `todo.baski.pro` → `192.168.0.6`. Если ПК берёт 8.8.8.8 — будет таймаут.
-  - **Авто:** если `/api/health` на публичном хосте не отвечает за ~2.5s — редирект на `http://192.168.0.6:8100/` (с HTTPS нельзя fetch на HTTP — mixed content). Логин при network-fail тоже кидает на LAN.
-  - **Desktop Photino:** при старте probe public→LAN (`ResolveOrigin`), открывает живой origin с `?client=desktop`.
-  - Ручной фикс: DNS `192.168.0.6` или hosts `192.168.0.6 todo.baski.pro`.
-- **Логин:** `login.js` v6 — autofill rAF+focus; soft-boot; LAN fallback; SW `notetask-v7`
+- **LAN caveat:** с домашней сети публичный IP `5.144.98.126` не открывается (нет NAT hairpin). Split-DNS (`dnsmasq` @ `192.168.0.6`): `todo.baski.pro` → `192.168.0.6` → Caddy HTTPS. **Не использовать** сырой `http://192.168.0.6:8100/` в UI — только домен.
+  - Клиент с 8.8.8.8: DNS `192.168.0.6` или hosts `192.168.0.6 todo.baski.pro`
+  - **Desktop Photino:** при старте, если DNS даёт публичный IP — дописывает hosts (нужен admin один раз), грузит только `https://todo.baski.pro/?client=desktop`
+- **Логин:** `login.js` v7 — без LAN-редиректа; soft-boot; SW `notetask-v7`
 
 - **Primary URL:** https://todo.baski.pro/ (Let's Encrypt, A `todo` → 5.144.98.126)
 - **Legacy path:** https://baski.pro/todo/

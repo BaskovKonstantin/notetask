@@ -1,14 +1,17 @@
 ﻿using System.Diagnostics;
-using System.Net.Http;
+using System.Net;
 using System.Runtime.InteropServices;
+using System.Text;
 using Photino.NET;
 
 namespace NoteTaskWin;
 
 internal static class Program
 {
-    const string PublicOrigin = "https://todo.baski.pro";
-    const string LanOrigin = "http://192.168.0.6:8100";
+    const string AppUrl = "https://todo.baski.pro/?client=desktop";
+    const string CaptureUrl = "https://todo.baski.pro/?client=desktop#capture";
+    const string LanIp = "192.168.0.6";
+    const string HostName = "todo.baski.pro";
     const int VK_SPACE = 0x20;
     const int VK_CONTROL = 0x11;
 
@@ -19,12 +22,9 @@ internal static class Program
     private static void Main(string[] args)
     {
         EnsureAutostart();
+        EnsureLanHostsEntry();
 
-        var origin = ResolveOrigin();
-        var appUrl = $"{origin}/?client=desktop";
-        var captureUrl = $"{origin}/?client=desktop#capture";
-        var startUrl = args.Any(a => a == "--capture") ? captureUrl : appUrl;
-
+        var startUrl = args.Any(a => a == "--capture") ? CaptureUrl : AppUrl;
         var window = new PhotinoWindow()
             .SetTitle("NoteTask")
             .SetUseOsDefaultSize(false)
@@ -37,27 +37,48 @@ internal static class Program
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 NoteTaskDesktop/1.0")
             .Load(startUrl);
 
-        StartGlobalCaptureWatcher(window, captureUrl);
+        StartGlobalCaptureWatcher(window);
         window.WaitForClose();
     }
 
     /// <summary>
-    /// Home Wi‑Fi often has no NAT hairpin to the public IP — prefer LAN when public health fails.
+    /// Home Wi‑Fi has no NAT hairpin to the public IP. Split-DNS (dnsmasq) maps
+    /// todo.baski.pro → LAN IP; if Windows uses 8.8.8.8, write a hosts line so the
+    /// domain still hits the same server (Caddy + LE cert), never a raw :8100 URL.
     /// </summary>
-    private static string ResolveOrigin()
-    {
-        if (ProbeHealth($"{PublicOrigin}/api/health")) return PublicOrigin;
-        if (ProbeHealth($"{LanOrigin}/api/health")) return LanOrigin;
-        return PublicOrigin;
-    }
-
-    private static bool ProbeHealth(string url)
+    private static void EnsureLanHostsEntry()
     {
         try
         {
-            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
-            using var res = http.GetAsync(url).GetAwaiter().GetResult();
-            return res.IsSuccessStatusCode;
+            if (!OperatingSystem.IsWindows()) return;
+            if (!LooksLikePublicHairpin()) return;
+
+            var hostsPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.System),
+                "drivers",
+                "etc",
+                "hosts");
+            if (!File.Exists(hostsPath)) return;
+
+            var text = File.ReadAllText(hostsPath, Encoding.ASCII);
+            if (text.Contains(HostName, StringComparison.OrdinalIgnoreCase)) return;
+
+            var line = $"{LanIp} {HostName}";
+            var suffix = text.EndsWith("\n", StringComparison.Ordinal) ? line + "\n" : "\n" + line + "\n";
+            File.AppendAllText(hostsPath, suffix, Encoding.ASCII);
+        }
+        catch
+        {
+            /* needs admin once — domain still works outside LAN / with DNS 192.168.0.6 */
+        }
+    }
+
+    private static bool LooksLikePublicHairpin()
+    {
+        try
+        {
+            var addrs = Dns.GetHostAddresses(HostName);
+            return addrs.Any(a => a.ToString() == "5.144.98.126");
         }
         catch
         {
@@ -65,7 +86,7 @@ internal static class Program
         }
     }
 
-    private static void StartGlobalCaptureWatcher(PhotinoWindow window, string captureUrl)
+    private static void StartGlobalCaptureWatcher(PhotinoWindow window)
     {
         var cts = new CancellationTokenSource();
         AppDomain.CurrentDomain.ProcessExit += (_, _) => cts.Cancel();
@@ -82,7 +103,7 @@ internal static class Program
                     var down = ctrl && space;
                     if (down && !wasDown)
                     {
-                        window.Load(captureUrl);
+                        window.Load(CaptureUrl);
                     }
                     wasDown = down;
                 }

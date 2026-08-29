@@ -2143,7 +2143,7 @@ if (!window.__notetaskLoginBound) {
         : /wrong password|auth/i.test(msg)
           ? "Неверный пароль"
           : /network|AbortError|Failed to fetch/i.test(msg)
-            ? "Сеть не отвечает (домашний Wi‑Fi). Открой http://192.168.0.6:8100/ или в hosts: 192.168.0.6 todo.baski.pro"
+            ? "Сеть не отвечает (домашний Wi‑Fi). DNS: 192.168.0.6 или hosts: 192.168.0.6 todo.baski.pro — затем https://todo.baski.pro/"
             : "Не удалось войти. Обнови страницу (Ctrl+F5).";
       errEl.classList.remove("hidden");
     } finally {
