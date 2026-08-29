@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Net.Http;
 using System.Runtime.InteropServices;
 using Photino.NET;
 
@@ -6,8 +7,8 @@ namespace NoteTaskWin;
 
 internal static class Program
 {
-    const string AppUrl = "https://todo.baski.pro/?client=desktop";
-    const string CaptureUrl = "https://todo.baski.pro/?client=desktop#capture";
+    const string PublicOrigin = "https://todo.baski.pro";
+    const string LanOrigin = "http://192.168.0.6:8100";
     const int VK_SPACE = 0x20;
     const int VK_CONTROL = 0x11;
 
@@ -19,7 +20,11 @@ internal static class Program
     {
         EnsureAutostart();
 
-        var startUrl = args.Any(a => a == "--capture") ? CaptureUrl : AppUrl;
+        var origin = ResolveOrigin();
+        var appUrl = $"{origin}/?client=desktop";
+        var captureUrl = $"{origin}/?client=desktop#capture";
+        var startUrl = args.Any(a => a == "--capture") ? captureUrl : appUrl;
+
         var window = new PhotinoWindow()
             .SetTitle("NoteTask")
             .SetUseOsDefaultSize(false)
@@ -32,11 +37,35 @@ internal static class Program
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 NoteTaskDesktop/1.0")
             .Load(startUrl);
 
-        StartGlobalCaptureWatcher(window);
+        StartGlobalCaptureWatcher(window, captureUrl);
         window.WaitForClose();
     }
 
-    private static void StartGlobalCaptureWatcher(PhotinoWindow window)
+    /// <summary>
+    /// Home Wi‑Fi often has no NAT hairpin to the public IP — prefer LAN when public health fails.
+    /// </summary>
+    private static string ResolveOrigin()
+    {
+        if (ProbeHealth($"{PublicOrigin}/api/health")) return PublicOrigin;
+        if (ProbeHealth($"{LanOrigin}/api/health")) return LanOrigin;
+        return PublicOrigin;
+    }
+
+    private static bool ProbeHealth(string url)
+    {
+        try
+        {
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
+            using var res = http.GetAsync(url).GetAwaiter().GetResult();
+            return res.IsSuccessStatusCode;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static void StartGlobalCaptureWatcher(PhotinoWindow window, string captureUrl)
     {
         var cts = new CancellationTokenSource();
         AppDomain.CurrentDomain.ProcessExit += (_, _) => cts.Cancel();
@@ -53,7 +82,7 @@ internal static class Program
                     var down = ctrl && space;
                     if (down && !wasDown)
                     {
-                        window.Load(CaptureUrl);
+                        window.Load(captureUrl);
                     }
                     wasDown = down;
                 }

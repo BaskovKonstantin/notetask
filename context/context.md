@@ -3,7 +3,11 @@
 Updated: 2026-08-12
 
 ## Live
-- **LAN caveat:** с той же сети публичный IP `5.144.98.126` часто не открывается (нет NAT hairpin). В LAN DNS (`dnsmasq` @ `192.168.0.6`) `todo.baski.pro` → `192.168.0.6`. Если ПК берёт 8.8.8.8 — будет таймаут. Фикс: DNS `192.168.0.6` или hosts `192.168.0.6 todo.baski.pro`. Аварийный вход без DNS: `http://192.168.0.6:8100/` (порт на LAN в docker-compose).
+- **LAN caveat:** с той же сети публичный IP `5.144.98.126` часто не открывается (нет NAT hairpin). В LAN DNS (`dnsmasq` @ `192.168.0.6`) `todo.baski.pro` → `192.168.0.6`. Если ПК берёт 8.8.8.8 — будет таймаут.
+  - **Авто:** если `/api/health` на публичном хосте не отвечает за ~2.5s — редирект на `http://192.168.0.6:8100/` (с HTTPS нельзя fetch на HTTP — mixed content). Логин при network-fail тоже кидает на LAN.
+  - **Desktop Photino:** при старте probe public→LAN (`ResolveOrigin`), открывает живой origin с `?client=desktop`.
+  - Ручной фикс: DNS `192.168.0.6` или hosts `192.168.0.6 todo.baski.pro`.
+- **Логин:** `login.js` v6 — autofill rAF+focus; soft-boot; LAN fallback; SW `notetask-v7`
 
 - **Primary URL:** https://todo.baski.pro/ (Let's Encrypt, A `todo` → 5.144.98.126)
 - **Legacy path:** https://baski.pro/todo/
