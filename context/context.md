@@ -30,12 +30,14 @@ Personal tracker (not TreckBas):
 - **Плашка задачи:** под каждой задачей чипы — раздел, P, срок/время, место, сумма (расход/доход)
 - **Финансы:** суммы в задачах; сводка в «Статистика» — расходы/доходы/баланс за 30д + список операций
 - **Downloads:** https://todo.baski.pro/download — Windows `.exe` + Android `.apk` (`data/downloads/`, `scripts/publish-downloads.sh`)
-- **Desktop (Tauri):** `desktop/` — WebView → todo.baski.pro; трей; Ctrl+Space глобально; autostart; close→tray. Build: `cd desktop && npm run build` (Windows)
+- **Desktop (Photino Win):** `desktop-win/` — WebView2 → `?client=desktop`; трей нет (окно); Ctrl+Space глобально; Startup shortcut. Build+publish: `dotnet publish …` + `scripts/publish-downloads.sh`
+- **Desktop (Tauri):** `desktop/` — то же URL с `?client=desktop`; трей; Ctrl+Space; autostart; close→tray. Build: `cd desktop && npm run build` (Windows)
 - **Android (Flutter):** `mobile/` — Today + виджет `TodayWidgetProvider`; API JWT. Build APK: see `mobile/README.md`
 - **PWA / мобильное:** баннер «Скачать» на телефоне; manifest + service worker
 - **Виджет:** https://todo.baski.pro/widget — компакт «Сегодня», после установки PWA открывается как приложение
 - **Звук выполнения:** «Глухой удар» (Web Audio)
-- **Логин:** отдельный `login.js` (autofill/пустой value); без HTML required; ошибка заметная; SW `notetask-v4`
+- **Логин:** отдельный `login.js` (autofill через rAF+focus, без pointerdown — ломал клик в WebView2/Photino); soft-boot через `__notetaskAfterLogin` без reload; ошибка заметная; SW `notetask-v7`
+- **Desktop client:** `?client=desktop` + UA `NoteTaskDesktop` + `chrome.webview` / `__TAURI__` — прячет «Скачать» на логине и в сайдбаре; Photino URL `https://todo.baski.pro/?client=desktop`
 - **Расписание (repeat):** в поповере срока — каждый день / 2–3 дня / будни / неделя / месяц; `repeat_rule`; выполнение → следующий срок (Todoist-style)
 - **Подсветка ввода:** распознанные токены (срок, p1–p4, @раздел, #метка, идея/план) цветные в поле задачи
 - **NLP срока:** дни недели (в понедельник…), месяцы (сентябрь / 15 октября), относительные даты; кириллица через unicode word-boundary (`app.js` v45)

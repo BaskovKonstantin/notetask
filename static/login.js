@@ -1,6 +1,7 @@
 /** Standalone login — works even if app.js fails to load/parse. */
 (function () {
   const TOKEN_KEY = "notetask_token";
+  const CLIENT_KEY = "notetask_client";
   const LOGIN_TIMEOUT_MS = 8000;
   const LAN_ORIGIN = "http://192.168.0.6:8100";
   const form = document.getElementById("login-form");
@@ -9,12 +10,52 @@
   const btn = document.getElementById("login-btn");
   const base = window.NOTETASK_BASE || "";
 
+  function isDesktopClient() {
+    try {
+      if (sessionStorage.getItem(CLIENT_KEY) === "desktop") return true;
+    } catch {
+      /* ignore */
+    }
+    try {
+      const q = new URLSearchParams(location.search).get("client");
+      if (q === "desktop") {
+        try {
+          sessionStorage.setItem(CLIENT_KEY, "desktop");
+        } catch {
+          /* ignore */
+        }
+        return true;
+      }
+    } catch {
+      /* ignore */
+    }
+    if (window.__TAURI__ || window.__TAURI_INTERNALS__) return true;
+    // Photino / WebView2 host control (not regular Edge/Chrome)
+    if (window.chrome && window.chrome.webview) return true;
+    if (/NoteTaskDesktop/i.test(navigator.userAgent || "")) return true;
+    return false;
+  }
+
+  function hideDesktopDownloads() {
+    if (!isDesktopClient()) return;
+    ["login-download", "download-apps-btn"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.hidden = true;
+      el.style.display = "none";
+    });
+  }
+
   function goDownload(e) {
     if (e) e.preventDefault();
+    if (isDesktopClient()) return;
     const path = `${base}/download` || "/download";
     const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
     const timer = ctrl ? setTimeout(() => ctrl.abort(), 2500) : null;
-    const probe = fetch(`${base}/api/health`, { signal: ctrl ? ctrl.signal : undefined, cache: "no-store" })
+    const probe = fetch(`${base}/api/health`, {
+      signal: ctrl ? ctrl.signal : undefined,
+      cache: "no-store",
+    })
       .then((r) => {
         if (timer) clearTimeout(timer);
         if (r.ok) {
@@ -31,6 +72,8 @@
     return probe;
   }
 
+  hideDesktopDownloads();
+
   const dl = document.getElementById("login-download");
   if (dl) {
     dl.setAttribute("href", `${base}/download` || "/download");
@@ -41,19 +84,16 @@
 
   window.__notetaskLoginBound = true;
 
-  // Autofill often shows dots while .value is still empty until focus.
-  btn.addEventListener("pointerdown", () => {
+  async function doLogin() {
+    err.classList.add("hidden");
+
+    // Autofill: value often empty until field focused (WebView2 / browsers)
     try {
       pass.focus({ preventScroll: true });
     } catch {
       pass.focus();
     }
-  });
-
-  form.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    err.classList.add("hidden");
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
 
     const password = String(pass.value || "");
     if (!password) {
@@ -84,6 +124,13 @@
       }
       if (!data.token) throw new Error("no token");
       localStorage.setItem(TOKEN_KEY, data.token);
+      // Soft boot when app.js ready — avoids Photino/WebView2 reload quirks
+      if (typeof window.__notetaskAfterLogin === "function") {
+        await window.__notetaskAfterLogin(data.token);
+        btn.disabled = false;
+        btn.textContent = prev || "Войти";
+        return;
+      }
       location.reload();
     } catch (ex) {
       const name = String(ex && ex.name ? ex.name : "");
@@ -105,5 +152,11 @@
     } finally {
       if (timer) clearTimeout(timer);
     }
+  }
+
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    doLogin();
   });
 })();

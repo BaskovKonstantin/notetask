@@ -6,8 +6,8 @@ namespace NoteTaskWin;
 
 internal static class Program
 {
-    const string AppUrl = "https://todo.baski.pro/";
-    const string CaptureUrl = "https://todo.baski.pro/#capture";
+    const string AppUrl = "https://todo.baski.pro/?client=desktop";
+    const string CaptureUrl = "https://todo.baski.pro/?client=desktop#capture";
     const int VK_SPACE = 0x20;
     const int VK_CONTROL = 0x11;
 
@@ -28,6 +28,8 @@ internal static class Program
             .SetMinWidth(720)
             .SetMinHeight(520)
             .Center()
+            .SetUserAgent(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 NoteTaskDesktop/1.0")
             .Load(startUrl);
 
         StartGlobalCaptureWatcher(window);

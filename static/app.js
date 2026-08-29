@@ -183,6 +183,54 @@ function showApp() {
   $("app").classList.remove("hidden");
 }
 
+const CLIENT_KEY = "notetask_client";
+
+function isDesktopClient() {
+  try {
+    if (sessionStorage.getItem(CLIENT_KEY) === "desktop") return true;
+  } catch {
+    /* ignore */
+  }
+  try {
+    const q = new URLSearchParams(location.search).get("client");
+    if (q === "desktop") {
+      try {
+        sessionStorage.setItem(CLIENT_KEY, "desktop");
+      } catch {
+        /* ignore */
+      }
+      return true;
+    }
+  } catch {
+    /* ignore */
+  }
+  if (window.__TAURI__ || window.__TAURI_INTERNALS__) return true;
+  if (window.chrome && window.chrome.webview) return true;
+  if (/NoteTaskDesktop/i.test(navigator.userAgent || "")) return true;
+  return false;
+}
+
+function hideDesktopDownloads() {
+  if (!isDesktopClient()) return;
+  ["login-download", "download-apps-btn"].forEach((id) => {
+    const el = $(id);
+    if (!el) return;
+    el.hidden = true;
+    el.style.display = "none";
+  });
+}
+
+window.__notetaskAfterLogin = async (token) => {
+  state.token = token;
+  localStorage.setItem(TOKEN_KEY, state.token);
+  showApp();
+  hideDesktopDownloads();
+  await loadProjectsCache();
+  setView("today");
+  await refresh();
+  track("app_opened", "ui", null, { path: location.pathname, client: "login" });
+};
+
 const kindLabels = { task: "Задача", idea: "Идея", plan: "План" };
 
 const CHIP_ICON = {
@@ -2552,6 +2600,7 @@ async function boot() {
   initTaskTitleHighlight();
   initSidebarToggle();
   hideTaskForm();
+  hideDesktopDownloads();
   if (!state.token) {
     showLogin();
     return;
@@ -2562,6 +2611,7 @@ async function boot() {
     await api("/api/projects");
     await loadProjectsCache();
     showApp();
+    hideDesktopDownloads();
     track("app_opened", "ui", null, { path: location.pathname });
     setView("today");
     handleCaptureHash();
