@@ -1479,7 +1479,7 @@ async def list_downloads():
     return {"items": _download_entries()}
 
 
-@app.get("/downloads/{filename}")
+@app.api_route("/downloads/{filename}", methods=["GET", "HEAD"])
 async def get_download(filename: str):
     # only catalog filenames
     allowed = {item["filename"] for item in DOWNLOAD_CATALOG}
@@ -1493,7 +1493,10 @@ async def get_download(filename: str):
         path,
         media_type=media,
         filename=filename,
-        headers={"Cache-Control": "no-cache"},
+        headers={
+            "Cache-Control": "no-cache",
+            "Accept-Ranges": "bytes",
+        },
     )
 
 
