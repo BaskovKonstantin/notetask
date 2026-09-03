@@ -2342,6 +2342,7 @@ function setView(view, opts = {}) {
   syncWorkProjectChipVisibility();
   const main = document.querySelector(".main");
   if (main) {
+    main.classList.add("content-wide");
     main.classList.toggle("finance-wide", view === "finance");
     if (!prefersReducedMotion()) {
       main.classList.remove("view-swap");

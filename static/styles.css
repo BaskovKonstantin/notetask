@@ -233,8 +233,9 @@ button, input, select, textarea {
 
 .main {
   padding: 28px 28px 60px;
-  max-width: 980px;
+  max-width: none;
   width: 100%;
+  min-width: 0;
   transition: max-width 0.28s ease;
 }
 
@@ -1880,7 +1881,8 @@ textarea { min-height: 90px; resize: vertical; }
   box-shadow: 0 0 0 4px rgba(var(--accent-rgb), 0.18), var(--shadow);
 }
 
-/* --- finance full page --- */
+/* --- main content full remaining width (after sidebar) --- */
+.main.content-wide,
 .main.finance-wide {
   max-width: none;
 }

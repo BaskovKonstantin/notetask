@@ -1,6 +1,15 @@
 # NoteTask / todo.baski.pro — context
 
-Updated: 2026-09-04 (~01:15 MSK)
+Updated: 2026-09-04 (~01:20 MSK)
+
+## Main views full width 2026-09-04 (~01:20 MSK)
+
+- Bug: `.main` имел `max-width: 980px` (~924px контент) + пустой gutter справа. Только `#view-finance` снимал лимит через `.finance-wide`.
+- Fix: `.main { max-width: none; min-width: 0 }`; класс `.content-wide` (HTML + `setView`) рядом с `.finance-wide`.
+- Views: Сегодня/`#view-tasks`, История, Статистика, разделы (Идеи, Здоровье, Тренировки, Питание, …), Финансы. Sidebar + `.with-section-panel` без изменений (2 колонки).
+- Mobile ≤860px: padding 18/14, single column — ок.
+- Cache: `styles.css?v=48`, `app.js?v=71`, `pwa.js?v=8`, SW `notetask-v23`.
+- Verify 1600px / sidebar 340: `.main` = 1260 (= remaining), `max-width: none`; Идеи `#view-tasks` 1204; Здоровье `with-section-panel` 623+563; История/Финансы 1204.
 
 ## Finance sheet work income fix 2026-09-04 (~01:15 MSK)
 
