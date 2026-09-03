@@ -258,10 +258,21 @@ class WorkProjectIn(BaseModel):
     notes: str = ""
 
 
+WORK_PAYMENT_STATUSES = ("received", "planned")
+
+
 class WorkPaymentIn(BaseModel):
     amount: float = Field(gt=0)
     paid_at: str | None = None
     note: str = ""
+    status: Literal["received", "planned"] = "received"
+
+
+class WorkPaymentPatch(BaseModel):
+    amount: float | None = Field(default=None, gt=0)
+    paid_at: str | None = None
+    note: str | None = None
+    status: Literal["received", "planned"] | None = None
 
 
 class HealthProfileIn(BaseModel):
@@ -1084,6 +1095,9 @@ async def stats(db: aiosqlite.Connection = Depends(get_db), _: dict = Depends(re
         d = row_to_dict(row)
         if d["cost_type"] in finance_totals:
             finance_totals[d["cost_type"]] = float(d["total"] or 0)
+    finance_totals["income"] += float(
+        await sum_work_payment_income(db, since_day=days[0])
+    )
     cur = await db.execute(
         """
         SELECT id, title, cost, cost_type, due_at, completed_at, location, project_id
@@ -1111,6 +1125,61 @@ async def stats(db: aiosqlite.Connection = Depends(get_db), _: dict = Depends(re
 
 
 # ---------- section panels ----------
+
+WORK_PAYMENT_PLANNED_STATUSES = ("planned", "future")
+
+
+async def work_payments_has_status(db: aiosqlite.Connection) -> bool:
+    cur = await db.execute("PRAGMA table_info(work_project_payments)")
+    return any(row[1] == "status" for row in await cur.fetchall())
+
+
+def work_payment_received_filter(has_status: bool, alias: str = "p") -> str:
+    if not has_status:
+        return ""
+    planned = ", ".join(f"'{s}'" for s in WORK_PAYMENT_PLANNED_STATUSES)
+    return f" AND COALESCE({alias}.status, 'received') NOT IN ({planned})"
+
+
+async def sum_work_payment_income(
+    db: aiosqlite.Connection,
+    *,
+    year_month: str | None = None,
+    since_day: str | None = None,
+    year_months: list[str] | None = None,
+) -> float | dict[str, float]:
+    has_status = await work_payments_has_status(db)
+    status_sql = work_payment_received_filter(has_status)
+    base = f"""
+        FROM work_project_payments p
+        JOIN work_projects w ON w.id = p.work_project_id AND w.deleted_at IS NULL
+        WHERE p.amount > 0{status_sql}
+    """
+    if year_month is not None:
+        cur = await db.execute(
+            f"SELECT COALESCE(SUM(p.amount), 0) AS total {base} AND SUBSTR(p.paid_at, 1, 7) = ?",
+            (year_month,),
+        )
+        return float((await cur.fetchone())["total"] or 0)
+    if since_day is not None:
+        cur = await db.execute(
+            f"SELECT COALESCE(SUM(p.amount), 0) AS total {base} AND SUBSTR(p.paid_at, 1, 10) >= ?",
+            (since_day,),
+        )
+        return float((await cur.fetchone())["total"] or 0)
+    if year_months:
+        placeholders = ",".join("?" * len(year_months))
+        cur = await db.execute(
+            f"""
+            SELECT SUBSTR(p.paid_at, 1, 7) AS ym, COALESCE(SUM(p.amount), 0) AS total
+            {base} AND SUBSTR(p.paid_at, 1, 7) IN ({placeholders})
+            GROUP BY ym
+            """,
+            year_months,
+        )
+        return {row["ym"]: float(row["total"] or 0) for row in await cur.fetchall()}
+    return 0.0
+
 
 @app.get("/api/finance/months")
 async def list_finance_months(
@@ -1149,6 +1218,7 @@ async def list_finance_months(
         bucket = from_tasks.setdefault(d["ym"], {"expense": 0.0, "income": 0.0})
         if d["cost_type"] in ("expense", "income"):
             bucket[d["cost_type"]] = float(d["total"] or 0)
+    from_work = await sum_work_payment_income(db, year_months=keys)
     out = []
     for ym in keys:
         has_row = ym in saved
@@ -1158,7 +1228,8 @@ async def list_finance_months(
         manual_expense = float(row.get("expense") or 0) if has_row else 0.0
         task_income = float(task_totals["income"])
         task_expense = float(task_totals["expense"])
-        income = manual_income + task_income
+        work_income = float(from_work.get(ym, 0.0))
+        income = manual_income + task_income + work_income
         expense = manual_expense + task_expense
         out.append(
             {
@@ -1167,6 +1238,7 @@ async def list_finance_months(
                 "manual_expense": manual_expense,
                 "task_income": task_income,
                 "task_expense": task_expense,
+                "work_income": work_income,
                 "income": income,
                 "expense": expense,
                 "notes": row.get("notes") or "",
@@ -1184,6 +1256,7 @@ async def list_finance_months(
             "balance": total_income - total_expense,
             "task_income": sum(x["task_income"] for x in out),
             "task_expense": sum(x["task_expense"] for x in out),
+            "work_income": sum(x["work_income"] for x in out),
             "manual_income": sum(x["manual_income"] for x in out),
             "manual_expense": sum(x["manual_expense"] for x in out),
         },
@@ -1228,8 +1301,9 @@ async def get_finance_month(
     manual_expense = float(saved["expense"] or 0) if saved else 0.0
     notes = (saved["notes"] if saved else "") or ""
 
-    # panel shows task-driven totals (manual kept for API compatibility, not primary UI)
-    income = task_income
+    work_income = float(await sum_work_payment_income(db, year_month=year_month))
+    # panel shows task- and work-payment-driven totals (manual kept for API compatibility)
+    income = task_income + work_income
     expense = task_expense
     cur = await db.execute(
         f"""
@@ -1251,12 +1325,44 @@ async def get_finance_month(
                 day = str(d[key])[:10]
                 break
         d["day"] = day
+        d["entry_type"] = "task"
         entries.append(d)
+
+    has_status = await work_payments_has_status(db)
+    status_sql = work_payment_received_filter(has_status, alias="p")
+    cur = await db.execute(
+        f"""
+        SELECT p.id, p.amount, p.paid_at, p.note, w.title AS project_title
+        FROM work_project_payments p
+        JOIN work_projects w ON w.id = p.work_project_id AND w.deleted_at IS NULL
+        WHERE p.amount > 0{status_sql}
+          AND SUBSTR(p.paid_at, 1, 7) = ?
+        ORDER BY p.paid_at DESC, p.id DESC
+        LIMIT 100
+        """,
+        (year_month,),
+    )
+    for row in await cur.fetchall():
+        d = row_to_dict(row)
+        note = (d.get("note") or "").strip()
+        title = f"{d['project_title']}: {note}" if note else str(d["project_title"])
+        entries.append(
+            {
+                "id": d["id"],
+                "entry_type": "work_payment",
+                "title": title,
+                "cost": float(d["amount"] or 0),
+                "cost_type": "income",
+                "day": str(d["paid_at"])[:10] if d.get("paid_at") else None,
+            }
+        )
+    entries.sort(key=lambda e: (e.get("day") or "", e.get("id") or 0), reverse=True)
 
     return {
         "year_month": year_month,
         "task_income": task_income,
         "task_expense": task_expense,
+        "work_income": work_income,
         "manual_income": manual_income,
         "manual_expense": manual_expense,
         "income": income,
@@ -1324,20 +1430,34 @@ async def delete_finance_month(
 async def enrich_work_project(db: aiosqlite.Connection, project: dict[str, Any]) -> dict[str, Any]:
     pid = project["id"]
     cur = await db.execute(
-        "SELECT COALESCE(SUM(amount), 0) AS paid_sum FROM work_project_payments WHERE work_project_id=?",
+        """
+        SELECT COALESCE(SUM(amount), 0) AS paid_sum FROM work_project_payments
+        WHERE work_project_id=? AND COALESCE(status, 'received') = 'received'
+        """,
         (pid,),
     )
     paid_sum = float((await cur.fetchone())["paid_sum"] or 0)
     cur = await db.execute(
         """
+        SELECT COALESCE(SUM(amount), 0) AS planned_sum FROM work_project_payments
+        WHERE work_project_id=? AND status = 'planned'
+        """,
+        (pid,),
+    )
+    planned_sum = float((await cur.fetchone())["planned_sum"] or 0)
+    cur = await db.execute(
+        """
         SELECT * FROM work_project_payments
         WHERE work_project_id=?
-        ORDER BY paid_at DESC, id DESC
+        ORDER BY
+          CASE COALESCE(status, 'received') WHEN 'planned' THEN 1 ELSE 0 END,
+          paid_at DESC,
+          id DESC
         """,
         (pid,),
     )
     payments = [row_to_dict(r) for r in await cur.fetchall()]
-    return {**project, "paid_sum": paid_sum, "payments": payments}
+    return {**project, "paid_sum": paid_sum, "planned_sum": planned_sum, "payments": payments}
 
 
 async def fetch_work_project(db: aiosqlite.Connection, item_id: int) -> dict[str, Any] | None:
@@ -1440,7 +1560,11 @@ async def list_work_payments(
     project = await fetch_work_project(db, item_id)
     if not project:
         raise HTTPException(404, "Work project not found")
-    return {"paid_sum": project["paid_sum"], "payments": project["payments"]}
+    return {
+        "paid_sum": project["paid_sum"],
+        "planned_sum": project["planned_sum"],
+        "payments": project["payments"],
+    }
 
 
 @app.post("/api/work-projects/{item_id}/payments")
@@ -1458,12 +1582,13 @@ async def create_work_payment(
         raise HTTPException(404, "Work project not found")
     now = utcnow()
     paid_at = (body.paid_at or "")[:32].strip() or now[:10]
+    status = body.status if body.status in WORK_PAYMENT_STATUSES else "received"
     cur = await db.execute(
         """
-        INSERT INTO work_project_payments(work_project_id, amount, paid_at, note, created_at)
-        VALUES(?,?,?,?,?)
+        INSERT INTO work_project_payments(work_project_id, amount, paid_at, note, status, created_at)
+        VALUES(?,?,?,?,?,?)
         """,
-        (item_id, float(body.amount), paid_at, (body.note or "").strip()[:500], now),
+        (item_id, float(body.amount), paid_at, (body.note or "").strip()[:500], status, now),
     )
     payment_id = cur.lastrowid
     await log_action(
@@ -1472,6 +1597,47 @@ async def create_work_payment(
         "work_payment",
         payment_id,
         {"work_project_id": item_id, "amount": body.amount},
+    )
+    await db.commit()
+    cur = await db.execute("SELECT * FROM work_project_payments WHERE id=?", (payment_id,))
+    return row_to_dict(await cur.fetchone())
+
+
+@app.patch("/api/work-projects/{item_id}/payments/{payment_id}")
+async def patch_work_payment(
+    item_id: int,
+    payment_id: int,
+    body: WorkPaymentPatch,
+    db: aiosqlite.Connection = Depends(get_db),
+    _: dict = Depends(require_auth),
+):
+    cur = await db.execute(
+        """
+        SELECT * FROM work_project_payments
+        WHERE id=? AND work_project_id=?
+        """,
+        (payment_id, item_id),
+    )
+    old = row_to_dict(await cur.fetchone())
+    if not old:
+        raise HTTPException(404, "Payment not found")
+    amount = float(body.amount) if body.amount is not None else float(old["amount"])
+    paid_at = (body.paid_at or old["paid_at"] or "")[:32].strip() or utcnow()[:10]
+    note = (body.note if body.note is not None else old.get("note") or "").strip()[:500]
+    status = body.status if body.status in WORK_PAYMENT_STATUSES else old.get("status") or "received"
+    await db.execute(
+        """
+        UPDATE work_project_payments SET amount=?, paid_at=?, note=?, status=?
+        WHERE id=? AND work_project_id=?
+        """,
+        (amount, paid_at, note, status, payment_id, item_id),
+    )
+    await log_action(
+        db,
+        "updated",
+        "work_payment",
+        payment_id,
+        {"work_project_id": item_id, "amount": amount, "status": status},
     )
     await db.commit()
     cur = await db.execute("SELECT * FROM work_project_payments WHERE id=?", (payment_id,))

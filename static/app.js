@@ -1124,6 +1124,16 @@ function fmtShortDateTime(value) {
   }
 }
 
+function chipPopoverRoot(el) {
+  const node = el instanceof Element ? el : el?.parentElement;
+  if (!node || !(node instanceof Element)) return null;
+  return node.closest(".chip-popover, .chip-menu");
+}
+
+function isChipPopoverInteraction(target) {
+  return !!chipPopoverRoot(target);
+}
+
 function closeTaskPopovers() {
   document.querySelectorAll(".chip-menu").forEach((menu) => menu.classList.add("hidden"));
   document.querySelectorAll(".chip-btn").forEach((btn) => {
@@ -1301,8 +1311,12 @@ function initTaskMetaChips() {
   });
 
   document.addEventListener("click", (e) => {
-    if (e.target.closest(".chip-popover, .chip-menu")) return;
-    closeTaskPopovers();
+    if (isChipPopoverInteraction(e.target)) return;
+    window.setTimeout(() => {
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && chipPopoverRoot(active)) return;
+      closeTaskPopovers();
+    }, 0);
   });
   document.querySelectorAll(".chip-menu").forEach((menu) => {
     menu.addEventListener("click", (e) => e.stopPropagation());
@@ -1524,8 +1538,10 @@ async function renderFinancePanel() {
                 .map((e) => {
                   const type = e.cost_type === "income" ? "income" : "expense";
                   const day = e.day ? fmtShortDay(e.day) : "";
+                  const taskAttr =
+                    e.entry_type === "work_payment" ? "" : ` data-finance-task="${e.id}"`;
                   return `
-            <button type="button" class="fin-op" data-finance-task="${e.id}">
+            <button type="button" class="fin-op"${taskAttr}>
               <div class="fin-op-main">
                 <span class="fin-op-title">${escapeHtml(e.title || "Без названия")}</span>
                 <span class="fin-op-day">${escapeHtml(day)}</span>
@@ -1545,23 +1561,31 @@ async function renderFinancePanel() {
 function workPayBlock(p) {
   const budget = p.budget != null ? Number(p.budget) : null;
   const paid = Number(p.paid_sum || 0);
+  const planned = Number(p.planned_sum || 0);
   const pct = budget && budget > 0 ? Math.min(100, Math.round((paid / budget) * 100)) : null;
   const payments = Array.isArray(p.payments) ? p.payments : [];
-  const summary =
+  let summary =
     budget != null
       ? `Получено ${escapeHtml(moneyPlain(paid))} из ${escapeHtml(moneyPlain(budget))}${pct != null ? ` (${pct}%)` : ""}`
       : `Получено ${escapeHtml(moneyPlain(paid))}`;
+  if (planned > 0) summary += ` · план ${escapeHtml(moneyPlain(planned))}`;
   const rows = payments.length
     ? `<ul class="work-pay-list">${payments
-        .map(
-          (pay) => `
-      <li class="work-pay-row">
-        <span>${escapeHtml((pay.paid_at || "").slice(0, 10))}</span>
+        .map((pay) => {
+          const isPlanned = pay.status === "planned";
+          return `
+      <li class="work-pay-row${isPlanned ? " planned" : ""}">
+        <span>${escapeHtml((pay.paid_at || "").slice(0, 10))}${isPlanned ? `<span class="work-pay-badge">План</span>` : ""}</span>
         <span>${escapeHtml(pay.note || "")}</span>
         <span class="amt">${escapeHtml(moneyPlain(pay.amount))}</span>
+        ${
+          isPlanned
+            ? `<button type="button" class="btn ghost small" data-work-pay-recv="${pay.id}" title="Отметить полученным" aria-label="Отметить полученным">✓</button>`
+            : ""
+        }
         <button type="button" class="btn ghost small btn-del" data-work-pay-del="${pay.id}" title="Удалить платёж" aria-label="Удалить платёж">×</button>
-      </li>`,
-        )
+      </li>`;
+        })
         .join("")}</ul>`
     : `<p class="work-meta">Пока нет платежей</p>`;
   return `
@@ -1575,7 +1599,8 @@ function workPayBlock(p) {
       ${rows}
       <form class="work-pay-form" data-work-pay-form>
         <label>Сумма <input name="amount" type="number" min="0.01" step="0.01" required placeholder="0" /></label>
-        <label>Дата <input name="paid_at" type="date" value="${escapeAttr(todayIso())}" /></label>
+        <label>Дата <input name="paid_at" type="date" value="${escapeAttr(todayIso())}" data-work-pay-date /></label>
+        <label class="work-pay-plan"><input name="planned" type="checkbox" data-work-pay-planned /> План</label>
         <button class="btn small" type="submit">+</button>
         <label class="full">Комментарий <input name="note" type="text" placeholder="Аванс, этап…" /></label>
       </form>
@@ -2132,6 +2157,7 @@ function formatDayHeader(dayKey) {
       weekday: "long",
       day: "numeric",
       month: "long",
+      year: "numeric",
     });
   } catch {
     return dayKey;
@@ -2870,7 +2896,7 @@ $("task-form").addEventListener("submit", async (e) => {
 });
 
 $("task-list").addEventListener("mousedown", (e) => {
-  if (e.target.closest(".chip-menu, .chip-popover")) e.stopPropagation();
+  if (isChipPopoverInteraction(e.target)) e.stopPropagation();
 });
 
 $("task-list").addEventListener("click", async (e) => {
@@ -2958,7 +2984,7 @@ $("task-list").addEventListener("click", async (e) => {
       toggleChipPopover(chipBtn, menu);
       return;
     }
-    if (e.target.closest(".chip-menu, .chip-popover")) {
+    if (isChipPopoverInteraction(e.target)) {
       e.stopPropagation();
       return;
     }
@@ -3087,6 +3113,7 @@ $("section-panel").addEventListener("submit", async (e) => {
         amount,
         paid_at: String(fd.get("paid_at") || todayIso()),
         note: String(fd.get("note") || "").trim(),
+        status: fd.get("planned") ? "planned" : "received",
       }),
     });
     await loadWorkProjectsCache();
@@ -3140,6 +3167,13 @@ $("section-panel").addEventListener("submit", async (e) => {
 });
 
 $("section-panel").addEventListener("change", async (e) => {
+  const payDate = e.target.closest("[data-work-pay-date]");
+  if (payDate) {
+    const form = payDate.closest("[data-work-pay-form]");
+    const planned = form?.querySelector("[data-work-pay-planned]");
+    if (planned) planned.checked = String(payDate.value || "") > todayIso();
+    return;
+  }
   const statusSel = e.target.closest("[data-health-status]");
   if (!statusSel) return;
   const box = statusSel.closest("[data-health-region]");
@@ -3217,6 +3251,19 @@ $("section-panel").addEventListener("click", async (e) => {
       e.stopPropagation();
       const payId = Number(payDel.dataset.workPayDel);
       await api(`/api/work-projects/${id}/payments/${payId}`, { method: "DELETE" });
+      await loadWorkProjectsCache();
+      await renderWorkPanel();
+      return;
+    }
+    const payRecv = e.target.closest("[data-work-pay-recv]");
+    if (payRecv) {
+      e.preventDefault();
+      e.stopPropagation();
+      const payId = Number(payRecv.dataset.workPayRecv);
+      await api(`/api/work-projects/${id}/payments/${payId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: "received" }),
+      });
       await loadWorkProjectsCache();
       await renderWorkPanel();
       return;

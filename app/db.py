@@ -154,6 +154,7 @@ CREATE TABLE IF NOT EXISTS work_project_payments (
   amount REAL NOT NULL,
   paid_at TEXT NOT NULL,
   note TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'received',
   created_at TEXT NOT NULL
 );
 
@@ -268,6 +269,7 @@ async def migrate(db: aiosqlite.Connection) -> None:
           amount REAL NOT NULL,
           paid_at TEXT NOT NULL,
           note TEXT NOT NULL DEFAULT '',
+          status TEXT NOT NULL DEFAULT 'received',
           created_at TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_work_project_payments_project
@@ -313,6 +315,7 @@ async def migrate(db: aiosqlite.Connection) -> None:
         """
     )
     await db.execute("DELETE FROM health_body WHERE region='forehead'")
+    await ensure_column(db, "work_project_payments", "status", "TEXT NOT NULL DEFAULT 'received'")
 
 
 async def connect() -> aiosqlite.Connection:

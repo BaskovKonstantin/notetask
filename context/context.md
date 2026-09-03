@@ -1,6 +1,19 @@
 # NoteTask / todo.baski.pro — context
 
-Updated: 2026-09-03 (~22:45 MSK)
+Updated: 2026-09-04 (~00:00 MSK)
+
+## Finance income from work payments 2026-09-03 (~23:58 MSK)
+
+- Bug: fin-panel `.fin-split-card.income` (ДОХОД) = +0 ₽ — игнорировал `work_project_payments`.
+- Fix: backend `/api/finance/months/*` + `/api/stats` — `work_income` из received-платежей (`status != planned`); операции включают work_payment entries.
+- Cache: `app.js?v=65`, SW `notetask-v18`.
+
+## Due chip popover fix 2026-09-03 (~23:50 MSK)
+
+- Bug: task list due chip popover closed on first click in `input[type=date|time]` (manual edit / native picker retarget).
+- Cause: document `click` outside-handler ran before input focus; some browsers report wrong `event.target` for date/time controls.
+- Fix: `chipPopoverRoot()` helper + deferred close (`setTimeout(0)`) skips close when `document.activeElement` still inside `.chip-menu`.
+- Cache: `app.js?v=64`, SW `notetask-v17`.
 
 ## Health hair region 2026-09-03 (~22:45 MSK)
 

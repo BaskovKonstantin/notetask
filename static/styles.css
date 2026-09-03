@@ -436,6 +436,34 @@ button, input, select, textarea {
   color: var(--muted);
 }
 
+.work-pay-row.planned {
+  opacity: 0.92;
+}
+
+.work-pay-row.planned .amt {
+  color: var(--muted);
+  font-weight: 550;
+}
+
+.work-pay-badge {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 0.65rem;
+  font-weight: 650;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(196, 92, 38, 0.12);
+  color: #c45c26;
+  vertical-align: middle;
+}
+
+.work-pay-actions {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
 .work-pay-row .amt {
   font-weight: 650;
   color: var(--ink);
@@ -443,7 +471,7 @@ button, input, select, textarea {
 
 .work-pay-form {
   display: grid;
-  grid-template-columns: 1fr 1fr auto;
+  grid-template-columns: 1fr 1fr auto auto;
   gap: 6px;
   align-items: end;
 }
@@ -457,6 +485,20 @@ button, input, select, textarea {
 
 .work-pay-form .full {
   grid-column: 1 / -1;
+}
+
+.work-pay-plan {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  color: var(--muted);
+  white-space: nowrap;
+  padding-bottom: 6px;
+}
+
+.work-pay-plan input {
+  margin: 0;
 }
 
 .status-pill {
