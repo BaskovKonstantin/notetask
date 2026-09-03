@@ -1,6 +1,12 @@
 # NoteTask / todo.baski.pro — context
 
-Updated: 2026-09-03 (~22:05 MSK)
+Updated: 2026-09-03 (~22:10 MSK)
+
+## NLP cost parser 2026-09-03 (~22:10 MSK)
+
+- Composer NLP extracts money from title → chip «Сумма», strip on submit (`cleanTitle`).
+- Formats: `-N`/`+N` (expense/income), `N₽`/`N р`/`Nмлн`/`N тыс`, bare trailing large number (≥1000, ≥4 digits).
+- Highlight `.hl-cost`. Cache: `app.js?v=60`, `styles.css?v=42`, SW `notetask-v13`.
 
 ## Priority chip colors 2026-09-03 (~22:05 MSK)
 
