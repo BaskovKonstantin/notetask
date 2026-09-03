@@ -1,6 +1,14 @@
 # NoteTask / todo.baski.pro — context
 
-Updated: 2026-09-04 (~00:45 MSK)
+Updated: 2026-09-04 (~00:50 MSK)
+
+## Task list remind chip 2026-09-04 (~00:50 MSK)
+
+- Bug: `.task-attrs` не показывал напоминание — только composer `#chip-remind`; `remind_at` в БД есть, UI списка нет.
+- Fix: chip «Напомн.» (bell) в `renderTaskAttrs` между сроком и местом — popover: `datetime-local`, пресеты (15 мин, 1 ч, за 1 ч до срока, в момент срока), «Без напоминания»; PATCH `{ remind_at }` / `null`.
+- Composer `#pop-remind`: те же пресеты.
+- Notify без изменений — worker `app/notify.py` уже шлёт по `remind_at`.
+- Cache: `app.js?v=69`, SW `notetask-v21`. Verify: task 174, `http://192.168.0.6/`.
 
 ## NLP trailing remind 2026-09-04 (~00:45 MSK)
 
@@ -315,7 +323,7 @@ Personal tracker (not TreckBas):
   - **Покупки** (2026-09-03): обычный раздел — задача = желаемая покупка, сумма в чипе `cost`, галочка = купил; цвет `#c9892e`, sort 7
 - **Разобрать (Inbox):** в сайдбаре только если есть open-задачи (`open_count` в `/api/projects`); пустой — скрыт
 - **Sidebar:** кнопка «←» в topbar — сворачивает меню, состояние в `localStorage` (`notetask_sidebar_collapsed`); drag resize правого края, ширина в `notetask_sidebar_width` (180–400px, CSS `--sidebar-width`)
-- **Плашка задачи:** под каждой задачей чипы — раздел, P, срок/время, место, сумма (расход/доход)
+- **Плашка задачи:** под каждой задачей чипы — раздел, P, срок/время, **напоминание**, место, сумма (расход/доход)
 - **Финансы:** суммы в задачах; сводка в «Статистика» — расходы/доходы/баланс за 30д + список операций; **полный раздел «Финансы»** в sidebar — бюджет/счета/операции (`/api/finance/sheet`)
 - **Downloads:** https://todo.baski.pro/download — Windows `.exe` + Android `.apk` (`data/downloads/`, `scripts/publish-downloads.sh`)
 - **Desktop (Photino Win):** `desktop-win/` — WebView2 → `?client=desktop`; трей нет (окно); Ctrl+Space глобально; Startup shortcut. Build+publish: `dotnet publish …` + `scripts/publish-downloads.sh`
