@@ -1,6 +1,14 @@
 # NoteTask / todo.baski.pro — context
 
-Updated: 2026-09-04 (~00:50 MSK)
+Updated: 2026-09-04 (~00:55 MSK)
+
+## Finance page full-width budget grid 2026-09-04 (~00:55 MSK)
+
+- **Layout:** `#view-finance` — panel padding 0; `.fin-page-summary` (месяц, баланс, счета) с padding 18px; таблицы бюджета **full bleed** в `.fin-budget-sheet`.
+- **CSS:** `.main.finance-wide` снимает `max-width: 980px`; `.fin-budget-table` — spreadsheet grid (border all cells, fixed cols: Статья 46% · План/Факт/Δ по 18%), zebra + hover.
+- **JS:** `setView("finance")` → `main.finance-wide`; budget section вынесена из summary wrapper.
+- **Google Sheet CSV (gid=0):** экспорт доступен, но вкладка — **реестр проектов** (Проект · Направление · Цена · Месяц · Статус), не шаблон «Статья · План · Факт · Δ». Seed категорий без изменений (типовой «Домашний бюджет» из 820ab20). Другие gid → login HTML.
+- Cache: `styles.css?v=47`, `app.js?v=70`, SW `notetask-v22`.
 
 ## Task list remind chip 2026-09-04 (~00:50 MSK)
 
@@ -31,7 +39,7 @@ Updated: 2026-09-04 (~00:50 MSK)
 
 ## Finance section (full page) 2026-09-04 (~00:20 MSK)
 
-- Google Sheet `1UrEntfxS-y7Ol0c6yUsvVZQcKV6GqxD4VcC4k0rp-cQ` — **private** (CSV export → login HTML). MVP по типовой структуре «Домашний бюджет».
+- Google Sheet `1UrEntfxS-y7Ol0c6yUsvVZQcKV6GqxD4VcC4k0rp-cQ` — gid=0 CSV: реестр проектов (не бюджет-шаблон); типовой seed «Домашний бюджет».
 - **Sidebar:** кнопка **Финансы** (`data-view="finance"`) — отдельный экран `#view-finance`, не путать с fin-panel в «Личные дела».
 - **UI:** месяц ‹›, баланс/доход/расход, счета, таблица бюджета (Статья · План · Факт · Δ), форма операции, журнал (записи + задачи + work payments).
 - **DB:** `finance_categories`, `finance_accounts`, `finance_transactions`, `finance_budget` (+ старые `finance_months`).
