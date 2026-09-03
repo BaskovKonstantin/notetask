@@ -295,7 +295,7 @@ Personal tracker (not TreckBas):
 - **Разделы (projects):** Inbox, Личные дела, Развлечения, Работа, Здоровье, Тренировки, Питание, Покупки, Идеи — sidebar + `@название` в задаче
   - **Покупки** (2026-09-03): обычный раздел — задача = желаемая покупка, сумма в чипе `cost`, галочка = купил; цвет `#c9892e`, sort 7
 - **Разобрать (Inbox):** в сайдбаре только если есть open-задачи (`open_count` в `/api/projects`); пустой — скрыт
-- **Sidebar:** кнопка «←» в topbar — сворачивает меню, состояние в `localStorage` (`notetask_sidebar_collapsed`)
+- **Sidebar:** кнопка «←» в topbar — сворачивает меню, состояние в `localStorage` (`notetask_sidebar_collapsed`); drag resize правого края, ширина в `notetask_sidebar_width` (180–400px, CSS `--sidebar-width`)
 - **Плашка задачи:** под каждой задачей чипы — раздел, P, срок/время, место, сумма (расход/доход)
 - **Финансы:** суммы в задачах; сводка в «Статистика» — расходы/доходы/баланс за 30д + список операций; **полный раздел «Финансы»** в sidebar — бюджет/счета/операции (`/api/finance/sheet`)
 - **Downloads:** https://todo.baski.pro/download — Windows `.exe` + Android `.apk` (`data/downloads/`, `scripts/publish-downloads.sh`)
