@@ -250,9 +250,42 @@ class WorkProjectIn(BaseModel):
     notes: str = ""
 
 
+class WorkPaymentIn(BaseModel):
+    amount: float = Field(gt=0)
+    paid_at: str | None = None
+    note: str = ""
+
+
 class HealthProfileIn(BaseModel):
     metrics: dict[str, str] = Field(default_factory=dict)
     body: dict[str, dict[str, str]] = Field(default_factory=dict)
+
+
+# Legacy coarse zones + detailed map. Old rows keep working.
+HEALTH_REGION_IDS = (
+    "head",
+    "forehead",
+    "eyes",
+    "nose",
+    "ears",
+    "jaw",
+    "teeth",
+    "neck",
+    "shoulders",
+    "chest",
+    "back",
+    "stomach",
+    "arms",
+    "elbows",
+    "wrists",
+    "hands",
+    "hips",
+    "legs",
+    "thighs",
+    "knees",
+    "calves",
+    "feet",
+)
 
 
 class WorkoutGoalIn(BaseModel):
@@ -1206,13 +1239,44 @@ async def delete_finance_month(
     return {"ok": True}
 
 
+async def enrich_work_project(db: aiosqlite.Connection, project: dict[str, Any]) -> dict[str, Any]:
+    pid = project["id"]
+    cur = await db.execute(
+        "SELECT COALESCE(SUM(amount), 0) AS paid_sum FROM work_project_payments WHERE work_project_id=?",
+        (pid,),
+    )
+    paid_sum = float((await cur.fetchone())["paid_sum"] or 0)
+    cur = await db.execute(
+        """
+        SELECT * FROM work_project_payments
+        WHERE work_project_id=?
+        ORDER BY paid_at DESC, id DESC
+        """,
+        (pid,),
+    )
+    payments = [row_to_dict(r) for r in await cur.fetchall()]
+    return {**project, "paid_sum": paid_sum, "payments": payments}
+
+
+async def fetch_work_project(db: aiosqlite.Connection, item_id: int) -> dict[str, Any] | None:
+    cur = await db.execute(
+        "SELECT * FROM work_projects WHERE id=? AND deleted_at IS NULL",
+        (item_id,),
+    )
+    row = row_to_dict(await cur.fetchone())
+    if not row:
+        return None
+    return await enrich_work_project(db, row)
+
+
 @app.get("/api/work-projects")
 async def list_work_projects(db: aiosqlite.Connection = Depends(get_db), _: dict = Depends(require_auth)):
     cur = await db.execute(
         "SELECT * FROM work_projects WHERE deleted_at IS NULL ORDER BY "
         "CASE status WHEN 'active' THEN 0 WHEN 'paused' THEN 1 ELSE 2 END, updated_at DESC, id DESC"
     )
-    return [row_to_dict(r) for r in await cur.fetchall()]
+    rows = [row_to_dict(r) for r in await cur.fetchall()]
+    return [await enrich_work_project(db, row) for row in rows]
 
 
 @app.post("/api/work-projects")
@@ -1231,8 +1295,7 @@ async def create_work_project(
     )
     await log_action(db, "created", "work_project", cur.lastrowid, {"title": body.title})
     await db.commit()
-    cur = await db.execute("SELECT * FROM work_projects WHERE id=?", (cur.lastrowid,))
-    return row_to_dict(await cur.fetchone())
+    return await fetch_work_project(db, cur.lastrowid)
 
 
 @app.patch("/api/work-projects/{item_id}")
@@ -1255,8 +1318,7 @@ async def patch_work_project(
     )
     await log_action(db, "updated", "work_project", item_id, {"title": body.title})
     await db.commit()
-    cur = await db.execute("SELECT * FROM work_projects WHERE id=?", (item_id,))
-    return row_to_dict(await cur.fetchone())
+    return await fetch_work_project(db, item_id)
 
 
 @app.delete("/api/work-projects/{item_id}")
@@ -1281,7 +1343,84 @@ async def delete_work_project(
         "UPDATE tasks SET work_project_id=NULL, updated_at=? WHERE work_project_id=? AND deleted_at IS NULL",
         (now, item_id),
     )
+    await db.execute("DELETE FROM work_project_payments WHERE work_project_id=?", (item_id,))
     await log_action(db, "deleted", "work_project", item_id, {"title": row["title"]})
+    await db.commit()
+    return {"ok": True}
+
+
+@app.get("/api/work-projects/{item_id}/payments")
+async def list_work_payments(
+    item_id: int,
+    db: aiosqlite.Connection = Depends(get_db),
+    _: dict = Depends(require_auth),
+):
+    project = await fetch_work_project(db, item_id)
+    if not project:
+        raise HTTPException(404, "Work project not found")
+    return {"paid_sum": project["paid_sum"], "payments": project["payments"]}
+
+
+@app.post("/api/work-projects/{item_id}/payments")
+async def create_work_payment(
+    item_id: int,
+    body: WorkPaymentIn,
+    db: aiosqlite.Connection = Depends(get_db),
+    _: dict = Depends(require_auth),
+):
+    cur = await db.execute(
+        "SELECT id FROM work_projects WHERE id=? AND deleted_at IS NULL",
+        (item_id,),
+    )
+    if not await cur.fetchone():
+        raise HTTPException(404, "Work project not found")
+    now = utcnow()
+    paid_at = (body.paid_at or "")[:32].strip() or now[:10]
+    cur = await db.execute(
+        """
+        INSERT INTO work_project_payments(work_project_id, amount, paid_at, note, created_at)
+        VALUES(?,?,?,?,?)
+        """,
+        (item_id, float(body.amount), paid_at, (body.note or "").strip()[:500], now),
+    )
+    payment_id = cur.lastrowid
+    await log_action(
+        db,
+        "created",
+        "work_payment",
+        payment_id,
+        {"work_project_id": item_id, "amount": body.amount},
+    )
+    await db.commit()
+    cur = await db.execute("SELECT * FROM work_project_payments WHERE id=?", (payment_id,))
+    return row_to_dict(await cur.fetchone())
+
+
+@app.delete("/api/work-projects/{item_id}/payments/{payment_id}")
+async def delete_work_payment(
+    item_id: int,
+    payment_id: int,
+    db: aiosqlite.Connection = Depends(get_db),
+    _: dict = Depends(require_auth),
+):
+    cur = await db.execute(
+        """
+        SELECT id, amount FROM work_project_payments
+        WHERE id=? AND work_project_id=?
+        """,
+        (payment_id, item_id),
+    )
+    row = await cur.fetchone()
+    if not row:
+        raise HTTPException(404, "Payment not found")
+    await db.execute("DELETE FROM work_project_payments WHERE id=?", (payment_id,))
+    await log_action(
+        db,
+        "deleted",
+        "work_payment",
+        payment_id,
+        {"work_project_id": item_id, "amount": row["amount"]},
+    )
     await db.commit()
     return {"ok": True}
 
@@ -1305,7 +1444,7 @@ async def get_health_profile(db: aiosqlite.Connection = Depends(get_db), _: dict
     }
     for k, v in defaults.items():
         metrics.setdefault(k, v)
-    for region in ("head", "chest", "arms", "stomach", "back", "legs"):
+    for region in HEALTH_REGION_IDS:
         body.setdefault(region, {"note": "", "status": "ok"})
     return {"metrics": metrics, "body": body}
 
@@ -1465,6 +1604,7 @@ async def backup(db: aiosqlite.Connection = Depends(get_db), _: dict = Depends(r
         "daily_stats",
         "finance_months",
         "work_projects",
+        "work_project_payments",
         "health_metrics",
         "health_body",
         "workout_goals",

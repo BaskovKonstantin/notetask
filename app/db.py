@@ -140,6 +140,15 @@ CREATE TABLE IF NOT EXISTS workout_goals (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS work_project_payments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  work_project_id INTEGER NOT NULL REFERENCES work_projects(id),
+  amount REAL NOT NULL,
+  paid_at TEXT NOT NULL,
+  note TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
 """
 
 
@@ -221,6 +230,16 @@ async def migrate(db: aiosqlite.Connection) -> None:
           created_at TEXT NOT NULL,
           updated_at TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS work_project_payments (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          work_project_id INTEGER NOT NULL REFERENCES work_projects(id),
+          amount REAL NOT NULL,
+          paid_at TEXT NOT NULL,
+          note TEXT NOT NULL DEFAULT '',
+          created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_work_project_payments_project
+          ON work_project_payments(work_project_id);
         """
     )
 
