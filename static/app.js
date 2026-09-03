@@ -577,6 +577,55 @@ function parseTimeToken(text) {
   return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 }
 
+/** Parse money token: -25млн / +5000 / 25000₽ / trailing 25000000 → { cost, costType }. */
+function parseCostToken(raw, opts = {}) {
+  const requireMarker = !!opts.requireMarker; // sign / currency / млн|тыс
+  let text = String(raw || "")
+    .trim()
+    .replace(/^[−–—]/, "-")
+    .replace(/\s+/g, " ");
+  if (!text) return {};
+
+  let costType = null;
+  if (/^\+/.test(text)) {
+    costType = "income";
+    text = text.slice(1).trim();
+  } else if (/^-/.test(text)) {
+    costType = "expense";
+    text = text.slice(1).trim();
+  }
+
+  const currencyRe = /(?:₽|руб\.?|р\.?|rub)$/i;
+  const hasCurrency = currencyRe.test(text);
+  text = text.replace(currencyRe, "").trim();
+
+  let mul = 1;
+  if (/(?:млн|m)$/i.test(text)) {
+    mul = 1_000_000;
+    text = text.replace(/(?:млн|m)$/i, "").trim();
+  } else if (/(?:тыс|k)$/i.test(text)) {
+    mul = 1_000;
+    text = text.replace(/(?:тыс|k)$/i, "").trim();
+  }
+
+  const numMatch = text.match(/^(\d+(?:\s+\d+)*)(?:[.,](\d{1,2}))?$/);
+  if (!numMatch) return {};
+  const digits = numMatch[1].replace(/\s+/g, "");
+  if (!digits) return {};
+  const frac = numMatch[2] || "0";
+  const amount = Number(`${digits}.${frac}`) * mul;
+  if (!Number.isFinite(amount) || amount <= 0) return {};
+
+  const hasMarker = costType != null || hasCurrency || mul > 1;
+  if (requireMarker && !hasMarker) return {};
+  if (!hasMarker) {
+    // bare trailing number: only «large» amounts (≥ 1000, ≥ 4 digits)
+    if (digits.length < 4 || amount < 1000) return {};
+  }
+  if (!costType) costType = "expense";
+  return { cost: amount, costType };
+}
+
 function findProjectId(name) {
   const raw = name.toLowerCase();
   const compact = raw.replace(/[\s_-]+/g, "");
@@ -733,6 +782,29 @@ function collectTaskTokens(text) {
       re: ruTokenRe("идея|idea|план|plan"),
       meta: (m) => ({ kind: parseKindToken(m[0]) }),
     },
+    {
+      type: "cost",
+      // signed: -25000000 / +25 млн / −25тыс₽
+      re: ruTokenRe("[+\\-−–—]\\s*\\d+(?:\\s+\\d+)*(?:[.,]\\d{1,2})?\\s*(?:млн|тыс|[mk])?\\s*(?:₽|руб\\.?|р\\.?|rub)?"),
+      meta: (m) => parseCostToken(m[0], { requireMarker: true }),
+    },
+    {
+      type: "cost",
+      // currency or млн/тыс without sign: 25 000 000 ₽ / 25млн
+      re: ruTokenRe("\\d+(?:\\s+\\d+)*(?:[.,]\\d{1,2})?\\s*(?:млн|тыс|[mk])\\s*(?:₽|руб\\.?|р\\.?|rub)?"),
+      meta: (m) => parseCostToken(m[0], { requireMarker: true }),
+    },
+    {
+      type: "cost",
+      re: ruTokenRe("\\d+(?:\\s+\\d+)*(?:[.,]\\d{1,2})?\\s*(?:₽|руб\\.?|р\\.?|rub)"),
+      meta: (m) => parseCostToken(m[0], { requireMarker: true }),
+    },
+    {
+      type: "cost",
+      // bare large number only at end of title: «… 25000000»
+      re: /(?<![\p{L}\p{N}_])\d+(?:\s+\d+)*(?=\s*$)/gu,
+      meta: (m) => parseCostToken(m[0], { requireMarker: false }),
+    },
   ];
 
   const found = [];
@@ -741,6 +813,7 @@ function collectTaskTokens(text) {
       const meta = rule.meta(match);
       if (rule.type === "date" && !meta.due && !meta.dueTime) continue;
       if (rule.type === "remind" && !meta.remindAt && meta.remindBeforeMinutes == null) continue;
+      if (rule.type === "cost" && (meta.cost == null || !meta.costType)) continue;
       found.push({
         type: rule.type,
         start: match.index,
@@ -778,6 +851,10 @@ function mergeTaskMeta(tokens) {
     if (m.repeat) meta.repeat = m.repeat;
     if (m.remindAt) meta.remindAt = m.remindAt;
     if (m.remindBeforeMinutes != null) meta.remindBeforeMinutes = m.remindBeforeMinutes;
+    if (m.cost != null) {
+      meta.cost = m.cost;
+      meta.costType = m.costType || "expense";
+    }
   }
   return meta;
 }
@@ -821,6 +898,8 @@ function highlightableTokens(tokens) {
         return !!m.repeat;
       case "remind":
         return !!m.remindAt || m.remindBeforeMinutes != null;
+      case "cost":
+        return m.cost != null && !!m.costType;
       default: {
         const _exhaustive = token.type;
         void _exhaustive;
@@ -864,6 +943,10 @@ function applyParsedMeta(meta) {
   }
   if (meta.priority) $("task-priority").value = String(meta.priority);
   if (meta.kind) $("task-kind").value = meta.kind;
+  if (meta.cost != null) {
+    $("task-cost").value = String(meta.cost);
+    $("task-cost-type-value").value = meta.costType || "expense";
+  }
   if (meta.repeat !== undefined && $("task-repeat")) {
     $("task-repeat").value = meta.repeat || "";
     if (meta.repeat && !$("task-due").value) $("task-due").value = todayIso();
@@ -2675,8 +2758,14 @@ $("task-form").addEventListener("submit", async (e) => {
   const title = parsed.cleanTitle || $("task-title").value.trim();
   const labelsNote = parsed.meta.labels?.length ? `Метки: ${parsed.meta.labels.join(", ")}` : "";
   const location = $("task-location").value.trim() || null;
-  const costVal = $("task-cost").value ? Number($("task-cost").value) : null;
-  const costType = costVal ? $("task-cost-type-value").value || "expense" : null;
+  const costVal = $("task-cost").value
+    ? Number($("task-cost").value)
+    : parsed.meta.cost != null
+      ? Number(parsed.meta.cost)
+      : null;
+  const costType = costVal
+    ? $("task-cost-type-value").value || parsed.meta.costType || "expense"
+    : null;
   const created = await api("/api/tasks", {
     method: "POST",
     body: JSON.stringify({
