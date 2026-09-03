@@ -1,6 +1,14 @@
 # NoteTask / todo.baski.pro — context
 
-Updated: 2026-09-04 (~00:00 MSK)
+Updated: 2026-09-04 (~00:05 MSK)
+
+## Work planned payments 2026-09-04 (~00:05 MSK)
+
+- Раздел **Работа** → панель проекта: платежи `received` | `planned` (колонка `status`, миграция default `received`).
+- Прогресс «Получено X из Y» + шкала — только `received`; в summary «· план Z» если есть planned.
+- UI: чекбокс **План** в форме (+ авто-галка если дата > сегодня); строка с badge «План»; ✓ → PATCH `status: received`.
+- API: POST `{ status }`; PATCH `/api/work-projects/{id}/payments/{pid}`; DELETE без изменений.
+- Cache: `app.js?v=65`, `styles.css?v=44`, SW `notetask-v18`.
 
 ## Finance income from work payments 2026-09-03 (~23:58 MSK)
 
