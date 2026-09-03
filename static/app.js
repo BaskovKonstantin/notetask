@@ -345,6 +345,7 @@ const CHIP_ICON = {
   location: '<svg viewBox="0 0 16 16" width="13" height="13"><path fill="currentColor" d="M8 1.2a4.8 4.8 0 0 0-4.8 4.8c0 3.6 4.8 8.8 4.8 8.8s4.8-5.2 4.8-8.8A4.8 4.8 0 0 0 8 1.2zm0 6.5a1.7 1.7 0 1 1 0-3.4 1.7 1.7 0 0 1 0 3.4z"/></svg>',
   cost: '<svg viewBox="0 0 16 16" width="13" height="13"><path fill="currentColor" d="M2.5 4.5h11v7h-11v-7zm1.5 1.5v4h8V6h-8zm2 3.5H5V7h1v2.5zm3 0H8V7h1.5v2.5z"/></svg>',
   work: '<svg viewBox="0 0 16 16" width="13" height="13"><path fill="currentColor" d="M5 3.5h6l.8 1.5H14v8H2v-8h2.2L5 3.5zm1.2 1.5-.5 1H10.3l-.5-1H6.2zM3.5 7v4.5h9V7h-9z"/></svg>',
+  remind: '<svg viewBox="0 0 16 16" width="13" height="13"><path fill="currentColor" d="M8 1.5a4.5 4.5 0 0 0-4.5 4.5v2.1L2 10.5h12l-1.5-2.4V6A4.5 4.5 0 0 0 8 1.5zm-2.2 11h4.4a1.6 1.6 0 0 1-4.4 0z"/></svg>',
 };
 
 const RU_MONTHS = {
@@ -469,6 +470,57 @@ function quickDueButtonsHtml() {
       <button type="button" class="chip-option" data-quick-due="weekend">На выходных</button>
       <button type="button" class="chip-option" data-quick-due="next_week">На след. неделе</button>
       <button type="button" class="chip-option" data-quick-due="next_month">Через месяц</button>
+    </div>`;
+}
+
+function taskRemindInputValue(task) {
+  if (!task?.remind_at) return "";
+  try {
+    const d = new Date(task.remind_at);
+    if (Number.isNaN(d.getTime())) return "";
+    return localInputValue(d);
+  } catch {
+    return "";
+  }
+}
+
+function remindAtIso(localValue) {
+  if (!localValue) return null;
+  const d = new Date(localValue);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString();
+}
+
+function dueAtForRemindPreset(dueAt) {
+  if (!dueAt) return null;
+  if (dueAt.includes("T")) return dueAt;
+  const parts = taskDueParts({ due_at: dueAt });
+  return mergeTaskDue(parts.date, parts.time || "09:00");
+}
+
+function computeRemindPreset(preset, dueAt) {
+  const now = new Date();
+  if (preset === "15m") return new Date(now.getTime() + 15 * 60_000).toISOString();
+  if (preset === "1h") return new Date(now.getTime() + 3600_000).toISOString();
+  const dueIso = dueAtForRemindPreset(dueAt);
+  if (!dueIso) return null;
+  const dueDt = new Date(dueIso);
+  if (Number.isNaN(dueDt.getTime())) return null;
+  if (preset === "at_due") return dueDt.toISOString();
+  if (preset === "before_1h") {
+    dueDt.setMinutes(dueDt.getMinutes() - 60);
+    return dueDt.toISOString();
+  }
+  return null;
+}
+
+function remindPresetButtonsHtml(attrName) {
+  return `
+    <div class="due-quick">
+      <button type="button" class="chip-option" ${attrName}="15m">Через 15 мин</button>
+      <button type="button" class="chip-option" ${attrName}="1h">Через 1 час</button>
+      <button type="button" class="chip-option" ${attrName}="before_1h">За 1 час до срока</button>
+      <button type="button" class="chip-option" ${attrName}="at_due">В момент срока</button>
     </div>`;
 }
 
@@ -670,6 +722,11 @@ function collectTaskTokens(text) {
       meta: (m) => parseRemindToken(m[0]),
     },
     {
+      type: "remind",
+      re: /(?<![\p{L}\p{N}_])(?:напомнить|напомни|remind)(?=\s*$)/giu,
+      meta: (m) => parseRemindToken(m[0]),
+    },
+    {
       type: "date",
       re: ruTokenRe("сегодня|today|завтра|tomorrow|послезавтра"),
       meta: (m) => ({ due: parseDateToken(m[0]) }),
@@ -817,7 +874,7 @@ function collectTaskTokens(text) {
     for (const match of text.matchAll(rule.re)) {
       const meta = rule.meta(match);
       if (rule.type === "date" && !meta.due && !meta.dueTime) continue;
-      if (rule.type === "remind" && !meta.remindAt && meta.remindBeforeMinutes == null) continue;
+      if (rule.type === "remind" && !meta.remindAt && meta.remindBeforeMinutes == null && !meta.remindAtDue) continue;
       if (rule.type === "cost" && (meta.cost == null || !meta.costType)) continue;
       found.push({
         type: rule.type,
@@ -856,6 +913,7 @@ function mergeTaskMeta(tokens) {
     if (m.repeat) meta.repeat = m.repeat;
     if (m.remindAt) meta.remindAt = m.remindAt;
     if (m.remindBeforeMinutes != null) meta.remindBeforeMinutes = m.remindBeforeMinutes;
+    if (m.remindAtDue) meta.remindAtDue = true;
     if (m.cost != null) {
       meta.cost = m.cost;
       meta.costType = m.costType || "expense";
@@ -870,6 +928,35 @@ function resolveParsedDue(meta, fallbackDate = "", fallbackTime = "") {
   const timePart = meta.dueTime || fallbackTime || "";
   if (timePart) return mergeTaskDue(datePart || todayIso(), timePart);
   return meta.due || fallbackDate || null;
+}
+
+function defaultRemindLocal() {
+  const dt = new Date();
+  dt.setHours(9, 0, 0, 0);
+  if (dt <= new Date()) dt.setDate(dt.getDate() + 1);
+  return localInputValue(dt);
+}
+
+function resolveRemindLocal(meta, fallbackDate = "", fallbackTime = "") {
+  if (meta.remindAt) return meta.remindAt;
+  if (meta.remindBeforeMinutes != null) {
+    const dueIso = resolveParsedDue(meta, fallbackDate, fallbackTime);
+    if (!dueIso) return null;
+    const dueDt = new Date(dueIso);
+    if (Number.isNaN(dueDt.getTime())) return null;
+    dueDt.setMinutes(dueDt.getMinutes() - Number(meta.remindBeforeMinutes));
+    return localInputValue(dueDt);
+  }
+  if (meta.remindAtDue) {
+    const dueIso = resolveParsedDue(meta, fallbackDate, fallbackTime);
+    const normalized = dueAtForRemindPreset(dueIso);
+    if (normalized) {
+      const dueDt = new Date(normalized);
+      if (!Number.isNaN(dueDt.getTime())) return localInputValue(dueDt);
+    }
+    return defaultRemindLocal();
+  }
+  return null;
 }
 
 function cleanTitleFromTokens(text, tokens) {
@@ -902,7 +989,7 @@ function highlightableTokens(tokens) {
       case "repeat":
         return !!m.repeat;
       case "remind":
-        return !!m.remindAt || m.remindBeforeMinutes != null;
+        return !!m.remindAt || m.remindBeforeMinutes != null || !!m.remindAtDue;
       case "cost":
         return m.cost != null && !!m.costType;
       default: {
@@ -958,18 +1045,8 @@ function applyParsedMeta(meta) {
   }
   const remindInput = $("task-remind");
   if (remindInput) {
-    if (meta.remindAt) {
-      remindInput.value = meta.remindAt;
-    } else if (meta.remindBeforeMinutes != null) {
-      const dueIso = resolveParsedDue(meta, dueInput.value, timeInput?.value || "");
-      if (dueIso) {
-        const dueDt = new Date(dueIso);
-        if (!Number.isNaN(dueDt.getTime())) {
-          dueDt.setMinutes(dueDt.getMinutes() - Number(meta.remindBeforeMinutes));
-          remindInput.value = localInputValue(dueDt);
-        }
-      }
-    }
+    const remindLocal = resolveRemindLocal(meta, dueInput.value, timeInput?.value || "");
+    if (remindLocal) remindInput.value = remindLocal;
   }
   updateTaskChips();
 }
@@ -1313,6 +1390,16 @@ function initTaskMetaChips() {
     $("task-work-project").value = btn.dataset.setWorkProject || "";
     updateTaskChips();
     closeTaskPopovers();
+  });
+
+  $("pop-remind")?.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-composer-remind-preset]");
+    if (!btn) return;
+    const due = mergeTaskDue($("task-due")?.value || "", $("task-due-time")?.value || "") || $("task-due")?.value || null;
+    const iso = computeRemindPreset(btn.dataset.composerRemindPreset, due);
+    if (!iso) return;
+    $("task-remind").value = localInputValue(new Date(iso));
+    updateTaskChips();
   });
 
   document.addEventListener("click", (e) => {
@@ -2332,7 +2419,7 @@ async function patchTask(taskId, patch) {
     patch.project_id !== undefined &&
     Number(patch.project_id) !== Number(state.projectId);
   if (leavesView) await animateLeave(item, "move");
-  else if (item && (patch.priority != null || patch.due_at !== undefined || patch.work_project_id !== undefined)) {
+  else if (item && (patch.priority != null || patch.due_at !== undefined || patch.remind_at !== undefined || patch.work_project_id !== undefined)) {
     state.motion.pulseId = taskId;
   }
   await api(`/api/tasks/${taskId}`, { method: "PATCH", body: JSON.stringify(patch) });
@@ -2353,6 +2440,9 @@ function renderTaskAttrs(t, projectMap) {
     : due.time || dueLabel;
   const hasLocation = !!t.location;
   const hasCost = t.cost != null && Number(t.cost) !== 0;
+  const hasRemind = !!t.remind_at;
+  const remindInput = taskRemindInputValue(t);
+  const remindLabel = hasRemind ? fmtShortDateTime(t.remind_at) : "Напомн.";
   const costType = t.cost_type === "income" ? "income" : "expense";
   const showWork = isWorkSectionId(t.project_id) || t.work_project_id != null;
   const workTitle = workProjectTitle(t.work_project_id);
@@ -2430,6 +2520,17 @@ function renderTaskAttrs(t, projectMap) {
           }
           ${quickDueButtonsHtml()}
           ${repeatButtonsHtml(repeatRule)}
+        </div>
+      </div>
+      <div class="chip-popover">
+        <button type="button" class="chip-btn${hasRemind ? " has-value" : ""}" aria-expanded="false">
+          <span class="chip-icon">${CHIP_ICON.remind}</span>
+          <span class="chip-label">${escapeHtml(truncateText(remindLabel, 14))}</span>
+        </button>
+        <div class="chip-menu chip-menu-wide hidden" role="dialog" aria-label="Напоминание" data-task-due-at="${escapeAttr(t.due_at || "")}">
+          <input type="datetime-local" data-task-field="remind" value="${escapeAttr(remindInput)}" title="Напоминание" />
+          ${remindPresetButtonsHtml("data-task-remind-preset")}
+          ${hasRemind ? `<button type="button" class="chip-clear" data-task-clear-remind>Без напоминания</button>` : ""}
         </div>
       </div>
       <div class="chip-popover">
@@ -2650,10 +2751,14 @@ function startInlineTitleEdit(titleEl) {
       patch.cost_type = parsed.meta.costType || "expense";
     }
     if (parsed.meta.priority) patch.priority = Number(parsed.meta.priority);
-    const due = resolveParsedDue(parsed.meta, "", "");
+    const attrs = item.querySelector(".task-attrs");
+    const fbDate = attrs?.querySelector('[data-task-field="due-date"]')?.value || "";
+    const fbTime = attrs?.querySelector('[data-task-field="due-time"]')?.value || "";
+    const due = resolveParsedDue(parsed.meta, fbDate, fbTime);
     if (due) patch.due_at = due;
     if (parsed.meta.repeat) patch.repeat_rule = parsed.meta.repeat;
-    if (parsed.meta.remindAt) patch.remind_at = new Date(parsed.meta.remindAt).toISOString();
+    const remindLocal = resolveRemindLocal(parsed.meta, fbDate, fbTime);
+    if (remindLocal) patch.remind_at = new Date(remindLocal).toISOString();
     if (parsed.meta.projectId) patch.project_id = parsed.meta.projectId;
 
     const onlyTitle = Object.keys(patch).length === 1;
@@ -3096,6 +3201,7 @@ function parseRemindToken(raw) {
     if (dt <= now) dt.setDate(dt.getDate() + 1);
     return { remindAt: localInputValue(dt) };
   }
+  if (/^(?:напомнить|напомни|remind)$/.test(lower)) return { remindAtDue: true };
   return {};
 }
 
@@ -3298,6 +3404,25 @@ $("task-list").addEventListener("click", async (e) => {
       closeTaskPopovers();
       return;
     }
+    const remindPreset = e.target.closest("[data-task-remind-preset]");
+    if (remindPreset) {
+      e.stopPropagation();
+      const menu = remindPreset.closest(".chip-menu");
+      const dueAt = menu?.dataset.taskDueAt || attrsRoot.querySelector('[data-task-field="due-date"]')?.value || "";
+      const dueTime = attrsRoot.querySelector('[data-task-field="due-time"]')?.value || "";
+      const mergedDue = mergeTaskDue(dueAt, dueTime) || dueAt || null;
+      const iso = computeRemindPreset(remindPreset.dataset.taskRemindPreset, mergedDue);
+      if (!iso) return;
+      await patchTask(Number(attrsRoot.dataset.taskId), { remind_at: iso });
+      closeTaskPopovers();
+      return;
+    }
+    if (e.target.closest("[data-task-clear-remind]")) {
+      e.stopPropagation();
+      await patchTask(Number(attrsRoot.dataset.taskId), { remind_at: null });
+      closeTaskPopovers();
+      return;
+    }
     const repeatBtn = e.target.closest("[data-task-repeat]");
     if (repeatBtn) {
       e.stopPropagation();
@@ -3367,6 +3492,11 @@ $("task-list").addEventListener("change", async (e) => {
     const dateInput = attrsRoot.querySelector('[data-task-field="due-date"]');
     const timeInput = attrsRoot.querySelector('[data-task-field="due-time"]');
     await patchTask(taskId, { due_at: mergeTaskDue(dateInput.value, timeInput.value) });
+    closeTaskPopovers();
+    return;
+  }
+  if (field === "remind") {
+    await patchTask(taskId, { remind_at: remindAtIso(e.target.value) });
     closeTaskPopovers();
     return;
   }

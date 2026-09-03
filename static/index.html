@@ -203,6 +203,12 @@
                   </button>
                   <div class="chip-menu chip-menu-wide hidden" id="pop-remind" role="dialog" aria-label="Напоминание">
                     <input type="datetime-local" id="task-remind" title="Напоминание" />
+                    <div class="due-quick">
+                      <button type="button" class="chip-option" data-composer-remind-preset="15m">Через 15 мин</button>
+                      <button type="button" class="chip-option" data-composer-remind-preset="1h">Через 1 час</button>
+                      <button type="button" class="chip-option" data-composer-remind-preset="before_1h">За 1 час до срока</button>
+                      <button type="button" class="chip-option" data-composer-remind-preset="at_due">В момент срока</button>
+                    </div>
                     <button type="button" class="chip-clear" data-clear="task-remind">Без напоминания</button>
                   </div>
                 </div>
@@ -316,6 +322,6 @@
   </div>
 
   <script src="assets/pwa-install.js?v=3"></script>
-  <script src="assets/app.js?v=68"></script>
+  <script src="assets/app.js?v=69"></script>
 </body>
 </html>

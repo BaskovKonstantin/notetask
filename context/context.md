@@ -1,6 +1,15 @@
 # NoteTask / todo.baski.pro — context
 
-Updated: 2026-09-04 (~00:30 MSK)
+Updated: 2026-09-04 (~00:45 MSK)
+
+## NLP trailing remind 2026-09-04 (~00:45 MSK)
+
+- Trailing keywords in title: `напомнить`, `напомни`, `remind` (end of string only).
+- Regex: `(?<![\p{L}\p{N}_])(?:напомнить|напомни|remind)(?=\s*$)` → meta `{ remindAtDue: true }`.
+- `resolveRemindLocal(meta, fbDate, fbTime)`: absolute `remindAt` → `remindBeforeMinutes` offset from due → `remindAtDue` at due moment.
+- **Default remind:** due date+time from NLP or chip fallback via `dueAtForRemindPreset`; date-only due → 09:00 that day; no due → next 09:00 local.
+- Strip keyword from `cleanTitle`; highlight `.hl-remind`. Composer + inline rename use same parser; inline rename reads due chips as fallback.
+- Cache: `app.js?v=69`, SW `notetask-v21`.
 
 ## Sidebar resize + collapse 2026-09-04 (~00:30 MSK)
 
