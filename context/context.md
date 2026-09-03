@@ -1,6 +1,15 @@
 # NoteTask / todo.baski.pro — context
 
-Updated: 2026-09-04 (~00:55 MSK)
+Updated: 2026-09-04 (~01:15 MSK)
+
+## Finance sheet work income fix 2026-09-04 (~01:15 MSK)
+
+- Bug report: `#view-finance` income «ДОХОД +0 · работа 0 ₽» при received-платежах в Работа.
+- Root cause: summary `/api/finance/sheet` уже считал `work_income` (`sum_work_payment_income`, paid_at month, status≠planned). На **текущем месяце** (2026-09) received=0 — 250k в августе, сентябрьские planned. Панель Работа — все received без фильтра месяца.
+- Fix: budget rollup — `work_income` → «Подработка», `task_income` → «Прочие доходы», `task_expense` → «Прочие расходы».
+- Tests: `tests/test_finance_income.py` (2 ok).
+- Verify: `GET /api/finance/sheet?year_month=2026-08` → income/work 250k, Подработка actual 250k; browser август — карточка +250k, журнал «Снеговики · работа».
+- Commit: `6de2c39`. Backend restart. Frontend cache без изменений.
 
 ## Finance page full-width budget grid 2026-09-04 (~00:55 MSK)
 
