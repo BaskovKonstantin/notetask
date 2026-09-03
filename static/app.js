@@ -778,7 +778,7 @@ function highlightableTokens(tokens) {
     const m = token.meta || {};
     switch (token.type) {
       case "date":
-        return !!m.due;
+        return !!m.due || !!m.dueTime;
       case "time":
         return !!m.dueTime;
       case "priority":
