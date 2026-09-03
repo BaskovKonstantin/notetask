@@ -2222,15 +2222,34 @@ function startInlineTitleEdit(titleEl) {
   };
   const save = async () => {
     if (saved) return;
-    const next = input.value.trim();
-    if (!next || next === original) {
+    const raw = input.value.trim();
+    if (!raw) {
+      cancel();
+      return;
+    }
+    const parsed = parseTaskInput(raw);
+    const nextTitle = parsed.cleanTitle || raw;
+    const patch = { title: nextTitle };
+    if (parsed.meta.cost != null) {
+      patch.cost = Number(parsed.meta.cost);
+      patch.cost_type = parsed.meta.costType || "expense";
+    }
+    if (parsed.meta.priority) patch.priority = Number(parsed.meta.priority);
+    const due = resolveParsedDue(parsed.meta, "", "");
+    if (due) patch.due_at = due;
+    if (parsed.meta.repeat) patch.repeat_rule = parsed.meta.repeat;
+    if (parsed.meta.remindAt) patch.remind_at = new Date(parsed.meta.remindAt).toISOString();
+    if (parsed.meta.projectId) patch.project_id = parsed.meta.projectId;
+
+    const onlyTitle = Object.keys(patch).length === 1;
+    if (onlyTitle && nextTitle === original) {
       cancel();
       return;
     }
     saved = true;
-    restore(next);
+    restore(nextTitle);
     try {
-      await patchTask(taskId, { title: next });
+      await patchTask(taskId, patch);
     } catch (err) {
       alert(err.message || "Не удалось сохранить");
       await refresh();
