@@ -128,6 +128,32 @@ async def ensure_finance_sheet_defaults(db: aiosqlite.Connection) -> None:
     await db.commit()
 
 
+def _rollup_task_work_budget(
+    categories: list[dict[str, Any]],
+    income_by_cat: dict[int | None, float],
+    expense_by_cat: dict[int | None, float],
+    *,
+    task_income: float,
+    task_expense: float,
+    work_income: float,
+) -> tuple[dict[int | None, float], dict[int | None, float]]:
+    """Map task/work totals into default budget categories for plan/fact table."""
+    income = dict(income_by_cat)
+    expense = dict(expense_by_cat)
+    income_names = {c["name"]: c["id"] for c in categories if c["kind"] == "income"}
+    expense_names = {c["name"]: c["id"] for c in categories if c["kind"] == "expense"}
+    sidework_id = income_names.get("Подработка")
+    other_income_id = income_names.get("Прочие доходы")
+    other_expense_id = expense_names.get("Прочие расходы")
+    if sidework_id is not None and work_income:
+        income[sidework_id] = income.get(sidework_id, 0) + work_income
+    if other_income_id is not None and task_income:
+        income[other_income_id] = income.get(other_income_id, 0) + task_income
+    if other_expense_id is not None and task_expense:
+        expense[other_expense_id] = expense.get(other_expense_id, 0) + task_expense
+    return income, expense
+
+
 async def _task_totals_for_month(db: aiosqlite.Connection, year_month: str) -> tuple[float, float]:
     day_expr = "COALESCE(SUBSTR(completed_at,1,10), SUBSTR(due_at,1,10), SUBSTR(created_at,1,10))"
     cur = await db.execute(
@@ -304,21 +330,6 @@ async def get_finance_sheet(
     )
     planned_by_cat = {row["category_id"]: float(row["planned"] or 0) for row in await cur.fetchall()}
 
-    budget_rows = []
-    for cat in categories:
-        cid = cat["id"]
-        kind = cat["kind"]
-        actual = income_by_cat.get(cid, 0) if kind == "income" else expense_by_cat.get(cid, 0)
-        planned = planned_by_cat.get(cid, 0)
-        budget_rows.append(
-            {
-                **cat,
-                "planned": planned,
-                "actual": actual,
-                "delta": planned - actual if kind == "expense" else actual - planned,
-            }
-        )
-
     cur = await db.execute(
         """
         SELECT account_id,
@@ -358,6 +369,30 @@ async def get_finance_sheet(
 
     income = tx_income + task_income + work_income
     expense = tx_expense + task_expense
+
+    rolled_income, rolled_expense = _rollup_task_work_budget(
+        categories,
+        income_by_cat,
+        expense_by_cat,
+        task_income=task_income,
+        task_expense=task_expense,
+        work_income=work_income,
+    )
+    budget_rows = []
+    for cat in categories:
+        cid = cat["id"]
+        kind = cat["kind"]
+        actual = rolled_income.get(cid, 0) if kind == "income" else rolled_expense.get(cid, 0)
+        planned = planned_by_cat.get(cid, 0)
+        budget_rows.append(
+            {
+                **cat,
+                "planned": planned,
+                "actual": actual,
+                "delta": planned - actual if kind == "expense" else actual - planned,
+            }
+        )
+
     entries = await _merged_entries(db, ym)
 
     cur = await db.execute(
