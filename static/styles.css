@@ -513,6 +513,43 @@ button, input, select, textarea {
 
 .body-svg .region.warn { fill: #f3d4a8; stroke: #c45c26; }
 .body-svg .region.bad { fill: #f0b4b4; stroke: #b33; }
+.body-svg .region.unknown { fill: #d7d9d4; stroke: #7a8076; stroke-dasharray: 3 2; }
+
+.health-notes {
+  display: grid;
+  gap: 8px;
+}
+.health-notes-label {
+  font-size: 0.78rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.health-note-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  max-height: 180px;
+  overflow: auto;
+}
+.health-note-item {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+}
+.health-note-meta {
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.health-note-text {
+  margin: 0 0 6px;
+  white-space: pre-wrap;
+  font-size: 0.88rem;
+}
 
 .health-metrics {
   display: grid;

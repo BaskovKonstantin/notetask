@@ -129,6 +129,13 @@ CREATE TABLE IF NOT EXISTS health_body (
   updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS health_body_notes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  region TEXT NOT NULL,
+  text TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS workout_goals (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   title TEXT NOT NULL,
@@ -238,6 +245,12 @@ async def migrate(db: aiosqlite.Connection) -> None:
           status TEXT NOT NULL DEFAULT 'ok',
           updated_at TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS health_body_notes (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          region TEXT NOT NULL,
+          text TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS workout_goals (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           title TEXT NOT NULL,
@@ -276,6 +289,18 @@ async def migrate(db: aiosqlite.Connection) -> None:
           body TEXT NOT NULL DEFAULT '',
           read_at TEXT
         );
+        """
+    )
+    await db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_health_body_notes_region ON health_body_notes(region, created_at)"
+    )
+    await db.execute(
+        """
+        INSERT INTO health_body_notes(region, text, created_at)
+        SELECT b.region, b.note, COALESCE(b.updated_at, datetime('now'))
+        FROM health_body b
+        WHERE TRIM(b.note) != ''
+          AND NOT EXISTS (SELECT 1 FROM health_body_notes n WHERE n.region = b.region)
         """
     )
 

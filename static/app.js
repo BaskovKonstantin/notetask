@@ -1636,7 +1636,27 @@ function bodySvg(body) {
   const cls = (id) => {
     const st = (body[id] && body[id].status) || "ok";
     const active = state.healthSelected === id ? " active" : "";
-    const tone = st === "warn" ? " warn" : st === "bad" ? " bad" : "";
+    let tone = "";
+    switch (st) {
+      case "warn":
+        tone = " warn";
+        break;
+      case "bad":
+        tone = " bad";
+        break;
+      case "unknown":
+        tone = " unknown";
+        break;
+      case "ok":
+        tone = "";
+        break;
+      default: {
+        const _exhaustive = st;
+        void _exhaustive;
+        tone = "";
+        break;
+      }
+    }
     return `region${tone}${active}`;
   };
   return `
@@ -1682,8 +1702,10 @@ async function renderHealthPanel(data) {
   const metrics = profile.metrics || {};
   const body = profile.body || {};
   const selected = state.healthSelected;
-  const region = body[selected] || { note: "", status: "ok" };
+  const region = body[selected] || { note: "", status: "ok", notes: [] };
   const regionLabel = HEALTH_REGIONS.find((r) => r.id === selected)?.label || selected;
+  const notes = Array.isArray(region.notes) ? region.notes : [];
+  const status = region.status || "ok";
   $("section-panel-inner").innerHTML = `
     <h2>Здоровье</h2>
     <p class="sp-sub">Тело и характеристики — клик по зоне</p>
@@ -1692,14 +1714,32 @@ async function renderHealthPanel(data) {
       <div class="health-region-edit" data-health-region="${escapeAttr(selected)}">
         <strong>${escapeHtml(regionLabel)}</strong>
         <label>Состояние
-          <select name="status">
-            <option value="ok"${region.status === "ok" ? " selected" : ""}>Норма</option>
-            <option value="warn"${region.status === "warn" ? " selected" : ""}>Внимание</option>
-            <option value="bad"${region.status === "bad" ? " selected" : ""}>Проблема</option>
+          <select name="status" data-health-status>
+            <option value="ok"${status === "ok" ? " selected" : ""}>Норма</option>
+            <option value="warn"${status === "warn" ? " selected" : ""}>Внимание</option>
+            <option value="bad"${status === "bad" ? " selected" : ""}>Проблема</option>
+            <option value="unknown"${status === "unknown" ? " selected" : ""}>Неизвестно</option>
           </select>
         </label>
-        <label>Заметка <textarea name="note" rows="3">${escapeHtml(region.note || "")}</textarea></label>
-        <button type="button" class="btn" id="health-save-region">Сохранить зону</button>
+        <div class="health-notes">
+          <span class="health-notes-label">Заметки</span>
+          ${
+            notes.length
+              ? `<ul class="health-note-list">${notes
+                  .map(
+                    (n) => `
+            <li class="health-note-item" data-health-note-id="${n.id}">
+              <div class="health-note-meta">${escapeHtml(fmtShortDateTime(n.created_at))}</div>
+              <p class="health-note-text">${escapeHtml(n.text)}</p>
+              <button type="button" class="chip-clear" data-health-note-del="${n.id}">Удалить</button>
+            </li>`,
+                  )
+                  .join("")}</ul>`
+              : `<p class="empty" style="padding:0">Пока нет заметок</p>`
+          }
+          <textarea name="note" rows="3" placeholder="Новая заметка по зоне"></textarea>
+          <button type="button" class="btn" data-health-note-add>Добавить заметку</button>
+        </div>
       </div>
     </div>
     <form class="sp-form" id="health-metrics-form">
@@ -3099,6 +3139,20 @@ $("section-panel").addEventListener("submit", async (e) => {
   }
 });
 
+$("section-panel").addEventListener("change", async (e) => {
+  const statusSel = e.target.closest("[data-health-status]");
+  if (!statusSel) return;
+  const box = statusSel.closest("[data-health-region]");
+  if (!box) return;
+  const region = box.dataset.healthRegion;
+  const status = statusSel.value || "ok";
+  await api("/api/health-profile", {
+    method: "PUT",
+    body: JSON.stringify({ metrics: {}, body: { [region]: { status } } }),
+  });
+  await renderHealthPanel();
+});
+
 $("section-panel").addEventListener("click", async (e) => {
   const shiftBtn = e.target.closest("[data-finance-shift]");
   if (shiftBtn) {
@@ -3127,15 +3181,30 @@ $("section-panel").addEventListener("click", async (e) => {
     return;
   }
   if (e.target.id === "health-save-region") {
+    return;
+  }
+  const noteAdd = e.target.closest("[data-health-note-add]");
+  if (noteAdd) {
     const box = e.target.closest("[data-health-region]");
     if (!box) return;
     const region = box.dataset.healthRegion;
-    const status = box.querySelector('[name="status"]')?.value || "ok";
-    const note = box.querySelector('[name="note"]')?.value || "";
-    await api("/api/health-profile", {
-      method: "PUT",
-      body: JSON.stringify({ metrics: {}, body: { [region]: { status, note } } }),
+    const textarea = box.querySelector('[name="note"]');
+    const text = textarea?.value.trim() || "";
+    if (!text) return;
+    await api(`/api/health-body/${encodeURIComponent(region)}/notes`, {
+      method: "POST",
+      body: JSON.stringify({ text }),
     });
+    await renderHealthPanel();
+    return;
+  }
+  const noteDel = e.target.closest("[data-health-note-del]");
+  if (noteDel) {
+    const box = e.target.closest("[data-health-region]");
+    if (!box) return;
+    const region = box.dataset.healthRegion;
+    const noteId = Number(noteDel.dataset.healthNoteDel);
+    await api(`/api/health-body/${encodeURIComponent(region)}/notes/${noteId}`, { method: "DELETE" });
     await renderHealthPanel();
     return;
   }

@@ -269,6 +269,20 @@ class HealthProfileIn(BaseModel):
     body: dict[str, dict[str, str]] = Field(default_factory=dict)
 
 
+class HealthNoteIn(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+
+
+HEALTH_STATUSES = ("ok", "warn", "bad", "unknown")
+
+
+def normalize_health_status(raw: str | None) -> str:
+    value = str(raw or "ok").strip().lower()
+    if value in HEALTH_STATUSES:
+        return value
+    return "ok"
+
+
 # Legacy coarse zones + detailed map. Old rows keep working.
 HEALTH_REGION_IDS = (
     "head",
@@ -1493,15 +1507,35 @@ async def delete_work_payment(
     return {"ok": True}
 
 
+async def load_health_notes_map(db: aiosqlite.Connection) -> dict[str, list[dict[str, Any]]]:
+    cur = await db.execute(
+        "SELECT id, region, text, created_at FROM health_body_notes ORDER BY created_at DESC, id DESC"
+    )
+    notes: dict[str, list[dict[str, Any]]] = {}
+    for raw in await cur.fetchall():
+        row = row_to_dict(raw)
+        notes.setdefault(row["region"], []).append(
+            {"id": row["id"], "text": row["text"], "created_at": row["created_at"]}
+        )
+    return notes
+
+
 @app.get("/api/health-profile")
 async def get_health_profile(db: aiosqlite.Connection = Depends(get_db), _: dict = Depends(require_auth)):
     cur = await db.execute("SELECT * FROM health_metrics")
     metrics = {row_to_dict(r)["key"]: row_to_dict(r)["value"] for r in await cur.fetchall()}
+    notes_map = await load_health_notes_map(db)
     cur = await db.execute("SELECT * FROM health_body")
-    body = {
-        row_to_dict(r)["region"]: {"note": row_to_dict(r)["note"], "status": row_to_dict(r)["status"]}
-        for r in await cur.fetchall()
-    }
+    body = {}
+    for r in await cur.fetchall():
+        row = row_to_dict(r)
+        region = row["region"]
+        notes = notes_map.get(region, [])
+        body[region] = {
+            "note": notes[0]["text"] if notes else (row["note"] or ""),
+            "status": normalize_health_status(row["status"]),
+            "notes": notes,
+        }
     defaults = {
         "weight": "",
         "height": "",
@@ -1513,7 +1547,7 @@ async def get_health_profile(db: aiosqlite.Connection = Depends(get_db), _: dict
     for k, v in defaults.items():
         metrics.setdefault(k, v)
     for region in HEALTH_REGION_IDS:
-        body.setdefault(region, {"note": "", "status": "ok"})
+        body.setdefault(region, {"note": "", "status": "ok", "notes": []})
     return {"metrics": metrics, "body": body}
 
 
@@ -1533,29 +1567,91 @@ async def put_health_profile(
             (key[:32], str(value)[:200], now),
         )
     for region, data in body.body.items():
+        region_id = region[:32]
+        status = normalize_health_status(data.get("status"))
+        cur = await db.execute("SELECT note FROM health_body WHERE region=?", (region_id,))
+        old = await cur.fetchone()
+        note = str(data["note"])[:500] if "note" in data else (row_to_dict(old)["note"] if old else "")
         await db.execute(
             """
             INSERT INTO health_body(region, note, status, updated_at) VALUES(?,?,?,?)
             ON CONFLICT(region) DO UPDATE SET
               note=excluded.note, status=excluded.status, updated_at=excluded.updated_at
             """,
-            (
-                region[:32],
-                str(data.get("note") or "")[:500],
-                str(data.get("status") or "ok")[:16],
-                now,
-            ),
+            (region_id, note, status, now),
         )
+        if "note" in data:
+            text = str(data.get("note") or "").strip()[:2000]
+            if text:
+                cur = await db.execute(
+                    "SELECT 1 FROM health_body_notes WHERE region=? LIMIT 1", (region_id,)
+                )
+                exists = await cur.fetchone()
+                if not exists:
+                    await db.execute(
+                        "INSERT INTO health_body_notes(region, text, created_at) VALUES(?,?,?)",
+                        (region_id, text, now),
+                    )
     await log_action(db, "updated", "health_profile", None, {"metrics": list(body.metrics.keys())})
     await db.commit()
-    cur = await db.execute("SELECT * FROM health_metrics")
-    metrics = {row_to_dict(r)["key"]: row_to_dict(r)["value"] for r in await cur.fetchall()}
-    cur = await db.execute("SELECT * FROM health_body")
-    regions = {
-        row_to_dict(r)["region"]: {"note": row_to_dict(r)["note"], "status": row_to_dict(r)["status"]}
-        for r in await cur.fetchall()
-    }
-    return {"metrics": metrics, "body": regions}
+    return await get_health_profile(db, _)
+
+
+@app.post("/api/health-body/{region}/notes")
+async def add_health_note(
+    region: str,
+    body: HealthNoteIn,
+    db: aiosqlite.Connection = Depends(get_db),
+    _: dict = Depends(require_auth),
+):
+    region_id = region[:32]
+    if region_id not in HEALTH_REGION_IDS:
+        raise HTTPException(status_code=404, detail="Unknown region")
+    text = body.text.strip()[:2000]
+    if not text:
+        raise HTTPException(status_code=400, detail="Empty note")
+    now = utcnow()
+    await db.execute(
+        """
+        INSERT INTO health_body(region, note, status, updated_at) VALUES(?,?,?,?)
+        ON CONFLICT(region) DO UPDATE SET note=excluded.note, updated_at=excluded.updated_at
+        """,
+        (region_id, text, "ok", now),
+    )
+    cur = await db.execute(
+        "INSERT INTO health_body_notes(region, text, created_at) VALUES(?,?,?)",
+        (region_id, text, now),
+    )
+    await db.commit()
+    return {"id": cur.lastrowid, "text": text, "created_at": now, "region": region_id}
+
+
+@app.delete("/api/health-body/{region}/notes/{note_id}")
+async def delete_health_note(
+    region: str,
+    note_id: int,
+    db: aiosqlite.Connection = Depends(get_db),
+    _: dict = Depends(require_auth),
+):
+    region_id = region[:32]
+    cur = await db.execute(
+        "DELETE FROM health_body_notes WHERE id=? AND region=?",
+        (note_id, region_id),
+    )
+    if cur.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Note not found")
+    cur = await db.execute(
+        "SELECT text FROM health_body_notes WHERE region=? ORDER BY created_at DESC, id DESC LIMIT 1",
+        (region_id,),
+    )
+    latest = await cur.fetchone()
+    latest_text = row_to_dict(latest)["text"] if latest else ""
+    await db.execute(
+        "UPDATE health_body SET note=?, updated_at=? WHERE region=?",
+        (latest_text, utcnow(), region_id),
+    )
+    await db.commit()
+    return {"ok": True}
 
 
 @app.get("/api/workout-panel")
