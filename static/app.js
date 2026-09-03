@@ -1076,6 +1076,8 @@ function updateTaskChips() {
   const priority = $("task-priority").value;
   $("chip-priority-label").textContent = `P${priority}`;
   $("chip-priority").classList.toggle("has-value", priority !== "4");
+  $("chip-priority").classList.remove("prio-1", "prio-2", "prio-3", "prio-4");
+  $("chip-priority").classList.add(`prio-${priority}`);
   document.querySelectorAll("[data-set-priority]").forEach((btn) => {
     btn.classList.toggle("selected", btn.dataset.setPriority === priority);
   });
@@ -1901,7 +1903,7 @@ function renderTaskAttrs(t, projectMap) {
           : ""
       }
       <div class="chip-popover">
-        <button type="button" class="chip-btn${hasPriority ? " has-value" : ""}" aria-expanded="false">
+        <button type="button" class="chip-btn prio-${t.priority}${hasPriority ? " has-value" : ""}" aria-expanded="false">
           <span class="chip-icon">${CHIP_ICON.priority}</span>
           <span class="chip-label">P${t.priority}</span>
         </button>
