@@ -1,10 +1,59 @@
 const TOKEN_KEY = "notetask_token";
 const SIDEBAR_KEY = "notetask_sidebar_collapsed";
+const LAN_ORIGIN = "http://192.168.0.6:8100";
 const BASE = window.NOTETASK_BASE ?? (() => {
   const path = window.location.pathname;
   if (path === "/todo" || path.startsWith("/todo/")) return "/todo";
   return "";
 })();
+
+function isDesktopClient() {
+  try {
+    if (sessionStorage.getItem("notetask_client") === "desktop") return true;
+  } catch {
+    /* ignore */
+  }
+  try {
+    if (new URLSearchParams(location.search).get("client") === "desktop") return true;
+  } catch {
+    /* ignore */
+  }
+  if (window.__TAURI__ || window.__TAURI_INTERNALS__) return true;
+  if (window.chrome && window.chrome.webview) return true;
+  if (/NoteTaskDesktop|Photino/i.test(navigator.userAgent || "")) return true;
+  return false;
+}
+
+function isLanHost() {
+  return location.hostname === "192.168.0.6" || location.hostname === "127.0.0.1";
+}
+
+/** Home Wi‑Fi hairpin bypass: public DNS + no NAT loopback → use LAN HTTP. */
+function lanFallbackUrl() {
+  const params = new URLSearchParams(location.search);
+  if (isDesktopClient()) params.set("client", "desktop");
+  const token = localStorage.getItem(TOKEN_KEY) || "";
+  const q = params.toString();
+  const hash = token ? `#restore=${encodeURIComponent(token)}` : location.hash || "";
+  return `${LAN_ORIGIN}/${q ? `?${q}` : ""}${hash}`;
+}
+
+function consumeTokenRestore() {
+  const m = /^#restore=(.+)$/.exec(location.hash || "");
+  if (!m) return;
+  try {
+    localStorage.setItem(TOKEN_KEY, decodeURIComponent(m[1]));
+  } catch {
+    /* ignore */
+  }
+  history.replaceState(null, "", location.pathname + location.search);
+}
+
+function goLanFallback() {
+  if (isLanHost()) return false;
+  location.replace(lanFallbackUrl());
+  return true;
+}
 
 const state = {
   view: "today",
@@ -59,23 +108,29 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
+const API_TIMEOUT_MS = 12000;
+
+function isAuthError(err) {
+  const msg = String(err?.message || err || "");
+  return msg === "auth" || msg === "Auth required" || msg === "Invalid token";
+}
+
 async function api(path, opts = {}) {
   const headers = { "Content-Type": "application/json", ...(opts.headers || {}) };
   if (state.token) headers.Authorization = `Bearer ${state.token}`;
   const url = path.startsWith("http") ? path : `${BASE}${path}`;
-  const loginCall = String(path).includes("/api/login");
   let signal = opts.signal;
   let timer = null;
-  if (loginCall && !signal && typeof AbortController !== "undefined") {
+  if (!signal && typeof AbortController !== "undefined") {
     const ctrl = new AbortController();
     signal = ctrl.signal;
-    timer = setTimeout(() => ctrl.abort(), 8000);
+    timer = setTimeout(() => ctrl.abort(), API_TIMEOUT_MS);
   }
   let res;
   try {
     res = await fetch(url, { ...opts, headers, signal });
   } catch (ex) {
-    if (loginCall && (ex?.name === "AbortError" || /Failed to fetch|NetworkError/i.test(String(ex?.message || "")))) {
+    if (ex?.name === "AbortError" || /Failed to fetch|NetworkError|Load failed/i.test(String(ex?.message || ""))) {
       throw new Error("network");
     }
     throw ex;
@@ -206,7 +261,7 @@ function isDesktopClient() {
   }
   if (window.__TAURI__ || window.__TAURI_INTERNALS__) return true;
   if (window.chrome && window.chrome.webview) return true;
-  if (/NoteTaskDesktop/i.test(navigator.userAgent || "")) return true;
+  if (/NoteTaskDesktop|Photino/i.test(navigator.userAgent || "")) return true;
   return false;
 }
 
@@ -1478,7 +1533,23 @@ function setView(view, opts = {}) {
     main.classList.add("view-swap");
   }
   track("view_opened", "ui", null, { view, project_id: state.projectId });
-  refresh();
+  refresh().catch(showListError);
+}
+
+function showListError() {
+  const v = state.view;
+  const taskViews = ["today", "project"];
+  let root;
+  if (taskViews.includes(v)) root = $("task-list");
+  else if (v === "history") root = $("history-list");
+  else if (v === "stats") root = $("stats-cards");
+  else return;
+  if (!root) return;
+  root.innerHTML =
+    '<div class="empty">Не удалось загрузить. <button type="button" class="btn ghost small list-retry">Повторить</button></div>';
+  root.querySelector(".list-retry")?.addEventListener("click", () => {
+    refresh().catch(showListError);
+  });
 }
 
 async function refresh() {
@@ -2593,7 +2664,31 @@ $("section-panel").addEventListener("click", async (e) => {
   }
 });
 
+function showBootError() {
+  document.getElementById("boot-error")?.remove();
+  const el = document.createElement("div");
+  el.id = "boot-error";
+  el.className = "boot-error";
+  el.style.cssText =
+    "position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:24px;text-align:center;z-index:9999;";
+  el.innerHTML =
+    '<p>Нет связи с сервером. Проверь сеть и попробуй снова.</p>' +
+    '<button type="button" class="btn" data-boot-retry>Повторить</button>' +
+    `<a class="btn ghost" href="${LAN_ORIGIN}/" style="text-decoration:none">Домашний Wi‑Fi: открыть локально</a>`;
+  el.querySelector("[data-boot-retry]")?.addEventListener("click", () => {
+    if (isDesktopClient() && goLanFallback()) return;
+    location.reload();
+  });
+  el.querySelector("a")?.addEventListener("click", (e) => {
+    e.preventDefault();
+    goLanFallback();
+  });
+  document.body.appendChild(el);
+}
+
 async function boot() {
+  consumeTokenRestore();
+  state.token = localStorage.getItem(TOKEN_KEY) || "";
   addWorkoutSetRow();
   $("wo-started").value = localInputValue();
   initTaskMetaChips();
@@ -2615,8 +2710,10 @@ async function boot() {
     track("app_opened", "ui", null, { path: location.pathname });
     setView("today");
     handleCaptureHash();
-  } catch {
-    showLogin();
+  } catch (err) {
+    if (isAuthError(err)) showLogin();
+    else if ((isDesktopClient() || window.__notetaskLanNeeded) && goLanFallback()) return;
+    else showBootError();
   }
 }
 

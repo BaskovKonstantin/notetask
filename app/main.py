@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -14,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from .auth import make_token, require_auth, verify_password
-from .config import DATA_DIR, PORT
+from .config import DATA_DIR, DB_PATH, PORT
 from .db import (
     bump_completions,
     bump_workouts,
@@ -44,21 +46,42 @@ DOWNLOAD_CATALOG = (
 )
 
 
+log = logging.getLogger("notetask")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db = await connect()
     await ensure_defaults(db)
-    app.state.db = db
-    yield
+    cutoff = (datetime.now(timezone.utc).date() - timedelta(days=180)).isoformat()
+    await db.execute("DELETE FROM action_log WHERE at < ?", (cutoff,))
+    await db.commit()
     await db.close()
+    yield
 
 
 app = FastAPI(title="NoteTask", lifespan=lifespan)
 app.mount("/assets", StaticFiles(directory=STATIC), name="assets")
 
 
-async def get_db(request: Request) -> aiosqlite.Connection:
-    return request.app.state.db
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    log.exception("Unhandled error on %s %s", request.method, request.url.path)
+    return JSONResponse({"detail": "Internal error"}, status_code=500)
+
+
+async def get_db() -> AsyncGenerator[aiosqlite.Connection, None]:
+    db = await aiosqlite.connect(DB_PATH)
+    db.row_factory = aiosqlite.Row
+    await db.execute("PRAGMA busy_timeout=5000")
+    await db.execute("PRAGMA foreign_keys=ON")
+    try:
+        yield db
+    except Exception:
+        await db.rollback()
+        raise
+    finally:
+        await db.close()
 
 
 
@@ -1558,7 +1581,10 @@ async def web_manifest(request: Request):
 
 @app.get("/")
 async def index():
-    return FileResponse(STATIC / "index.html")
+    return FileResponse(
+        STATIC / "index.html",
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate", "Pragma": "no-cache"},
+    )
 
 
 @app.get("/{path:path}")
@@ -1569,7 +1595,10 @@ async def spa_fallback(path: str):
     candidate = STATIC / path
     if candidate.is_file():
         return FileResponse(candidate)
-    return FileResponse(STATIC / "index.html")
+    return FileResponse(
+        STATIC / "index.html",
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate", "Pragma": "no-cache"},
+    )
 
 
 def run():

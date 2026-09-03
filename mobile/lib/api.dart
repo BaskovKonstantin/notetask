@@ -2,6 +2,29 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+const kPublicBase = 'https://todo.baski.pro';
+const kLanBase = 'http://192.168.0.6:8100';
+
+/// Prefer public HTTPS; on home Wi‑Fi hairpin/DoH failure use LAN :8100.
+Future<String> resolveApiBase({String preferred = kPublicBase}) async {
+  if (await _healthOk(preferred)) return preferred;
+  if (preferred != kLanBase && await _healthOk(kLanBase)) return kLanBase;
+  return preferred;
+}
+
+Future<bool> _healthOk(String base) async {
+  try {
+    final res = await http
+        .get(Uri.parse('$base/api/health'))
+        .timeout(const Duration(milliseconds: 2500));
+    if (res.statusCode != 200) return false;
+    final data = jsonDecode(res.body);
+    return data is Map && data['ok'] == true;
+  } catch (_) {
+    return false;
+  }
+}
+
 class NoteTaskApi {
   NoteTaskApi({required this.baseUrl, this.token});
 

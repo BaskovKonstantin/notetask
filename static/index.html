@@ -13,8 +13,47 @@
       window.NOTETASK_BASE = base === "/todo/" ? "/todo" : "";
     })();
   </script>
+  <script>
+    /* Home Wi‑Fi hairpin: if API dead, desktop/Photino jump to LAN HTTP now (before app.js). */
+    (function () {
+      var LAN = "http://192.168.0.6:8100";
+      if (/^(192\.168\.0\.6|127\.0\.0\.1)$/.test(location.hostname)) return;
+      var ua = navigator.userAgent || "";
+      var desk =
+        /[?&]client=desktop\b/i.test(location.search) ||
+        /NoteTaskDesktop|Photino/i.test(ua) ||
+        !!(window.chrome && window.chrome.webview);
+      var ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+      var timer = setTimeout(function () {
+        if (ctrl) ctrl.abort();
+      }, 2500);
+      var opts = { cache: "no-store" };
+      if (ctrl) opts.signal = ctrl.signal;
+      fetch(location.origin + "/api/health", opts)
+        .then(function (r) {
+          if (!r.ok) throw new Error("bad");
+          return r.json();
+        })
+        .then(function (j) {
+          clearTimeout(timer);
+          if (!j || j.ok !== true) throw new Error("bad");
+        })
+        .catch(function () {
+          clearTimeout(timer);
+          window.__notetaskLanNeeded = true;
+          if (!desk) return;
+          var tok = "";
+          try {
+            tok = localStorage.getItem("notetask_token") || "";
+          } catch (e) {}
+          var q = location.search || "";
+          if (q.indexOf("client=desktop") < 0) q += (q ? "&" : "?") + "client=desktop";
+          location.replace(LAN + "/" + q + (tok ? "#restore=" + encodeURIComponent(tok) : ""));
+        });
+    })();
+  </script>
   <link rel="stylesheet" href="assets/styles.css?v=37" />
-  <script src="assets/pwa.js?v=4"></script>
+  <script src="assets/pwa.js?v=5"></script>
 </head>
 <body>
   <div id="login" class="login-wrap">
@@ -32,7 +71,7 @@
       style="width:100%;max-width:400px;margin:12px auto 0;display:block;text-align:center;text-decoration:none;box-sizing:border-box"
     >Скачать для Windows / Android</a>
   </div>
-  <script src="assets/login.js?v=9"></script>
+  <script src="assets/login.js?v=11"></script>
 
   <div id="app" class="app-shell hidden">
     <aside class="sidebar">
@@ -255,6 +294,6 @@
   </div>
 
   <script src="assets/pwa-install.js?v=3"></script>
-  <script src="assets/app.js?v=51"></script>
+  <script src="assets/app.js?v=53"></script>
 </body>
 </html>

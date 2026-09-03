@@ -4,9 +4,9 @@ import 'package:notetask_mobile/api.dart';
 import 'package:notetask_mobile/today_page.dart';
 
 const _tokenKey = 'notetask_token';
-const _baseUrl = String.fromEnvironment(
+const _preferredBase = String.fromEnvironment(
   'API_BASE',
-  defaultValue: 'https://todo.baski.pro',
+  defaultValue: kPublicBase,
 );
 
 Future<void> main() async {
@@ -43,6 +43,7 @@ class _BootGate extends StatefulWidget {
 class _BootGateState extends State<_BootGate> {
   final _storage = const FlutterSecureStorage();
   NoteTaskApi? _api;
+  String _baseUrl = _preferredBase;
   bool _loading = true;
 
   @override
@@ -52,13 +53,15 @@ class _BootGateState extends State<_BootGate> {
   }
 
   Future<void> _restore() async {
+    final base = await resolveApiBase(preferred: _preferredBase);
     final token = await _storage.read(key: _tokenKey);
     if (token != null && token.isNotEmpty) {
-      final api = NoteTaskApi(baseUrl: _baseUrl, token: token);
+      final api = NoteTaskApi(baseUrl: base, token: token);
       try {
         await api.projects();
         if (!mounted) return;
         setState(() {
+          _baseUrl = base;
           _api = api;
           _loading = false;
         });
@@ -68,12 +71,18 @@ class _BootGateState extends State<_BootGate> {
       }
     }
     if (!mounted) return;
-    setState(() => _loading = false);
+    setState(() {
+      _baseUrl = base;
+      _loading = false;
+    });
   }
 
   Future<void> _onLoggedIn(NoteTaskApi api, String token) async {
     await _storage.write(key: _tokenKey, value: token);
-    setState(() => _api = api);
+    setState(() {
+      _baseUrl = api.baseUrl;
+      _api = api;
+    });
   }
 
   Future<void> _logout() async {
@@ -115,7 +124,8 @@ class _LoginPageState extends State<LoginPage> {
       _error = null;
     });
     try {
-      final api = NoteTaskApi(baseUrl: widget.baseUrl);
+      final base = await resolveApiBase(preferred: widget.baseUrl);
+      final api = NoteTaskApi(baseUrl: base);
       final token = await api.login(_password.text);
       api.token = token;
       await widget.onLoggedIn(api, token);

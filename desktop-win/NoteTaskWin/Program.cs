@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics;
 using System.Net;
+using System.Net.Http;
 using System.Runtime.InteropServices;
 using System.Text;
 using Photino.NET;
@@ -9,7 +10,9 @@ namespace NoteTaskWin;
 internal static class Program
 {
     const string AppUrl = "https://todo.baski.pro/?client=desktop";
+    const string LanUrl = "http://192.168.0.6:8100/?client=desktop";
     const string CaptureUrl = "https://todo.baski.pro/?client=desktop#capture";
+    const string LanCaptureUrl = "http://192.168.0.6:8100/?client=desktop#capture";
     const string LanIp = "192.168.0.6";
     const string HostName = "todo.baski.pro";
     const int VK_SPACE = 0x20;
@@ -24,7 +27,8 @@ internal static class Program
         EnsureAutostart();
         EnsureLanHostsEntry();
 
-        var startUrl = args.Any(a => a == "--capture") ? CaptureUrl : AppUrl;
+        var capture = args.Any(a => a == "--capture");
+        var startUrl = PickStartUrl(capture);
         var window = new PhotinoWindow()
             .SetTitle("NoteTask")
             .SetUseOsDefaultSize(false)
@@ -39,6 +43,33 @@ internal static class Program
 
         StartGlobalCaptureWatcher(window);
         window.WaitForClose();
+    }
+
+    /// <summary>
+    /// Prefer public HTTPS. If hairpin/DoH breaks it but LAN is up, use :8100.
+    /// </summary>
+    private static string PickStartUrl(bool capture)
+    {
+        // Prefer LAN on home Wi‑Fi — skips hairpin/DoH entirely
+        if (CanReach("http://192.168.0.6:8100/api/health", 1200))
+            return capture ? LanCaptureUrl : LanUrl;
+        if (CanReach("https://todo.baski.pro/api/health", 4000))
+            return capture ? CaptureUrl : AppUrl;
+        return capture ? LanCaptureUrl : LanUrl;
+    }
+
+    private static bool CanReach(string url, int timeoutMs)
+    {
+        try
+        {
+            using var client = new HttpClient { Timeout = TimeSpan.FromMilliseconds(timeoutMs) };
+            using var resp = client.GetAsync(url).GetAwaiter().GetResult();
+            return resp.IsSuccessStatusCode;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     /// <summary>
@@ -69,7 +100,7 @@ internal static class Program
         }
         catch
         {
-            /* needs admin once — domain still works outside LAN / with DNS 192.168.0.6 */
+            /* needs admin once — PickStartUrl falls back to LAN HTTP */
         }
     }
 
@@ -103,15 +134,26 @@ internal static class Program
                     var down = ctrl && space;
                     if (down && !wasDown)
                     {
-                        window.Load(CaptureUrl);
+                        window.Invoke(() =>
+                        {
+                            try
+                            {
+                                window.Load(PickStartUrl(capture: true));
+                                window.SetMinimized(false);
+                            }
+                            catch
+                            {
+                                /* ignore */
+                            }
+                        });
                     }
                     wasDown = down;
                 }
                 catch
                 {
-                    /* ignore transient native errors */
+                    /* ignore */
                 }
-                await Task.Delay(40, cts.Token).ConfigureAwait(false);
+                await Task.Delay(80, cts.Token).ConfigureAwait(false);
             }
         }, cts.Token);
     }
@@ -121,32 +163,33 @@ internal static class Program
         try
         {
             if (!OperatingSystem.IsWindows()) return;
-            var startup = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.Startup),
-                "NoteTask.lnk");
-            if (File.Exists(startup)) return;
-
             var exe = Environment.ProcessPath;
-            if (string.IsNullOrEmpty(exe) || !File.Exists(exe)) return;
-            var workDir = Path.GetDirectoryName(exe) ?? "";
+            if (string.IsNullOrEmpty(exe)) return;
+            var startup = Environment.GetFolderPath(Environment.SpecialFolder.Startup);
+            var lnk = Path.Combine(startup, "NoteTask.lnk");
+            if (File.Exists(lnk)) return;
 
-            var script = $$"""
-                $s = (New-Object -ComObject WScript.Shell).CreateShortcut('{{startup.Replace("'", "''")}}')
-                $s.TargetPath = '{{exe.Replace("'", "''")}}'
-                $s.WorkingDirectory = '{{workDir.Replace("'", "''")}}'
-                $s.Save()
-                """;
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = "powershell",
-                Arguments = "-NoProfile -ExecutionPolicy Bypass -Command \"" + script.Replace("\"", "\\\"") + "\"",
-                CreateNoWindow = true,
-                UseShellExecute = false,
-            })?.WaitForExit(8000);
+            // Minimal .lnk via PowerShell (no COM ref required at compile time)
+            var ps =
+                "$s=(New-Object -ComObject WScript.Shell).CreateShortcut('"
+                + lnk.Replace("'", "''")
+                + "');$s.TargetPath='"
+                + exe.Replace("'", "''")
+                + "';$s.WorkingDirectory='"
+                + Path.GetDirectoryName(exe)!.Replace("'", "''")
+                + "';$s.Save()";
+            Process.Start(
+                new ProcessStartInfo
+                {
+                    FileName = "powershell",
+                    Arguments = "-NoProfile -Command " + ps,
+                    CreateNoWindow = true,
+                    UseShellExecute = false,
+                })?.WaitForExit(5000);
         }
         catch
         {
-            /* best-effort */
+            /* ignore */
         }
     }
 }

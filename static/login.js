@@ -2,6 +2,7 @@
 (function () {
   const TOKEN_KEY = "notetask_token";
   const CLIENT_KEY = "notetask_client";
+  const LAN_ORIGIN = "http://192.168.0.6:8100";
   const LOGIN_TIMEOUT_MS = 8000;
   const form = document.getElementById("login-form");
   const pass = document.getElementById("password");
@@ -30,8 +31,21 @@
     }
     if (window.__TAURI__ || window.__TAURI_INTERNALS__) return true;
     if (window.chrome && window.chrome.webview) return true;
-    if (/NoteTaskDesktop/i.test(navigator.userAgent || "")) return true;
+    if (/NoteTaskDesktop|Photino/i.test(navigator.userAgent || "")) return true;
     return false;
+  }
+
+  function isLanHost() {
+    return location.hostname === "192.168.0.6" || location.hostname === "127.0.0.1";
+  }
+
+  function goLanFallback() {
+    if (isLanHost()) return false;
+    const params = new URLSearchParams(location.search);
+    if (isDesktopClient()) params.set("client", "desktop");
+    const q = params.toString();
+    location.replace(`${LAN_ORIGIN}/${q ? `?${q}` : ""}`);
+    return true;
   }
 
   function isNetworkError(ex) {
@@ -137,8 +151,11 @@
       if (/wrong password|auth/i.test(msg)) {
         err.textContent = "Неверный пароль";
       } else if (isNetworkError(ex)) {
-        err.textContent =
-          "Сеть не отвечает. С домашнего Wi‑Fi нужен DNS 192.168.0.6 (или hosts: 192.168.0.6 todo.baski.pro), сайт — только https://todo.baski.pro/";
+        if (isDesktopClient() && goLanFallback()) return;
+        err.innerHTML =
+          'Сеть не отвечает. Дома: открой <a href="' +
+          LAN_ORIGIN +
+          '/">локальный адрес</a> или DNS 192.168.0.6';
       } else {
         err.textContent = "Не удалось войти. Обнови страницу (Ctrl+F5).";
       }

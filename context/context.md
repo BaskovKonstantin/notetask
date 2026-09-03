@@ -1,6 +1,70 @@
 # NoteTask / todo.baski.pro — context
 
-Updated: 2026-09-03
+Updated: 2026-09-03 (~13:32 MSK)
+
+## Outage check 2026-09-03 (~13:32 MSK) — «как не грузился так и не грузится»
+
+**Backend жив.** Клиент дома бьёт в `5.144.98.126` (DoH/8.8.8.8), TP-Link без hairpin → timeout. Старый Photino (`NoteTask-Setup.exe` 2026-08-29) **не** умеет LAN-first — HTTPS страница не доезжает → JS-fallback бесполезен.
+
+Сделано сейчас:
+- index.html: early Photino/desktop redirect на `http://192.168.0.6:8100` если `/api/health` мёртв; `Cache-Control: no-store` на index
+- app.js v53 / login.js v11: UA `Photino` = desktop; boot auto-LAN
+- Samba: `OPEN-NOTETASK.bat`, `ЗАПУСТИ-NOTETASK.bat`, `OTKROY-TODO.bat`
+- Photino source уже LAN-first, **dotnet на сервере нет** — пересобрать Setup нельзя отсюда; нужен Windows publish
+
+Доказательства:
+- health 200 LAN + HTTPS с сервера
+- `.5` ARP REACHABLE, ping/SSH закрыты; к todo с `.5` почти нет запросов
+- `95.24.212.142` ходит в GitLab на baski.pro (внешка жива)
+
+**Юзеру сейчас:** `\\192.168.0.6\homeserver\ЗАПУСТИ-NOTETASK.bat` или браузер `http://192.168.0.6:8100/`
+
+## Outage check 2026-09-03 (~13:26 MSK) — «не грузится»
+
+Повторная проверка после «приложение NoteTask не грузится».
+
+**Вердикт тот же: backend жив. Ломается путь клиент→сервер.**
+
+Доказательства тогда:
+- `notetask` Up; `/api/health` 200 LAN+HTTPS
+- dnsmasq: `todo` → `192.168.0.6`; `8.8.8.8` → `5.144.98.126`
+- Assets: app.js v52, login.js v10 (позже → v53/v11)
+
+## Outage check 2026-09-03 (~13:00 MSK)
+
+Симптом пользователя: «везде Нет связи с сервером».
+
+**Вердикт: приложение/сервер живы. Ломается путь клиент→сервер (DNS/hairpin), не backend.**
+
+### Access unlock (same day)
+
+User: «сними все ограничения — со всех устройств».
+
+- Caddy: удалён мёртвый `(allowed_operator)` 403; `todo.baski.pro/todo*` → 301 `/`
+- Web app.js v52 / login.js v10: LAN fallback `http://192.168.0.6:8100/` + `#restore=` JWT
+- Photino PickStartUrl + Flutter `resolveApiBase`
+- IP-ограничений на todo не было; снаружи уже открыто; защита = пароль
+
+Доказательства сервер OK:
+- `notetask` Up (restart 08:32 UTC clean Exit=0), RestartCount=0
+- `/api/health` 200: `127.0.0.1:8100`, `192.168.0.6:8100`, `https://todo.baski.pro`
+- login + `/api/projects` + `/api/tasks` 200 с паролем из `.env`
+- Caddy `baski-web` host-network, `todo.baski.pro` → `127.0.0.1:8100`
+- cert LE до 2026-11-06; dnsmasq active; split-DNS `todo`→`192.168.0.6`
+- Playwright: логин-экран, base `/`, без boot-error
+- Ошибок/traceback в `docker logs notetask` нет
+
+Клиентская картина:
+- Текст UI = `showBootError()` в `app.js` (есть токен, `fetch`/`json` упал → не auth)
+- Photino с `192.168.0.5` в **08:21 UTC** полностью работал (health/projects/tasks 200)
+- После рестарта контейнера **08:32 UTC** — **0** API-запросов Photino к todo (либо не открывали, либо пакеты не доходят)
+- WireGuard peers `10.66.0.2/3` — **нет handshake** (WG offline)
+- iptables REDIRECT hairpin `5.144.98.126:443` ≈ 1 пакет за жизнь — не спасает LAN→роутер
+- UFW не режет 443/8100 с LAN; BLOCK только IGMP multicast с `.5`
+
+Root cause (тот же что 2026-08-29): домашний Wi‑Fi + резолв в публичный `5.144.98.126` (DoH/Secure DNS/8.8.8.8) + **нет NAT hairpin на TP-Link** → timeout → «Нет связи». Лечится split-DNS `192.168.0.6` / hosts / отключить Secure DNS. Обход LAN: `http://192.168.0.6:8100/` (порт открыт в compose+UFW).
+
+Вторично: на `todo.baski.pro` путь `/todo/api/*` отдаёт HTML (strip только на `baski.pro/todo*` via `handle_path`) — при ошибочном `NOTETASK_BASE=/todo` boot тоже покажет «Нет связи».
 
 ## Brand
 - Logo: forest green rounded square + list/check — `https://todo.baski.pro/icons/logo.png` (also `logo.svg`, `logo-192.png`, `logo-512.png`). PWA icons `icon-192/512` synced.
@@ -44,7 +108,7 @@ Updated: 2026-09-03
 ## Live
 
 ## Live
-- **LAN caveat:** с домашней сети публичный IP без hairpin. Split-DNS: `todo.baski.pro` → `192.168.0.6` → **Caddy HTTPS**. Порт `:8100` только на `127.0.0.1` (не в LAN). Клиент всегда `https://todo.baski.pro/`.
+- **LAN caveat:** с домашней сети публичный IP без hairpin. Split-DNS: `todo.baski.pro` → `192.168.0.6` → **Caddy HTTPS**. Порт `:8100` на `127.0.0.1` + `192.168.0.6` (LAN bypass). Клиент нормально `https://todo.baski.pro/`.
 - **Логин:** `login.js` v9 — домен only; soft-boot; SW `notetask-v8`; fonts self-hosted
 
 - **Primary URL:** https://todo.baski.pro/ (Let's Encrypt, A `todo` → 5.144.98.126)
