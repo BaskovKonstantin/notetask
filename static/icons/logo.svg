@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="NoteTask">
+  <rect width="512" height="512" rx="112" fill="#2F6F4E"/>
+  <path fill="none" stroke="#F7F4EC" stroke-width="48" stroke-linecap="round" stroke-linejoin="round"
+        d="M156 268 L228 340 L368 176"/>
+</svg>

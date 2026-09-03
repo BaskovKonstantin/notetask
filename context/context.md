@@ -2,6 +2,9 @@
 
 Updated: 2026-09-03
 
+## Brand
+- Logo: forest green rounded square + list/check — `https://todo.baski.pro/icons/logo.png` (also `logo.svg`, `logo-192.png`, `logo-512.png`). PWA icons `icon-192/512` synced.
+
 ## Stability audit 2026-08-29
 
 Симптом: у клиента старая версия фронта из кэша висла на «Загрузка задач…» (строки нет в текущем коде). Сервер локально и через Caddy быстрый (API 1–10мс, БД 233KB, 150 задач, integrity ok, WAL, busy_timeout 5000).
