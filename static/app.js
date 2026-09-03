@@ -105,7 +105,7 @@ const SECTION_PANELS = {
 
 const HEALTH_REGIONS = [
   { id: "head", label: "Голова" },
-  { id: "forehead", label: "Лоб" },
+  { id: "hair", label: "Волосы" },
   { id: "eyes", label: "Глаза" },
   { id: "nose", label: "Нос" },
   { id: "ears", label: "Уши" },
@@ -1662,7 +1662,7 @@ function bodySvg(body) {
   return `
   <svg class="body-svg" viewBox="0 0 140 280" role="img" aria-label="Тело">
     <ellipse class="${cls("head")}" data-region="head" cx="70" cy="28" rx="20" ry="22"></ellipse>
-    <ellipse class="${cls("forehead")}" data-region="forehead" cx="70" cy="18" rx="14" ry="6"></ellipse>
+    <ellipse class="${cls("hair")}" data-region="hair" cx="70" cy="12" rx="18" ry="8"></ellipse>
     <ellipse class="${cls("eyes")}" data-region="eyes" cx="62" cy="26" rx="4" ry="3"></ellipse>
     <ellipse class="${cls("eyes")}" data-region="eyes" cx="78" cy="26" rx="4" ry="3"></ellipse>
     <ellipse class="${cls("nose")}" data-region="nose" cx="70" cy="32" rx="3" ry="4"></ellipse>

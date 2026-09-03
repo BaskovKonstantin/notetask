@@ -286,7 +286,7 @@ def normalize_health_status(raw: str | None) -> str:
 # Legacy coarse zones + detailed map. Old rows keep working.
 HEALTH_REGION_IDS = (
     "head",
-    "forehead",
+    "hair",
     "eyes",
     "nose",
     "ears",

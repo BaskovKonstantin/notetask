@@ -303,6 +303,16 @@ async def migrate(db: aiosqlite.Connection) -> None:
           AND NOT EXISTS (SELECT 1 FROM health_body_notes n WHERE n.region = b.region)
         """
     )
+    # forehead → hair (UI region rename)
+    await db.execute("UPDATE health_body_notes SET region='hair' WHERE region='forehead'")
+    await db.execute(
+        """
+        INSERT INTO health_body(region, note, status, updated_at)
+        SELECT 'hair', note, status, updated_at FROM health_body WHERE region='forehead'
+        ON CONFLICT(region) DO NOTHING
+        """
+    )
+    await db.execute("DELETE FROM health_body WHERE region='forehead'")
 
 
 async def connect() -> aiosqlite.Connection:
