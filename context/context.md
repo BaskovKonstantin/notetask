@@ -1,6 +1,18 @@
 # NoteTask / todo.baski.pro — context
 
-Updated: 2026-09-04 (~00:05 MSK)
+Updated: 2026-09-04 (~00:15 MSK)
+
+## Overdue notify null due_at fix 2026-09-04 (~00:15 MSK)
+
+- Bug: вечерний digest «Просрочено» включал задачи без срока — у digest id=2 (28 задач) были старые `due_at` из Todoist (напр. `2026-08-08`); юзер снял через «Без срока» (~22:00 MSK 2026-09-03).
+- Fix: `app/due_utils.py` — `due_at_present`, `parse_task_dt`, `is_task_overdue`; `app/notify.py` — SQL `due_at IS NOT NULL AND TRIM != '' AND date < today` + double-check `is_task_overdue`; due-at notify skip без due.
+- Tests: `tests/test_due_overdue.py` (8 ok). Live DB: 31 null due → 0 overdue; 2 с реальным прошлым сроком.
+- Backend: `docker compose restart notetask`. Frontend cache не менялся.
+
+## Day group header year 2026-09-04 (~00:10 MSK)
+
+- Task list `.day-group-header` (`formatDayHeader` in `app.js`): добавлен `year: "numeric"` — ru-RU как `monthLabel`, напр. «понедельник, 1 января 2026 г.» (не для «Сегодня»/«Завтра»/«Без срока»).
+- Cache: `app.js?v=65`, SW `notetask-v18`.
 
 ## Work planned payments 2026-09-04 (~00:05 MSK)
 

@@ -21,6 +21,7 @@ from .config import (
     TELEGRAM_PROXY,
 )
 from .db import utcnow
+from .due_utils import due_at_present, is_task_overdue, parse_task_dt
 
 log = logging.getLogger("notetask.notify")
 
@@ -29,25 +30,6 @@ TZ = ZoneInfo(NOTIFY_TZ)
 
 def _now_local() -> datetime:
     return datetime.now(TZ)
-
-
-def parse_task_dt(raw: str | None) -> datetime | None:
-    if not raw:
-        return None
-    text = raw.strip().replace("Z", "+00:00")
-    try:
-        dt = datetime.fromisoformat(text)
-    except ValueError:
-        try:
-            d = datetime.strptime(text[:10], "%Y-%m-%d")
-            return d.replace(tzinfo=TZ, hour=MORNING_DUE_HOUR, minute=0, second=0, microsecond=0)
-        except ValueError:
-            return None
-    if "T" not in text and len(text) <= 10:
-        return dt.replace(tzinfo=TZ, hour=MORNING_DUE_HOUR, minute=0, second=0, microsecond=0)
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=TZ)
-    return dt.astimezone(TZ)
 
 
 async def _already_sent(db: aiosqlite.Connection, kind: str, dedupe_key: str) -> bool:
@@ -158,6 +140,8 @@ async def tick_once() -> None:
                 )
 
             due_raw = task.get("due_at")
+            if not due_at_present(due_raw):
+                continue
             due_dt = parse_task_dt(due_raw)
             if not due_dt:
                 continue
@@ -198,11 +182,20 @@ async def tick_once() -> None:
         if now.hour == EVENING_DIGEST_HOUR and now.minute < 2:
             digest_key = f"overdue_digest:{now.date().isoformat()}"
             if not await _already_sent(db, "overdue_digest", digest_key):
-                overdue = []
-                for task in tasks:
-                    due_dt = parse_task_dt(task.get("due_at"))
-                    if due_dt and due_dt.date() < now.date():
-                        overdue.append(task)
+                today_key = now.date().isoformat()
+                cur = await db.execute(
+                    """
+                    SELECT id, title, due_at
+                    FROM tasks
+                    WHERE deleted_at IS NULL AND status='open' AND kind='task'
+                      AND due_at IS NOT NULL AND TRIM(due_at) != ''
+                      AND SUBSTR(due_at, 1, 10) < ?
+                    ORDER BY due_at, id
+                    """,
+                    (today_key,),
+                )
+                overdue = [dict(r) for r in await cur.fetchall()]
+                overdue = [t for t in overdue if is_task_overdue(t.get("due_at"), now)]
                 if overdue:
                     lines = [f"• {t['title']}" for t in overdue[:30]]
                     more = "" if len(overdue) <= 30 else f"\n…и ещё {len(overdue) - 30}"
