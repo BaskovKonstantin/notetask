@@ -1,4 +1,4 @@
-const CACHE = "notetask-v7";
+const CACHE = "notetask-v8";
 
 self.addEventListener("install", (event) => {
   const base = self.registration.scope;
@@ -20,7 +20,14 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
   if (url.pathname.includes("/api/")) {
-    event.respondWith(fetch(event.request));
+    event.respondWith(
+      fetch(event.request).catch(() =>
+        new Response(JSON.stringify({ detail: "offline" }), {
+          status: 503,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
     return;
   }
   if (event.request.method !== "GET") return;
@@ -42,18 +49,16 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // Static assets: network first with cache fallback
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      const network = fetch(event.request)
-        .then((res) => {
-          if (res.ok && url.origin === self.location.origin) {
-            const copy = res.clone();
-            caches.open(CACHE).then((cache) => cache.put(event.request, copy));
-          }
-          return res;
-        })
-        .catch(() => cached);
-      return cached || network;
-    }),
+    fetch(event.request)
+      .then((res) => {
+        if (res.ok && url.origin === self.location.origin) {
+          const copy = res.clone();
+          caches.open(CACHE).then((cache) => cache.put(event.request, copy));
+        }
+        return res;
+      })
+      .catch(() => caches.match(event.request)),
   );
 });

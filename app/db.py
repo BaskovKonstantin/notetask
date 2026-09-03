@@ -172,6 +172,13 @@ async def migrate(db: aiosqlite.Connection) -> None:
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_projects_source_ext "
         "ON projects(source, external_id) WHERE external_id IS NOT NULL"
     )
+    await db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_tasks_list ON tasks(deleted_at, status, kind)"
+    )
+    await db.execute("CREATE INDEX IF NOT EXISTS idx_tasks_due ON tasks(due_at)")
+    await db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_workout_sets_session ON workout_sets(session_id)"
+    )
     await db.executescript(
         """
         CREATE TABLE IF NOT EXISTS finance_months (
@@ -278,7 +285,8 @@ async def ensure_project_catalog(db: aiosqlite.Connection) -> None:
         ("Здоровье", "#158fad", 4),
         ("Тренировки", "#1f4b7a", 5),
         ("Питание", "#7ecc49", 6),
-        ("Идеи", "#884dff", 7),
+        ("Покупки", "#c9892e", 7),
+        ("Идеи", "#884dff", 8),
     ]
     now = utcnow()
     for name, color, sort in catalog:
