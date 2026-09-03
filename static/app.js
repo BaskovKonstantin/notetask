@@ -1,5 +1,6 @@
 const TOKEN_KEY = "notetask_token";
 const SIDEBAR_KEY = "notetask_sidebar_collapsed";
+const SORT_KEY = "notetask_task_sort";
 const LAN_ORIGIN = "http://192.168.0.6:8100";
 const BASE = window.NOTETASK_BASE ?? (() => {
   const path = window.location.pathname;
@@ -55,6 +56,33 @@ function goLanFallback() {
   return true;
 }
 
+const SORT_FIELDS = [
+  { id: "due", label: "Срок" },
+  { id: "priority", label: "Приоритет" },
+  { id: "project", label: "Раздел" },
+  { id: "amount", label: "Сумма" },
+];
+
+function loadTaskSort() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(SORT_KEY) || "null");
+    if (raw && SORT_FIELDS.some((f) => f.id === raw.field)) {
+      return { field: raw.field, dir: raw.dir === "desc" ? "desc" : "asc" };
+    }
+  } catch {
+    /* ignore */
+  }
+  return { field: "due", dir: "asc" };
+}
+
+function saveTaskSort() {
+  try {
+    localStorage.setItem(SORT_KEY, JSON.stringify(state.taskSort));
+  } catch {
+    /* ignore */
+  }
+}
+
 const state = {
   view: "today",
   token: localStorage.getItem(TOKEN_KEY) || "",
@@ -65,6 +93,7 @@ const state = {
   healthSelected: "chest",
   motion: { enterId: null, completeId: null, pulseId: null },
   financeYm: null,
+  taskSort: loadTaskSort(),
 };
 
 const SECTION_PANELS = {
@@ -76,11 +105,27 @@ const SECTION_PANELS = {
 
 const HEALTH_REGIONS = [
   { id: "head", label: "Голова" },
+  { id: "forehead", label: "Лоб" },
+  { id: "eyes", label: "Глаза" },
+  { id: "nose", label: "Нос" },
+  { id: "ears", label: "Уши" },
+  { id: "jaw", label: "Челюсть" },
+  { id: "teeth", label: "Зубы" },
+  { id: "neck", label: "Шея" },
+  { id: "shoulders", label: "Плечи" },
   { id: "chest", label: "Грудь" },
-  { id: "arms", label: "Руки" },
-  { id: "stomach", label: "Живот" },
   { id: "back", label: "Спина" },
+  { id: "stomach", label: "Живот" },
+  { id: "arms", label: "Руки" },
+  { id: "elbows", label: "Локти" },
+  { id: "wrists", label: "Запястья" },
+  { id: "hands", label: "Кисти" },
+  { id: "hips", label: "Таз" },
   { id: "legs", label: "Ноги" },
+  { id: "thighs", label: "Бёдра" },
+  { id: "knees", label: "Колени" },
+  { id: "calves", label: "Голени" },
+  { id: "feet", label: "Стопы" },
 ];
 
 const HEALTH_METRIC_FIELDS = [
@@ -473,6 +518,7 @@ function parseDateToken(text) {
   if (dmy) {
     const day = Number(dmy[1]);
     const month = Number(dmy[2]) - 1;
+    if (month < 0 || month > 11 || day < 1 || day > 31) return null;
     let year = dmy[3] ? Number(dmy[3]) : now.getFullYear();
     if (year < 100) year += 2000;
     return toIsoDate(new Date(year, month, day, 12, 0, 0, 0));
@@ -492,7 +538,6 @@ function parseDateToken(text) {
   }
   return null;
 }
-
 
 function parseRepeatToken(text) {
   const lower = text.toLowerCase().trim().replace(/\s+/g, " ");
@@ -517,6 +562,19 @@ function parseKindToken(text) {
   if (/^(?:идея|idea)$/.test(lower)) return "idea";
   if (/^(?:план|plan)$/.test(lower)) return "plan";
   return null;
+}
+
+function parseTimeToken(text) {
+  const m = String(text || "")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, " ")
+    .match(/^(?:в\s+)?(\d{1,2})[:.](\d{2})$/);
+  if (!m) return null;
+  const hour = Number(m[1]);
+  const minute = Number(m[2]);
+  if (hour > 23 || minute > 59) return null;
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 }
 
 function findProjectId(name) {
@@ -566,6 +624,29 @@ function collectTaskTokens(text) {
       type: "date",
       re: ruTokenRe("\\d{4}-\\d{2}-\\d{2}"),
       meta: (m) => ({ due: parseDateToken(m[0]) }),
+    },
+    {
+      type: "date",
+      // "в 15:30" / "в 15.30" / "в 9:00" — before bare HH.MM so "в" sticks to time
+      re: ruTokenRe("в\\s+\\d{1,2}[:.]\\d{2}"),
+      meta: (m) => ({ dueTime: parseTimeToken(m[0]) }),
+    },
+    {
+      type: "date",
+      // bare "15:30" / "9:00" (colon = always time)
+      re: ruTokenRe("\\d{1,2}:\\d{2}"),
+      meta: (m) => ({ dueTime: parseTimeToken(m[0]) }),
+    },
+    {
+      type: "date",
+      // bare "15.30" / "9.45" — only when .MM cannot be a month (MM > 12)
+      re: ruTokenRe("\\d{1,2}\\.\\d{2}"),
+      meta: (m) => {
+        const dueTime = parseTimeToken(m[0]);
+        if (!dueTime) return {};
+        if (Number(dueTime.slice(3, 5)) <= 12) return {};
+        return { dueTime };
+      },
     },
     {
       type: "date",
@@ -632,12 +713,14 @@ function collectTaskTokens(text) {
   const found = [];
   for (const rule of patterns) {
     for (const match of text.matchAll(rule.re)) {
+      const meta = rule.meta(match);
+      if (rule.type === "date" && !meta.due && !meta.dueTime) continue;
       found.push({
         type: rule.type,
         start: match.index,
         end: match.index + match[0].length,
         text: match[0],
-        meta: rule.meta(match),
+        meta,
       });
     }
   }
@@ -658,6 +741,7 @@ function mergeTaskMeta(tokens) {
   for (const token of tokens) {
     const m = token.meta || {};
     if (m.due) meta.due = m.due;
+    if (m.dueTime) meta.dueTime = m.dueTime;
     if (m.priority) meta.priority = m.priority;
     if (m.kind) meta.kind = m.kind;
     if (m.projectName) {
@@ -668,6 +752,14 @@ function mergeTaskMeta(tokens) {
     if (m.repeat) meta.repeat = m.repeat;
   }
   return meta;
+}
+
+function resolveParsedDue(meta, fallbackDate = "", fallbackTime = "") {
+  const datePart =
+    (meta.due && String(meta.due).slice(0, 10)) || fallbackDate || "";
+  const timePart = meta.dueTime || fallbackTime || "";
+  if (timePart) return mergeTaskDue(datePart || todayIso(), timePart);
+  return meta.due || fallbackDate || null;
 }
 
 function cleanTitleFromTokens(text, tokens) {
@@ -687,6 +779,8 @@ function highlightableTokens(tokens) {
     switch (token.type) {
       case "date":
         return !!m.due;
+      case "time":
+        return !!m.dueTime;
       case "priority":
         return m.priority != null;
       case "project":
@@ -699,6 +793,7 @@ function highlightableTokens(tokens) {
         return !!m.repeat;
       default: {
         const _exhaustive = token.type;
+        void _exhaustive;
         return false;
       }
     }
@@ -730,7 +825,13 @@ function parseTaskInput(text) {
 }
 
 function applyParsedMeta(meta) {
-  if (meta.due) $("task-due").value = meta.due;
+  const dueInput = $("task-due");
+  const timeInput = $("task-due-time");
+  if (meta.due) dueInput.value = String(meta.due).slice(0, 10);
+  if (meta.dueTime) {
+    if (timeInput) timeInput.value = meta.dueTime;
+    if (!dueInput.value) dueInput.value = todayIso();
+  }
   if (meta.priority) $("task-priority").value = String(meta.priority);
   if (meta.kind) $("task-kind").value = meta.kind;
   if (meta.repeat !== undefined && $("task-repeat")) {
@@ -944,9 +1045,9 @@ function updateTaskChips() {
   } else if (due) {
     $("chip-due-label").textContent = dueTime ? `${fmtShortDay(due)} ${dueTime}` : fmtShortDay(due);
   } else {
-    $("chip-due-label").textContent = "Срок";
+    $("chip-due-label").textContent = dueTime || "Срок";
   }
-  $("chip-due").classList.toggle("has-value", !!due || !!repeat || !!dueTime);
+  $("chip-due").classList.toggle("has-value", !!due || !!dueTime || !!repeat);
   document.querySelectorAll("#composer-repeat [data-set-repeat]").forEach((btn) => {
     btn.classList.toggle("selected", (btn.dataset.setRepeat || "") === repeat);
   });
@@ -1042,8 +1143,9 @@ function initTaskMetaChips() {
       const el = $(btn.dataset.clear);
       if (el) el.value = "";
       if (btn.dataset.clear === "task-due") {
-        if ($("task-repeat")) $("task-repeat").value = "";
+        if (el) delete el.dataset.dueTime;
         if ($("task-due-time")) $("task-due-time").value = "";
+        if ($("task-repeat")) $("task-repeat").value = "";
       }
       updateTaskChips();
       closeTaskPopovers();
@@ -1309,11 +1411,52 @@ async function renderFinancePanel() {
   `;
 }
 
+
+function workPayBlock(p) {
+  const budget = p.budget != null ? Number(p.budget) : null;
+  const paid = Number(p.paid_sum || 0);
+  const pct = budget && budget > 0 ? Math.min(100, Math.round((paid / budget) * 100)) : null;
+  const payments = Array.isArray(p.payments) ? p.payments : [];
+  const summary =
+    budget != null
+      ? `Получено ${escapeHtml(moneyPlain(paid))} из ${escapeHtml(moneyPlain(budget))}${pct != null ? ` (${pct}%)` : ""}`
+      : `Получено ${escapeHtml(moneyPlain(paid))}`;
+  const rows = payments.length
+    ? `<ul class="work-pay-list">${payments
+        .map(
+          (pay) => `
+      <li class="work-pay-row">
+        <span>${escapeHtml((pay.paid_at || "").slice(0, 10))}</span>
+        <span>${escapeHtml(pay.note || "")}</span>
+        <span class="amt">${escapeHtml(moneyPlain(pay.amount))}</span>
+        <button type="button" class="btn ghost small btn-del" data-work-pay-del="${pay.id}" title="Удалить платёж" aria-label="Удалить платёж">×</button>
+      </li>`,
+        )
+        .join("")}</ul>`
+    : `<p class="work-meta">Пока нет платежей</p>`;
+  return `
+    <div class="work-pay">
+      <div class="work-pay-summary">${summary}</div>
+      ${
+        pct != null
+          ? `<div class="work-pay-bar" aria-hidden="true"><span style="width:${pct}%"></span></div>`
+          : ""
+      }
+      ${rows}
+      <form class="work-pay-form" data-work-pay-form>
+        <label>Сумма <input name="amount" type="number" min="0.01" step="0.01" required placeholder="0" /></label>
+        <label>Дата <input name="paid_at" type="date" value="${escapeAttr(todayIso())}" /></label>
+        <button class="btn small" type="submit">+</button>
+        <label class="full">Комментарий <input name="note" type="text" placeholder="Аванс, этап…" /></label>
+      </form>
+    </div>`;
+}
+
 async function renderWorkPanel() {
   const items = await api("/api/work-projects");
   $("section-panel-inner").innerHTML = `
     <h2>Проекты</h2>
-    <p class="sp-sub">Рабочие проекты и статусы</p>
+    <p class="sp-sub">Рабочие проекты, оплаты и статусы</p>
     ${
       items.length
         ? items
@@ -1334,6 +1477,7 @@ async function renderWorkPanel() {
           ${p.budget != null ? ` · бюджет ${escapeHtml(moneyPlain(p.budget))}` : ""}
         </div>
         ${p.notes ? `<div class="work-meta">${escapeHtml(p.notes)}</div>` : ""}
+        ${workPayBlock(p)}
         <div class="sp-actions">
           <button type="button" class="btn ghost" data-work-status="active">В работе</button>
           <button type="button" class="btn ghost" data-work-status="paused">Пауза</button>
@@ -1366,15 +1510,40 @@ function bodySvg(body) {
     return `region${tone}${active}`;
   };
   return `
-  <svg class="body-svg" viewBox="0 0 120 220" role="img" aria-label="Тело">
-    <ellipse class="${cls("head")}" data-region="head" cx="60" cy="28" rx="22" ry="24"></ellipse>
-    <rect class="${cls("chest")}" data-region="chest" x="38" y="54" width="44" height="42" rx="12"></rect>
-    <rect class="${cls("arms")}" data-region="arms" x="12" y="58" width="18" height="58" rx="9"></rect>
-    <rect class="${cls("arms")}" data-region="arms" x="90" y="58" width="18" height="58" rx="9"></rect>
-    <rect class="${cls("stomach")}" data-region="stomach" x="40" y="98" width="40" height="34" rx="10"></rect>
-    <rect class="${cls("back")}" data-region="back" x="48" y="88" width="24" height="16" rx="6" opacity="0.85"></rect>
-    <rect class="${cls("legs")}" data-region="legs" x="40" y="134" width="16" height="70" rx="8"></rect>
-    <rect class="${cls("legs")}" data-region="legs" x="64" y="134" width="16" height="70" rx="8"></rect>
+  <svg class="body-svg" viewBox="0 0 140 280" role="img" aria-label="Тело">
+    <ellipse class="${cls("head")}" data-region="head" cx="70" cy="28" rx="20" ry="22"></ellipse>
+    <ellipse class="${cls("forehead")}" data-region="forehead" cx="70" cy="18" rx="14" ry="6"></ellipse>
+    <ellipse class="${cls("eyes")}" data-region="eyes" cx="62" cy="26" rx="4" ry="3"></ellipse>
+    <ellipse class="${cls("eyes")}" data-region="eyes" cx="78" cy="26" rx="4" ry="3"></ellipse>
+    <ellipse class="${cls("nose")}" data-region="nose" cx="70" cy="32" rx="3" ry="4"></ellipse>
+    <ellipse class="${cls("ears")}" data-region="ears" cx="48" cy="28" rx="4" ry="6"></ellipse>
+    <ellipse class="${cls("ears")}" data-region="ears" cx="92" cy="28" rx="4" ry="6"></ellipse>
+    <ellipse class="${cls("jaw")}" data-region="jaw" cx="70" cy="40" rx="12" ry="6"></ellipse>
+    <rect class="${cls("teeth")}" data-region="teeth" x="64" y="36" width="12" height="5" rx="2"></rect>
+    <rect class="${cls("neck")}" data-region="neck" x="62" y="46" width="16" height="14" rx="5"></rect>
+    <rect class="${cls("shoulders")}" data-region="shoulders" x="28" y="58" width="84" height="14" rx="7"></rect>
+    <rect class="${cls("chest")}" data-region="chest" x="46" y="70" width="48" height="36" rx="10"></rect>
+    <rect class="${cls("back")}" data-region="back" x="56" y="78" width="28" height="18" rx="6" opacity="0.9"></rect>
+    <rect class="${cls("stomach")}" data-region="stomach" x="48" y="106" width="44" height="30" rx="10"></rect>
+    <rect class="${cls("arms")}" data-region="arms" x="18" y="70" width="14" height="36" rx="7"></rect>
+    <rect class="${cls("arms")}" data-region="arms" x="108" y="70" width="14" height="36" rx="7"></rect>
+    <ellipse class="${cls("elbows")}" data-region="elbows" cx="25" cy="108" rx="7" ry="6"></ellipse>
+    <ellipse class="${cls("elbows")}" data-region="elbows" cx="115" cy="108" rx="7" ry="6"></ellipse>
+    <rect class="${cls("wrists")}" data-region="wrists" x="18" y="118" width="14" height="10" rx="4"></rect>
+    <rect class="${cls("wrists")}" data-region="wrists" x="108" y="118" width="14" height="10" rx="4"></rect>
+    <ellipse class="${cls("hands")}" data-region="hands" cx="25" cy="134" rx="8" ry="7"></ellipse>
+    <ellipse class="${cls("hands")}" data-region="hands" cx="115" cy="134" rx="8" ry="7"></ellipse>
+    <rect class="${cls("hips")}" data-region="hips" x="48" y="134" width="44" height="16" rx="7"></rect>
+    <rect class="${cls("legs")}" data-region="legs" x="50" y="148" width="16" height="18" rx="6"></rect>
+    <rect class="${cls("legs")}" data-region="legs" x="74" y="148" width="16" height="18" rx="6"></rect>
+    <rect class="${cls("thighs")}" data-region="thighs" x="50" y="164" width="16" height="28" rx="7"></rect>
+    <rect class="${cls("thighs")}" data-region="thighs" x="74" y="164" width="16" height="28" rx="7"></rect>
+    <ellipse class="${cls("knees")}" data-region="knees" cx="58" cy="196" rx="8" ry="7"></ellipse>
+    <ellipse class="${cls("knees")}" data-region="knees" cx="82" cy="196" rx="8" ry="7"></ellipse>
+    <rect class="${cls("calves")}" data-region="calves" x="50" y="202" width="16" height="36" rx="7"></rect>
+    <rect class="${cls("calves")}" data-region="calves" x="74" y="202" width="16" height="36" rx="7"></rect>
+    <ellipse class="${cls("feet")}" data-region="feet" cx="56" cy="246" rx="12" ry="7"></ellipse>
+    <ellipse class="${cls("feet")}" data-region="feet" cx="84" cy="246" rx="12" ry="7"></ellipse>
   </svg>`;
 }
 
@@ -1601,8 +1770,12 @@ function taskDueParts(task) {
 function mergeTaskDue(date, time) {
   if (!date) return null;
   if (time) {
-    const d = new Date(`${date}T${time}:00`);
-    return Number.isNaN(d.getTime()) ? date : d.toISOString();
+    const hm = String(time).trim();
+    if (!/^\d{1,2}:\d{2}$/.test(hm)) return date;
+    const [h, m] = hm.split(":");
+    const hh = String(Number(h)).padStart(2, "0");
+    if (Number(h) > 23 || Number(m) > 59) return date;
+    return `${date}T${hh}:${m}:00`;
   }
   return date;
 }
@@ -1796,10 +1969,36 @@ function formatDayHeader(dayKey) {
 }
 
 function sortTasksInDayGroup(tasks) {
+  const { field, dir } = state.taskSort || { field: "due", dir: "asc" };
+  const mul = dir === "desc" ? -1 : 1;
+  const projectName = (t) => {
+    const p = state.projects.find((x) => x.id === t.project_id);
+    return (p?.name || "").toLowerCase();
+  };
   return [...tasks].sort((a, b) => {
-    const ta = taskTimeSortKey(a);
-    const tb = taskTimeSortKey(b);
-    if (ta !== tb) return ta - tb;
+    let cmp = 0;
+    switch (field) {
+      case "priority":
+        cmp = (a.priority || 4) - (b.priority || 4);
+        break;
+      case "project":
+        cmp = projectName(a).localeCompare(projectName(b), "ru");
+        break;
+      case "amount": {
+        const ca = a.cost == null ? -Infinity : Number(a.cost);
+        const cb = b.cost == null ? -Infinity : Number(b.cost);
+        cmp = ca - cb;
+        break;
+      }
+      case "due":
+      default: {
+        const ta = taskTimeSortKey(a);
+        const tb = taskTimeSortKey(b);
+        cmp = ta - tb;
+        break;
+      }
+    }
+    if (cmp !== 0) return cmp * mul;
     if (a.priority !== b.priority) return a.priority - b.priority;
     return b.id - a.id;
   });
@@ -1823,12 +2022,117 @@ function groupTasksByDay(tasks) {
   }));
 }
 
+
+function syncTaskSortBar() {
+  const bar = $("task-sort-bar");
+  if (!bar) return;
+  const { field, dir } = state.taskSort || { field: "due", dir: "asc" };
+  bar.querySelectorAll("[data-sort-field]").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.sortField === field);
+  });
+  const dirBtn = $("task-sort-dir");
+  if (dirBtn) {
+    dirBtn.textContent = dir === "desc" ? "↓" : "↑";
+    dirBtn.setAttribute("aria-label", dir === "desc" ? "По убыванию" : "По возрастанию");
+  }
+}
+
+function initTaskSortBar() {
+  const bar = $("task-sort-bar");
+  if (!bar || bar.dataset.bound) return;
+  bar.dataset.bound = "1";
+  bar.addEventListener("click", async (e) => {
+    const fieldBtn = e.target.closest("[data-sort-field]");
+    if (fieldBtn) {
+      const field = fieldBtn.dataset.sortField;
+      if (state.taskSort.field === field) {
+        state.taskSort.dir = state.taskSort.dir === "asc" ? "desc" : "asc";
+      } else {
+        state.taskSort.field = field;
+        state.taskSort.dir = field === "priority" ? "asc" : "asc";
+      }
+      saveTaskSort();
+      syncTaskSortBar();
+      if (["today", "project"].includes(state.view)) await loadTasks(state.view);
+      return;
+    }
+    if (e.target.closest("[data-sort-dir]")) {
+      state.taskSort.dir = state.taskSort.dir === "asc" ? "desc" : "asc";
+      saveTaskSort();
+      syncTaskSortBar();
+      if (["today", "project"].includes(state.view)) await loadTasks(state.view);
+    }
+  });
+  syncTaskSortBar();
+}
+
+function startInlineTitleEdit(titleEl) {
+  const item = titleEl.closest(".item");
+  if (!item || item.querySelector(".item-title-input")) return;
+  const taskId = Number(item.dataset.id);
+  const original = titleEl.textContent;
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "item-title-input";
+  input.value = original;
+  titleEl.replaceWith(input);
+  input.focus();
+  input.select();
+  let saved = false;
+  const restore = (text) => {
+    const div = document.createElement("div");
+    div.className = titleEl.className;
+    div.textContent = text;
+    input.replaceWith(div);
+  };
+  const cancel = () => {
+    if (saved) return;
+    saved = true;
+    restore(original);
+  };
+  const save = async () => {
+    if (saved) return;
+    const next = input.value.trim();
+    if (!next || next === original) {
+      cancel();
+      return;
+    }
+    saved = true;
+    restore(next);
+    try {
+      await patchTask(taskId, { title: next });
+    } catch (err) {
+      alert(err.message || "Не удалось сохранить");
+      await refresh();
+    }
+  };
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      input.blur();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      saved = true;
+      restore(original);
+    }
+  });
+  input.addEventListener("blur", () => {
+    void save();
+  });
+}
+
 async function loadTasks(view) {
   let url = `/api/tasks?view=${view === "project" ? "all" : view}`;
   if (view === "project" && state.projectId) url += `&project_id=${state.projectId}`;
   const tasks = await api(url);
   const root = $("task-list");
+  const sortBar = $("task-sort-bar");
   const projectMap = Object.fromEntries(state.projects.map((p) => [p.id, p.name]));
+  if (sortBar) {
+    const show = ["today", "project"].includes(view);
+    sortBar.hidden = !show;
+    if (show) syncTaskSortBar();
+  }
   if (!tasks.length) {
     root.innerHTML = `<div class="empty">${emptyHints[view] || "Пусто."}</div>`;
     return;
@@ -2271,7 +2575,11 @@ $("task-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const parsed = parseTaskInput($("task-title").value);
   const kind = parsed.meta.kind || $("task-kind").value;
-  let due = parsed.meta.due || $("task-due").value || null;
+  let due = resolveParsedDue(
+    parsed.meta,
+    $("task-due").value || "",
+    $("task-due-time")?.value || "",
+  );
   if (kind === "task" && !due && state.view === "today") due = todayIso();
   const remind = $("task-remind").value ? new Date($("task-remind").value).toISOString() : null;
   const priority = parsed.meta.priority || Number($("task-priority").value);
@@ -2305,6 +2613,8 @@ $("task-form").addEventListener("submit", async (e) => {
   if (created?.id) state.motion.enterId = created.id;
 
   $("task-title").value = "";
+  if ($("task-due-time")) $("task-due-time").value = "";
+  if ($("task-due")) delete $("task-due").dataset.dueTime;
   $("task-location").value = "";
   $("task-cost").value = "";
   $("task-cost-type-value").value = "expense";
@@ -2327,6 +2637,12 @@ $("task-list").addEventListener("mousedown", (e) => {
 });
 
 $("task-list").addEventListener("click", async (e) => {
+  const titleEl = e.target.closest(".item-title");
+  if (titleEl && !titleEl.classList.contains("done-title") && !e.target.closest(".task-attrs, .item-actions, .check")) {
+    e.preventDefault();
+    startInlineTitleEdit(titleEl);
+    return;
+  }
   const attrsRoot = e.target.closest(".task-attrs");
   if (attrsRoot) {
     const patchBtn = e.target.closest("[data-task-patch]");
@@ -2519,6 +2835,27 @@ $("workout-list").addEventListener("click", async (e) => {
 });
 
 $("section-panel").addEventListener("submit", async (e) => {
+  const payForm = e.target.closest("[data-work-pay-form]");
+  if (payForm) {
+    e.preventDefault();
+    const workItem = payForm.closest("[data-work-id]");
+    if (!workItem) return;
+    const id = Number(workItem.dataset.workId);
+    const fd = new FormData(payForm);
+    const amount = Number(fd.get("amount"));
+    if (!amount || amount <= 0) return;
+    await api(`/api/work-projects/${id}/payments`, {
+      method: "POST",
+      body: JSON.stringify({
+        amount,
+        paid_at: String(fd.get("paid_at") || todayIso()),
+        note: String(fd.get("note") || "").trim(),
+      }),
+    });
+    await loadWorkProjectsCache();
+    await renderWorkPanel();
+    return;
+  }
   if (e.target.id === "work-form") {
     e.preventDefault();
     const fd = new FormData(e.target);
@@ -2608,6 +2945,16 @@ $("section-panel").addEventListener("click", async (e) => {
   const workItem = e.target.closest("[data-work-id]");
   if (workItem) {
     const id = Number(workItem.dataset.workId);
+    const payDel = e.target.closest("[data-work-pay-del]");
+    if (payDel) {
+      e.preventDefault();
+      e.stopPropagation();
+      const payId = Number(payDel.dataset.workPayDel);
+      await api(`/api/work-projects/${id}/payments/${payId}`, { method: "DELETE" });
+      await loadWorkProjectsCache();
+      await renderWorkPanel();
+      return;
+    }
     if (e.target.closest("[data-work-delete]")) {
       e.preventDefault();
       e.stopPropagation();
@@ -2705,6 +3052,7 @@ async function boot() {
   $("wo-started").value = localInputValue();
   initTaskMetaChips();
   initTaskTitleHighlight();
+  initTaskSortBar();
   initSidebarToggle();
   hideTaskForm();
   hideDesktopDownloads();

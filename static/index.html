@@ -52,8 +52,8 @@
         });
     })();
   </script>
-  <link rel="stylesheet" href="assets/styles.css?v=38" />
-  <script src="assets/pwa.js?v=5"></script>
+  <link rel="stylesheet" href="assets/styles.css?v=39" />
+  <script src="assets/pwa.js?v=6"></script>
 </head>
 <body>
   <div id="login" class="login-wrap">
@@ -163,6 +163,7 @@
                   </button>
                   <div class="chip-menu chip-menu-wide hidden" id="pop-due" role="dialog" aria-label="Срок">
                     <input type="date" id="task-due" />
+                    <input type="time" id="task-due-time" title="Время" />
                     <div class="due-quick">
                       <button type="button" class="chip-option" data-composer-quick-due="tomorrow">Завтра</button>
                       <button type="button" class="chip-option" data-composer-quick-due="weekend">На выходных</button>
@@ -244,6 +245,14 @@
             <button class="btn" type="submit">Добавить</button>
           </div>
         </form>
+        <div class="task-sort-bar" id="task-sort-bar" hidden>
+          <span class="label">Сорт.</span>
+          <button type="button" data-sort-field="due">Срок</button>
+          <button type="button" data-sort-field="priority">Приоритет</button>
+          <button type="button" data-sort-field="project">Раздел</button>
+          <button type="button" data-sort-field="amount">Сумма</button>
+          <button type="button" class="sort-dir" id="task-sort-dir" data-sort-dir title="Направление">↑</button>
+        </div>
         <div class="list" id="task-list"></div>
       </section>
 
@@ -294,6 +303,6 @@
   </div>
 
   <script src="assets/pwa-install.js?v=3"></script>
-  <script src="assets/app.js?v=54"></script>
+  <script src="assets/app.js?v=55"></script>
 </body>
 </html>
