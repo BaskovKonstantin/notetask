@@ -841,6 +841,16 @@ button, input, select, textarea {
   border-radius: 8px;
 }
 .chip-clear:hover { background: rgba(0, 0, 0, 0.04); color: var(--ink); }
+.chip-clear-due {
+  margin-top: 2px;
+  margin-bottom: 4px;
+  color: #9b2c2c;
+  font-weight: 550;
+}
+.chip-clear-due:hover {
+  background: rgba(155, 44, 44, 0.08);
+  color: #9b2c2c;
+}
 
 .cost-type-toggle {
   display: grid;

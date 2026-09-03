@@ -935,15 +935,18 @@ function updateTaskChips() {
   });
 
   const due = $("task-due").value;
+  const dueTime = $("task-due-time")?.value || "";
   const repeat = $("task-repeat")?.value || "";
   if (repeat) {
     $("chip-due-label").textContent = due
-      ? `${fmtShortDay(due)} · ${repeatLabel(repeat)}`
+      ? `${fmtShortDay(due)}${dueTime ? ` ${dueTime}` : ""} · ${repeatLabel(repeat)}`
       : repeatLabel(repeat);
+  } else if (due) {
+    $("chip-due-label").textContent = dueTime ? `${fmtShortDay(due)} ${dueTime}` : fmtShortDay(due);
   } else {
-    $("chip-due-label").textContent = due ? fmtShortDay(due) : "Срок";
+    $("chip-due-label").textContent = "Срок";
   }
-  $("chip-due").classList.toggle("has-value", !!due || !!repeat);
+  $("chip-due").classList.toggle("has-value", !!due || !!repeat || !!dueTime);
   document.querySelectorAll("#composer-repeat [data-set-repeat]").forEach((btn) => {
     btn.classList.toggle("selected", (btn.dataset.setRepeat || "") === repeat);
   });
@@ -1038,11 +1041,16 @@ function initTaskMetaChips() {
     btn.addEventListener("click", () => {
       const el = $(btn.dataset.clear);
       if (el) el.value = "";
-      if (btn.dataset.clear === "task-due" && $("task-repeat")) $("task-repeat").value = "";
+      if (btn.dataset.clear === "task-due") {
+        if ($("task-repeat")) $("task-repeat").value = "";
+        if ($("task-due-time")) $("task-due-time").value = "";
+      }
       updateTaskChips();
       closeTaskPopovers();
     });
   });
+
+  $("task-due-time")?.addEventListener("change", updateTaskChips);
 
   $("composer-repeat")?.addEventListener("click", (e) => {
     const btn = e.target.closest("[data-set-repeat]");
@@ -1698,9 +1706,13 @@ function renderTaskAttrs(t, projectMap) {
         <div class="chip-menu chip-menu-wide hidden" role="dialog" aria-label="Срок и время">
           <input type="date" data-task-field="due-date" value="${escapeAttr(due.date)}" />
           <input type="time" data-task-field="due-time" value="${escapeAttr(due.time)}" />
+          ${
+            hasDue || hasRepeat
+              ? `<button type="button" class="chip-clear chip-clear-due" data-task-clear-due>Без срока</button>`
+              : ""
+          }
           ${quickDueButtonsHtml()}
           ${repeatButtonsHtml(repeatRule)}
-          <button type="button" class="chip-clear" data-task-clear-due>Без срока</button>
         </div>
       </div>
       <div class="chip-popover">
