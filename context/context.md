@@ -1,6 +1,13 @@
 # NoteTask / todo.baski.pro — context
 
-Updated: 2026-09-03 (~22:25 MSK)
+Updated: 2026-09-03 (~22:45 MSK)
+
+## Health hair region 2026-09-03 (~22:45 MSK)
+
+- Карта тела: зона `forehead` / «Лоб» заменена на `hair` / «Волосы» (SVG ellipse выше головы).
+- Backend `HEALTH_REGION_IDS`: `hair` вместо `forehead`.
+- DB migrate: `health_body` + `health_body_notes` `forehead` → `hair`.
+- Cache: `app.js?v=63`, SW `notetask-v16`. Playwright: клик → label «Волосы».
 
 ## Health unknown status + notes 2026-09-03 (~22:25 MSK)
 
