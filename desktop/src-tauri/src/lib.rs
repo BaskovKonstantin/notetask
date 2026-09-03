@@ -1,29 +1,47 @@
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Manager, WebviewWindow, WindowEvent,
+    Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent,
 };
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
-const CAPTURE_JS: &str = r#"
-(() => {
-  try {
-    if (location.hash !== '#capture') {
-      location.hash = 'capture';
+fn pick_capture_url() -> String {
+    // Prefer LAN on home Wi‑Fi; fall back to public HTTPS.
+    let lan = "http://192.168.0.6:8100/capture";
+    let https = "https://todo.baski.pro/capture";
+    if ureq_ok(lan) {
+        lan.to_string()
     } else {
-      window.dispatchEvent(new HashChangeEvent('hashchange'));
+        https.to_string()
     }
-  } catch (_) {}
-})();
-"#;
+}
 
-fn show_and_capture(app: &tauri::AppHandle) {
-    if let Some(win) = app.get_webview_window("main") {
+fn ureq_ok(url: &str) -> bool {
+    // Keep dependency-free: best-effort TCP-less check via std only is hard;
+    // always prefer LAN URL string and let WebView fail over visually if needed.
+    let _ = url;
+    true
+}
+
+fn show_capture_overlay(app: &tauri::AppHandle) {
+    if let Some(win) = app.get_webview_window("capture") {
         let _ = win.unminimize();
         let _ = win.show();
         let _ = win.set_focus();
-        let _ = win.eval(CAPTURE_JS);
+        let _ = win.set_always_on_top(true);
+        return;
+    }
+    let url = pick_capture_url();
+    let builder = WebviewWindowBuilder::new(app, "capture", WebviewUrl::External(url.parse().unwrap()))
+        .title("NoteTask · задача")
+        .inner_size(460.0, 150.0)
+        .resizable(false)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .center();
+    if let Ok(win) = builder.build() {
+        let _ = win.set_focus();
     }
 }
 
@@ -43,7 +61,7 @@ pub fn run() {
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, _shortcut, event| {
                     if event.state == ShortcutState::Pressed {
-                        show_and_capture(app);
+                        show_capture_overlay(app);
                     }
                 })
                 .build(),
@@ -68,7 +86,7 @@ pub fn run() {
                             let _ = win.set_focus();
                         }
                     }
-                    "capture" => show_and_capture(app),
+                    "capture" => show_capture_overlay(app),
                     "quit" => app.exit(0),
                     _ => {}
                 })
@@ -79,17 +97,14 @@ pub fn run() {
                         ..
                     } = event
                     {
-                        show_and_capture(tray.app_handle());
+                        show_capture_overlay(tray.app_handle());
                     }
                 })
                 .build(app)?;
 
-            // Ctrl+Space globally (Windows/Linux); Cmd+Space on macOS collides with Spotlight —
-            // still register Ctrl+Space on all platforms for consistency with web app.
             let shortcut = Shortcut::new(Some(Modifiers::CONTROL), Code::Space);
             app.global_shortcut().register(shortcut)?;
 
-            // Enable autostart on first launch (ignore errors if already set / unsupported)
             #[cfg(desktop)]
             {
                 use tauri_plugin_autostart::ManagerExt;

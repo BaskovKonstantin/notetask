@@ -3,18 +3,18 @@ services:
     build: .
     container_name: notetask
     restart: unless-stopped
+    # Host network: Caddy → 127.0.0.1:8100, LAN :8100, Telegram via mihomo :7890
+    network_mode: host
     env_file:
       - .env
     environment:
       NOTEBOOK_DB: /data/notetask.db
       NOTEBOOK_DATA: /data
       NOTEBOOK_PORT: "8100"
+      TELEGRAM_PROXY: ${TELEGRAM_PROXY:-http://127.0.0.1:7890}
+      NOTEBOOK_TZ: Europe/Moscow
     volumes:
       - ./data:/data
       - ./static:/app/static:ro
       - ./app:/app/app:ro
       - ./scripts:/app/scripts:ro
-    ports:
-      # localhost — Caddy HTTPS; LAN IP — обход hairpin/DoH (http://192.168.0.6:8100/)
-      - "127.0.0.1:8100:8100"
-      - "192.168.0.6:8100:8100"

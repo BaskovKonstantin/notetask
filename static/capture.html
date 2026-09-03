@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NoteTask — быстрый ввод</title>
+  <script>
+    (function () {
+      var p = location.pathname;
+      var base = (p === "/todo" || p.startsWith("/todo/")) ? "/todo/" : "/";
+      document.write('<base href="' + base + '" id="app-base" />');
+      window.NOTETASK_BASE = base === "/todo/" ? "/todo" : "";
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/capture.css?v=1" />
+</head>
+<body class="capture-body">
+  <div id="capture-login" class="capture-login hidden">
+    <form id="capture-login-form">
+      <input type="password" id="capture-password" placeholder="Пароль" autocomplete="current-password" required />
+      <button type="submit" class="btn">Войти</button>
+    </form>
+  </div>
+  <form id="capture-form" class="capture-form hidden">
+    <input type="text" id="capture-title" placeholder="Новая задача… p1 завтра через 15 минут" autocomplete="off" autofocus />
+    <button type="submit" class="btn" id="capture-submit">+</button>
+  </form>
+  <p id="capture-hint" class="capture-hint">Enter — добавить · Esc — закрыть</p>
+  <p id="capture-status" class="capture-status hidden"></p>
+  <script src="assets/capture.js?v=1"></script>
+</body>
+</html>

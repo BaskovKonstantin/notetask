@@ -11,8 +11,8 @@ internal static class Program
 {
     const string AppUrl = "https://todo.baski.pro/?client=desktop";
     const string LanUrl = "http://192.168.0.6:8100/?client=desktop";
-    const string CaptureUrl = "https://todo.baski.pro/?client=desktop#capture";
-    const string LanCaptureUrl = "http://192.168.0.6:8100/?client=desktop#capture";
+    const string CaptureOverlayUrl = "https://todo.baski.pro/capture";
+    const string LanCaptureOverlayUrl = "http://192.168.0.6:8100/capture";
     const string LanIp = "192.168.0.6";
     const string HostName = "todo.baski.pro";
     const int VK_SPACE = 0x20;
@@ -27,8 +27,13 @@ internal static class Program
         EnsureAutostart();
         EnsureLanHostsEntry();
 
-        var capture = args.Any(a => a == "--capture");
-        var startUrl = PickStartUrl(capture);
+        if (args.Any(a => a == "--overlay" || a == "--capture"))
+        {
+            RunOverlay();
+            return;
+        }
+
+        var startUrl = PickStartUrl(overlay: false);
         var window = new PhotinoWindow()
             .SetTitle("NoteTask")
             .SetUseOsDefaultSize(false)
@@ -41,21 +46,34 @@ internal static class Program
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 NoteTaskDesktop/1.0")
             .Load(startUrl);
 
-        StartGlobalCaptureWatcher(window);
+        StartGlobalCaptureWatcher();
         window.WaitForClose();
     }
 
-    /// <summary>
-    /// Prefer public HTTPS. If hairpin/DoH breaks it but LAN is up, use :8100.
-    /// </summary>
-    private static string PickStartUrl(bool capture)
+    private static void RunOverlay()
     {
-        // Prefer LAN on home Wi‑Fi — skips hairpin/DoH entirely
+        var url = PickStartUrl(overlay: true);
+        var window = new PhotinoWindow()
+            .SetTitle("NoteTask · задача")
+            .SetUseOsDefaultSize(false)
+            .SetWidth(460)
+            .SetHeight(150)
+            .SetResizable(false)
+            .SetTopMost(true)
+            .Center()
+            .SetUserAgent(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 NoteTaskDesktop/1.0")
+            .Load(url);
+        window.WaitForClose();
+    }
+
+    private static string PickStartUrl(bool overlay)
+    {
         if (CanReach("http://192.168.0.6:8100/api/health", 1200))
-            return capture ? LanCaptureUrl : LanUrl;
+            return overlay ? LanCaptureOverlayUrl : LanUrl;
         if (CanReach("https://todo.baski.pro/api/health", 4000))
-            return capture ? CaptureUrl : AppUrl;
-        return capture ? LanCaptureUrl : LanUrl;
+            return overlay ? CaptureOverlayUrl : AppUrl;
+        return overlay ? LanCaptureOverlayUrl : LanUrl;
     }
 
     private static bool CanReach(string url, int timeoutMs)
@@ -72,11 +90,6 @@ internal static class Program
         }
     }
 
-    /// <summary>
-    /// Home Wi‑Fi has no NAT hairpin to the public IP. Split-DNS (dnsmasq) maps
-    /// todo.baski.pro → LAN IP; if Windows uses 8.8.8.8, write a hosts line so the
-    /// domain still hits the same server (Caddy + LE cert), never a raw :8100 URL.
-    /// </summary>
     private static void EnsureLanHostsEntry()
     {
         try
@@ -117,7 +130,7 @@ internal static class Program
         }
     }
 
-    private static void StartGlobalCaptureWatcher(PhotinoWindow window)
+    private static void StartGlobalCaptureWatcher()
     {
         var cts = new CancellationTokenSource();
         AppDomain.CurrentDomain.ProcessExit += (_, _) => cts.Cancel();
@@ -134,18 +147,7 @@ internal static class Program
                     var down = ctrl && space;
                     if (down && !wasDown)
                     {
-                        window.Invoke(() =>
-                        {
-                            try
-                            {
-                                window.Load(PickStartUrl(capture: true));
-                                window.SetMinimized(false);
-                            }
-                            catch
-                            {
-                                /* ignore */
-                            }
-                        });
+                        LaunchOverlayProcess();
                     }
                     wasDown = down;
                 }
@@ -156,6 +158,26 @@ internal static class Program
                 await Task.Delay(80, cts.Token).ConfigureAwait(false);
             }
         }, cts.Token);
+    }
+
+    private static void LaunchOverlayProcess()
+    {
+        try
+        {
+            var exe = Environment.ProcessPath;
+            if (string.IsNullOrEmpty(exe)) return;
+            Process.Start(
+                new ProcessStartInfo
+                {
+                    FileName = exe,
+                    Arguments = "--overlay",
+                    UseShellExecute = false,
+                });
+        }
+        catch
+        {
+            /* ignore */
+        }
     }
 
     private static void EnsureAutostart()
@@ -169,7 +191,6 @@ internal static class Program
             var lnk = Path.Combine(startup, "NoteTask.lnk");
             if (File.Exists(lnk)) return;
 
-            // Minimal .lnk via PowerShell (no COM ref required at compile time)
             var ps =
                 "$s=(New-Object -ComObject WScript.Shell).CreateShortcut('"
                 + lnk.Replace("'", "''")

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -26,6 +27,7 @@ from .db import (
     row_to_dict,
     utcnow,
 )
+from .notify import notify_loop, send_telegram
 
 STATIC = Path(__file__).resolve().parents[1] / "static"
 DOWNLOADS_DIR = DATA_DIR / "downloads"
@@ -57,7 +59,13 @@ async def lifespan(app: FastAPI):
     await db.execute("DELETE FROM action_log WHERE at < ?", (cutoff,))
     await db.commit()
     await db.close()
-    yield
+    stop = asyncio.Event()
+    task = asyncio.create_task(notify_loop(stop))
+    try:
+        yield
+    finally:
+        stop.set()
+        await task
 
 
 app = FastAPI(title="NoteTask", lifespan=lifespan)
@@ -341,6 +349,66 @@ async def fetch_workout(db: aiosqlite.Connection, session_id: int) -> dict[str, 
 @app.get("/api/health")
 async def health():
     return {"ok": True, "service": "notetask"}
+
+
+@app.get("/api/notifications")
+async def list_notifications(
+    unread: int = 0,
+    db: aiosqlite.Connection = Depends(get_db),
+    _: dict = Depends(require_auth),
+):
+    if unread:
+        cur = await db.execute(
+            """
+            SELECT * FROM app_notifications
+            WHERE read_at IS NULL
+            ORDER BY id DESC
+            LIMIT 50
+            """
+        )
+    else:
+        cur = await db.execute(
+            "SELECT * FROM app_notifications ORDER BY id DESC LIMIT 50"
+        )
+    return [row_to_dict(r) for r in await cur.fetchall()]
+
+
+@app.post("/api/notifications/{item_id}/read")
+async def mark_notification_read(
+    item_id: int,
+    db: aiosqlite.Connection = Depends(get_db),
+    _: dict = Depends(require_auth),
+):
+    await db.execute(
+        "UPDATE app_notifications SET read_at=? WHERE id=? AND read_at IS NULL",
+        (utcnow(), item_id),
+    )
+    await db.commit()
+    return {"ok": True}
+
+
+@app.post("/api/notifications/read-all")
+async def mark_all_notifications_read(
+    db: aiosqlite.Connection = Depends(get_db),
+    _: dict = Depends(require_auth),
+):
+    await db.execute(
+        "UPDATE app_notifications SET read_at=? WHERE read_at IS NULL",
+        (utcnow(),),
+    )
+    await db.commit()
+    return {"ok": True}
+
+
+@app.post("/api/notifications/test")
+async def test_notification(_: dict = Depends(require_auth)):
+    ok = await asyncio.to_thread(
+        send_telegram,
+        "NoteTask: тестовое уведомление. Канал Telegram работает.",
+    )
+    if not ok:
+        raise HTTPException(502, "Telegram send failed")
+    return {"ok": True}
 
 
 @app.post("/api/login")
@@ -1619,6 +1687,14 @@ async def backup(db: aiosqlite.Connection = Depends(get_db), _: dict = Depends(r
 @app.get("/widget")
 async def widget_page():
     return FileResponse(STATIC / "widget.html")
+
+
+@app.get("/capture")
+async def capture_page():
+    return FileResponse(
+        STATIC / "capture.html",
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate", "Pragma": "no-cache"},
+    )
 
 
 def _download_entries() -> list[dict[str, Any]]:

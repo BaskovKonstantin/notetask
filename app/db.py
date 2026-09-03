@@ -149,6 +149,25 @@ CREATE TABLE IF NOT EXISTS work_project_payments (
   note TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS notification_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind TEXT NOT NULL,
+  dedupe_key TEXT NOT NULL,
+  task_id INTEGER,
+  sent_at TEXT NOT NULL,
+  UNIQUE(kind, dedupe_key)
+);
+
+CREATE TABLE IF NOT EXISTS app_notifications (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  created_at TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  task_id INTEGER,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL DEFAULT '',
+  read_at TEXT
+);
 """
 
 
@@ -240,6 +259,23 @@ async def migrate(db: aiosqlite.Connection) -> None:
         );
         CREATE INDEX IF NOT EXISTS idx_work_project_payments_project
           ON work_project_payments(work_project_id);
+        CREATE TABLE IF NOT EXISTS notification_log (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          kind TEXT NOT NULL,
+          dedupe_key TEXT NOT NULL,
+          task_id INTEGER,
+          sent_at TEXT NOT NULL,
+          UNIQUE(kind, dedupe_key)
+        );
+        CREATE TABLE IF NOT EXISTS app_notifications (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          created_at TEXT NOT NULL,
+          kind TEXT NOT NULL,
+          task_id INTEGER,
+          title TEXT NOT NULL,
+          body TEXT NOT NULL DEFAULT '',
+          read_at TEXT
+        );
         """
     )
 

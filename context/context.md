@@ -2,6 +2,18 @@
 
 Updated: 2026-09-03 (~15:00 MSK)
 
+## Stage 2 partial 2026-09-03 (~15:45 MSK)
+
+Shipped:
+- Notify worker (`app/notify.py`): remind_at / due / evening overdue digest → `app_notifications` + Telegram
+- Telegram via mihomo `TELEGRAM_PROXY=http://127.0.0.1:7890`; compose `network_mode: host`
+- NLP remind in composer: `через 15 минут`, `за 1 час`, `напомни в 15:00`
+- Browser Notification poll every 45s
+- `/capture` compact overlay page; Photino `--overlay` + Ctrl+Space launches overlay process; Tauri capture window
+- Smoke: remind task → in-app notification id=1 + Telegram test OK
+
+Pending: rebuild Windows `.exe` / Tauri on Windows machine; rotate exposed bot token.
+
 ## Stage 1 shipped 2026-09-03 (~15:00 MSK) — Approach 1
 
 Live on `http://127.0.0.1:8100` (docker rebuilt). Cache: `styles.css?v=39`, `app.js?v=55`.

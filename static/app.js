@@ -591,6 +591,31 @@ function findProjectId(name) {
 function collectTaskTokens(text) {
   const patterns = [
     {
+      type: "remind",
+      re: ruTokenRe("через\\s+\\d+\\s*(?:мин(?:ут[уы]?)?|м|час(?:а|ов)?|ч)"),
+      meta: (m) => parseRemindToken(m[0]),
+    },
+    {
+      type: "remind",
+      re: ruTokenRe("за\\s+\\d+\\s*(?:мин(?:ут[уы]?)?|м|час(?:а|ов)?|ч)"),
+      meta: (m) => parseRemindToken(m[0]),
+    },
+    {
+      type: "remind",
+      re: ruTokenRe("напомни\\s+завтра\\s+в\\s+\\d{1,2}(?:[:.]\\d{2})?"),
+      meta: (m) => parseRemindToken(m[0]),
+    },
+    {
+      type: "remind",
+      re: ruTokenRe("напомни\\s+в\\s+\\d{1,2}(?:[:.]\\d{2})?"),
+      meta: (m) => parseRemindToken(m[0]),
+    },
+    {
+      type: "remind",
+      re: ruTokenRe("напомни\\s+\\d{1,2}[:.]\\d{2}"),
+      meta: (m) => parseRemindToken(m[0]),
+    },
+    {
       type: "date",
       re: ruTokenRe("сегодня|today|завтра|tomorrow|послезавтра"),
       meta: (m) => ({ due: parseDateToken(m[0]) }),
@@ -715,6 +740,7 @@ function collectTaskTokens(text) {
     for (const match of text.matchAll(rule.re)) {
       const meta = rule.meta(match);
       if (rule.type === "date" && !meta.due && !meta.dueTime) continue;
+      if (rule.type === "remind" && !meta.remindAt && meta.remindBeforeMinutes == null) continue;
       found.push({
         type: rule.type,
         start: match.index,
@@ -750,6 +776,8 @@ function mergeTaskMeta(tokens) {
     }
     if (m.label) meta.labels.push(m.label);
     if (m.repeat) meta.repeat = m.repeat;
+    if (m.remindAt) meta.remindAt = m.remindAt;
+    if (m.remindBeforeMinutes != null) meta.remindBeforeMinutes = m.remindBeforeMinutes;
   }
   return meta;
 }
@@ -791,6 +819,8 @@ function highlightableTokens(tokens) {
         return !!m.kind;
       case "repeat":
         return !!m.repeat;
+      case "remind":
+        return !!m.remindAt || m.remindBeforeMinutes != null;
       default: {
         const _exhaustive = token.type;
         void _exhaustive;
@@ -837,6 +867,21 @@ function applyParsedMeta(meta) {
   if (meta.repeat !== undefined && $("task-repeat")) {
     $("task-repeat").value = meta.repeat || "";
     if (meta.repeat && !$("task-due").value) $("task-due").value = todayIso();
+  }
+  const remindInput = $("task-remind");
+  if (remindInput) {
+    if (meta.remindAt) {
+      remindInput.value = meta.remindAt;
+    } else if (meta.remindBeforeMinutes != null) {
+      const dueIso = resolveParsedDue(meta, dueInput.value, timeInput?.value || "");
+      if (dueIso) {
+        const dueDt = new Date(dueIso);
+        if (!Number.isNaN(dueDt.getTime())) {
+          dueDt.setMinutes(dueDt.getMinutes() - Number(meta.remindBeforeMinutes));
+          remindInput.value = localInputValue(dueDt);
+        }
+      }
+    }
   }
   updateTaskChips();
 }
@@ -2493,6 +2538,48 @@ function localInputValue(dt = new Date()) {
   return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
 }
 
+function parseRemindToken(raw) {
+  const lower = String(raw || "").toLowerCase().replace(/\s+/g, " ").trim();
+  const now = new Date();
+
+  let m = lower.match(/^через\s+(\d+)\s*(?:мин(?:ут[уы]?)?|м)$/);
+  if (m) {
+    const dt = new Date(now.getTime() + Number(m[1]) * 60_000);
+    return { remindAt: localInputValue(dt) };
+  }
+  m = lower.match(/^через\s+(\d+)\s*(?:час(?:а|ов)?|ч)$/);
+  if (m) {
+    const dt = new Date(now.getTime() + Number(m[1]) * 3_600_000);
+    return { remindAt: localInputValue(dt) };
+  }
+  m = lower.match(/^за\s+(\d+)\s*(?:мин(?:ут[уы]?)?|м)$/);
+  if (m) return { remindBeforeMinutes: Number(m[1]) };
+  m = lower.match(/^за\s+(\d+)\s*(?:час(?:а|ов)?|ч)$/);
+  if (m) return { remindBeforeMinutes: Number(m[1]) * 60 };
+
+  m = lower.match(/^напомни\s+завтра\s+в\s+(\d{1,2})(?:[:.](\d{2}))?$/);
+  if (m) {
+    const dt = addDays(now, 1);
+    dt.setHours(Number(m[1]), Number(m[2] || 0), 0, 0);
+    return { remindAt: localInputValue(dt) };
+  }
+  m = lower.match(/^напомни\s+в\s+(\d{1,2})(?:[:.](\d{2}))?$/);
+  if (m) {
+    const dt = new Date(now);
+    dt.setHours(Number(m[1]), Number(m[2] || 0), 0, 0);
+    if (dt <= now) dt.setDate(dt.getDate() + 1);
+    return { remindAt: localInputValue(dt) };
+  }
+  m = lower.match(/^напомни\s+(\d{1,2})(?:[:.](\d{2}))$/);
+  if (m) {
+    const dt = new Date(now);
+    dt.setHours(Number(m[1]), Number(m[2] || 0), 0, 0);
+    if (dt <= now) dt.setDate(dt.getDate() + 1);
+    return { remindAt: localInputValue(dt) };
+  }
+  return {};
+}
+
 document.addEventListener("keydown", (e) => {
   if (!e.ctrlKey || e.code !== "Space") return;
   if (isTypingTarget(document.activeElement) && document.activeElement?.id !== "task-title") return;
@@ -3045,6 +3132,46 @@ function showBootError() {
   document.body.appendChild(el);
 }
 
+const seenNotificationIds = new Set();
+
+function showBrowserNotification(title, body) {
+  if (!("Notification" in window)) return;
+  if (Notification.permission === "granted") {
+    try {
+      new Notification(title, { body, icon: "/assets/icons/icon-192.png" });
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+async function pollNotifications() {
+  if (!state.token) return;
+  try {
+    const rows = await api("/api/notifications?unread=1");
+    for (const row of rows || []) {
+      if (seenNotificationIds.has(row.id)) continue;
+      seenNotificationIds.add(row.id);
+      showBrowserNotification(row.title || "NoteTask", row.body || "");
+    }
+  } catch {
+    /* ignore transient */
+  }
+}
+
+function initNotificationPoll() {
+  if (!("Notification" in window)) {
+    window.setInterval(pollNotifications, 45_000);
+    pollNotifications();
+    return;
+  }
+  if (Notification.permission === "default") {
+    Notification.requestPermission().catch(() => {});
+  }
+  window.setInterval(pollNotifications, 45_000);
+  pollNotifications();
+}
+
 async function boot() {
   consumeTokenRestore();
   state.token = localStorage.getItem(TOKEN_KEY) || "";
@@ -3070,6 +3197,7 @@ async function boot() {
     track("app_opened", "ui", null, { path: location.pathname });
     setView("today");
     handleCaptureHash();
+    initNotificationPoll();
   } catch (err) {
     if (isAuthError(err)) showLogin();
     else if ((isDesktopClient() || window.__notetaskLanNeeded) && goLanFallback()) return;
