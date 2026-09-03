@@ -1,7 +1,7 @@
 const TOKEN_KEY = "notetask_token";
 const SIDEBAR_KEY = "notetask_sidebar_collapsed";
 const SORT_KEY = "notetask_task_sort";
-const LAN_ORIGIN = "http://192.168.0.6:8100";
+const LAN_ORIGIN = "http://192.168.0.6";
 const BASE = window.NOTETASK_BASE ?? (() => {
   const path = window.location.pathname;
   if (path === "/todo" || path.startsWith("/todo/")) return "/todo";
@@ -3118,9 +3118,12 @@ function showBootError() {
   el.style.cssText =
     "position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:24px;text-align:center;z-index:9999;";
   el.innerHTML =
-    '<p>Нет связи с сервером. Проверь сеть и попробуй снова.</p>' +
-    '<button type="button" class="btn" data-boot-retry>Повторить</button>' +
-    `<a class="btn ghost" href="${LAN_ORIGIN}/" style="text-decoration:none">Домашний Wi‑Fi: открыть локально</a>`;
+    '<p style="font-size:1.15rem;font-weight:600;margin:0">Нет связи с сервером</p>' +
+    '<p style="color:var(--muted);max-width:320px;margin:0;font-size:0.9rem">В домашней сети Wi‑Fi роутер блокирует внешний адрес.</p>' +
+    '<div style="display:flex;flex-direction:column;gap:10px;width:100%;max-width:300px;margin-top:8px">' +
+    `<a class="btn" href="${lanFallbackUrl()}" style="text-decoration:none">Открыть через Wi‑Fi (192.168.0.6)</a>` +
+    '<button type="button" class="btn ghost" data-boot-retry>Повторить</button>' +
+    '</div>';
   el.querySelector("[data-boot-retry]")?.addEventListener("click", () => {
     if (isDesktopClient() && goLanFallback()) return;
     location.reload();

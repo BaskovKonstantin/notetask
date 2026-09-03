@@ -2,7 +2,7 @@
 (function () {
   const TOKEN_KEY = "notetask_token";
   const CLIENT_KEY = "notetask_client";
-  const LAN_ORIGIN = "http://192.168.0.6:8100";
+  const LAN_ORIGIN = "http://192.168.0.6";
   const LOGIN_TIMEOUT_MS = 8000;
   const form = document.getElementById("login-form");
   const pass = document.getElementById("password");
