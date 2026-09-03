@@ -1,6 +1,11 @@
 # NoteTask / todo.baski.pro — context
 
-Updated: 2026-09-03 (~21:25 MSK)
+Updated: 2026-09-03 (~22:05 MSK)
+
+## Priority chip colors 2026-09-03 (~22:05 MSK)
+
+- Чип `P1`–`P4` в списке задач и композере: класс `prio-N`, цвета как у picker/badge (P1 красный, P2 оранж, P3 олива, P4 muted).
+- Cache: `styles.css?v=41`, `app.js?v=59`, SW `notetask-v12`.
 
 ## LAN Access & Hairpin Fix 2026-09-03 (~21:25 MSK)
 
