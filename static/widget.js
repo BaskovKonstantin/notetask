@@ -1,14 +1,41 @@
 const TOKEN_KEY = "notetask_token";
 const BASE = window.NOTETASK_BASE ?? "";
+const API_TIMEOUT_MS = 12000;
 
 function $(id) {
   return document.getElementById(id);
 }
 
+function isAuthError(err) {
+  const msg = String(err?.message || err || "");
+  return msg === "auth" || msg === "Auth required" || msg === "Invalid token";
+}
+
+function isNetworkError(err) {
+  return String(err?.message || err || "") === "network";
+}
+
 async function api(path, opts = {}) {
   const headers = { ...(opts.headers || {}), Authorization: `Bearer ${localStorage.getItem(TOKEN_KEY)}` };
   if (opts.body) headers["Content-Type"] = "application/json";
-  const res = await fetch(`${BASE}${path}`, { ...opts, headers });
+  let signal = opts.signal;
+  let timer = null;
+  if (!signal && typeof AbortController !== "undefined") {
+    const ctrl = new AbortController();
+    signal = ctrl.signal;
+    timer = setTimeout(() => ctrl.abort(), API_TIMEOUT_MS);
+  }
+  let res;
+  try {
+    res = await fetch(`${BASE}${path}`, { ...opts, headers, signal });
+  } catch (ex) {
+    if (ex?.name === "AbortError" || /Failed to fetch|NetworkError|Load failed/i.test(String(ex?.message || ""))) {
+      throw new Error("network");
+    }
+    throw ex;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
   if (res.status === 401) throw new Error("auth");
   if (!res.ok) throw new Error(String(res.status));
   return res.status === 204 ? null : res.json();
@@ -44,16 +71,26 @@ function renderTask(t) {
   </li>`;
 }
 
-async function loadWidgetTasks() {
-  const tasks = await api("/api/tasks?view=today");
-  const open = tasks.filter((t) => t.status !== "done");
-  const done = tasks.filter((t) => t.status === "done");
+function showWidgetOffline() {
   const list = $("widget-list");
-  if (!open.length && !done.length) {
-    list.innerHTML = '<li class="widget-empty">Нет задач на сегодня. Добавь ниже.</li>';
-    return;
+  if (list) list.innerHTML = '<li class="widget-empty">Нет связи. Потяни или открой снова.</li>';
+}
+
+async function loadWidgetTasks() {
+  try {
+    const tasks = await api("/api/tasks?view=today");
+    const open = tasks.filter((t) => t.status !== "done");
+    const done = tasks.filter((t) => t.status === "done");
+    const list = $("widget-list");
+    if (!open.length && !done.length) {
+      list.innerHTML = '<li class="widget-empty">Нет задач на сегодня. Добавь ниже.</li>';
+      return;
+    }
+    list.innerHTML = open.map(renderTask).join("") + done.map(renderTask).join("");
+  } catch (err) {
+    if (isAuthError(err)) showLogin();
+    else if (isNetworkError(err)) showWidgetOffline();
   }
-  list.innerHTML = open.map(renderTask).join("") + done.map(renderTask).join("");
 }
 
 function showLogin() {
@@ -83,8 +120,12 @@ async function boot() {
     await api("/api/projects");
     showApp();
     await loadWidgetTasks();
-  } catch {
-    showLogin();
+  } catch (err) {
+    if (isAuthError(err)) showLogin();
+    else {
+      showApp();
+      showWidgetOffline();
+    }
   }
 }
 

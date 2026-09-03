@@ -1,6 +1,67 @@
 # NoteTask / todo.baski.pro — context
 
-Updated: 2026-09-03 (~13:32 MSK)
+Updated: 2026-09-03 (~15:00 MSK)
+
+## Stage 1 shipped 2026-09-03 (~15:00 MSK) — Approach 1
+
+Live on `http://127.0.0.1:8100` (docker rebuilt). Cache: `styles.css?v=39`, `app.js?v=55`.
+
+1. **Task cards + sort** — `.item` card chrome; sort bar Due/Priority/Project/Amount + asc/desc; `localStorage` key `notetask_task_sort`.
+2. **Inline title edit** — click `.item-title` → input; Enter/blur PATCH; Esc cancel.
+3. **Work payments** — table `work_project_payments`; API list/create/delete under `/api/work-projects/{id}/payments`; work panel progress = paid_sum/budget.
+4. **Health body** — 22 regions (teeth, neck, eyes, jaw, shoulders, elbows, knees, feet…); old regions still valid; SVG detailed map.
+5. **Also** — clear due «Без срока» (composer + chip); NLP `в 15:30` / `15:30` → due time + strip from title; title input contrast fix kept.
+
+Verify: Today sort bar; click title; Работа panel payments; Здоровье click «Зубы».
+
+Stage 2 (Telegram/desktop overlay) — not started.
+
+## Due clear on list chip (2026-09-03)
+
+- List task due popover: кнопка **«Без срока»** (`data-task-clear-due`) → `PATCH { due_at: null, repeat_rule: null }`.
+- UX: кнопка сразу под date/time (не внизу под repeat); класс `.chip-clear-due`.
+- Commit: `b0b1f86` `feat(web): surface clear due on task chip` (app.js / styles.css / index cache bump).
+- Уже работало раньше; проблема discoverability — кнопка была под длинным списком «Расписание».
+
+## User requirements confirmed 2026-09-03 (~14:30 MSK)
+
+1. **Inline-edit названия задачи**:
+   - Одинарный клик по `.item-title` -> инпут на месте.
+   - Enter / blur -> PATCH `/api/tasks/{id}`, Esc -> отмена.
+
+2. **Карточки задач и сортировка**:
+   - Каждая задача — отдельный блок-карточка (`.item` как карточка: фон, граница, радиус, отступ, тень).
+   - Панель сортировки: Срок, Приоритет, Раздел, Сумма (направление asc/desc, сохранение в localStorage).
+
+3. **Рабочие проекты: частичные оплаты**:
+   - Список платежей (дата, сумма, комментарий) у проекта.
+   - Прогресс-бар оплаты: `(sum(payments) / budget * 100)%`.
+   - UI в `work-item`: шкала, сумма «получено X из Y (Z%)», форма добавления платежа.
+
+4. **Карта тела (Здоровье) — высокая детализация**:
+   - Высокая детализация: зубы, шея, глаза, нос, уши, челюсть, плечи, локти, колени, стопы и т.д. (20+ зон).
+
+5. **Уведомления и напоминания**:
+   - В момент срока + вечерний дайджест просроченных.
+   - Ввод задачи: указание времени напоминания (абсолютное "15:00", "завтра в 10", относительное "через 15 минут", "за 1 час").
+   - Канал: In-app + Telegram bot (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` в `.env`).
+   - Примечание: серверный хост сейчас имеет timeout до `api.telegram.org` (нужен proxy/VPN/bypass для отправки наружу).
+
+## Full server audit 2026-09-03 (~13:45 MSK) — «почему недоступно с другого устройства»
+
+- Backend `notetask` жив: 127.0.0.1:8100 и 192.168.0.6:8100 (200 OK).
+- Внешняя сеть (4G/LTE / WAN): `https://todo.baski.pro/` и `/api/health` 200 OK (проверено через внешний isolated runner). Снаружи сайт полностью доступен.
+- Локальная сеть Wi-Fi: устройство (напр. телефон `192.168.0.4` пингуется 1.6ms), но 0 HTTP/HTTPS запросов доходят до Caddy/NoteTask.
+- Причина 1 (домен): `todo.baski.pro` на Wi-Fi резолвится в публичный IP `5.144.98.126`. Роутер TP-Link (`192.168.0.1`) без NAT Loopback/hairpin сбрасывает пакеты LAN→WAN IP. На ПК `.5` работало только из-за записи в `hosts`.
+- Причина 2 (DHCP DNS): dnsmasq на `192.168.0.6` работает и отдает `192.168.0.6`, но роутер раздает клиентам свой DNS `192.168.0.1` / провайдерский, поэтому другие устройства не знают локальный IP.
+- Причина 3 (прямой IP): `http://192.168.0.6/` дает 308 redirect на `https://192.168.0.6/`, где Caddy падает с TLS alert (нет сертификата на IP). `192.168.0.6:8100` браузеры (Safari/Chrome) авто-апрейдят в HTTPS и получают TLS wrong version.
+
+
+## Screenshot 2026-09-03 (~13:35) — Edge «Страница недоступна»
+
+Клиент: `https://todo.baski.pro/download` → Chromium ERR (чёрный экран «Страница недоступна»).
+Сервер: `/download` 200 за ~15ms (LAN + HTTPS + public resolve с самой машины).
+Запросов с `.5` к todo нет → пакеты до Caddy не доходят. Тот же hairpin/DoH.
 
 ## Outage check 2026-09-03 (~13:32 MSK) — «как не грузился так и не грузится»
 
@@ -147,7 +208,8 @@ Personal tracker (not TreckBas):
 - **Desktop client:** `?client=desktop` + UA `NoteTaskDesktop` + `chrome.webview` / `__TAURI__` — прячет «Скачать» на логине и в сайдбаре; Photino URL `https://todo.baski.pro/?client=desktop`
 - **Расписание (repeat):** в поповере срока — каждый день / 2–3 дня / будни / неделя / месяц; `repeat_rule`; выполнение → следующий срок (Todoist-style)
 - **Подсветка ввода:** распознанные токены (срок, p1–p4, @раздел, #метка, идея/план) цветные в поле задачи
-- **NLP срока:** дни недели (в понедельник…), месяцы (сентябрь / 15 октября), относительные даты; кириллица через unicode word-boundary (`app.js` v45)
+- **NLP срока:** дни недели (в понедельник…), месяцы (сентябрь / 15 октября), относительные даты; кириллица через unicode word-boundary (`app.js` v54)
+- **NLP времени (2026-09-03):** `в 15:30` / `в 15.30` / `15:30` / `в 9:00` → `dueTime` + merge в `due_at` (дата из токена/чипа/сегодня), strip из title, подсветка `hl-date`; composer `#task-due-time`; `mergeTaskDue` пишет локальное `YYYY-MM-DDTHH:MM:00` (не UTC)
 - **Микроанимации:** удаление/перемещение/выполнение/создание задач (+ заметки, проекты, цели); смена экрана; уважает `prefers-reduced-motion`
 - **Тема раздела:** при открытии раздела UI плавно перекрашивается в `project.color` (CSS vars `--accent`, `--theme-glow*`)
 - **Рабочий проект у задачи:** в разделе Работа — чип «Проект» (composer + плашка задачи), поле `work_project_id` → `work_projects`; удаление проекта: × справа + confirm, отвязка задач
@@ -171,6 +233,13 @@ Personal tracker (not TreckBas):
 
 - File: `/home/kon/Projects/notetask/.env` (gitignored)
 - Password: in `.env` (`NOTEBOOK_PASSWORD`), gitignored
+- Telegram: `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` in `.env` (added 2026-09-03). **Never commit.** Token was pasted in chat — rotate via @BotFather if leak risk.
+- Note: from this host `api.telegram.org` may timeout (egress block) — verify from network that reaches TG.
+
+## Planned (brainstorming 2026-09-03)
+
+1. **Ctrl+Space capture overlay** — Photino + Tauri: маленькое always-on-top окно с вводом задачи, не полное приложение.
+2. **Due/overdue notifications** — in-app + Telegram; DB already has `remind_at`.
 
 ## Todoist import
 

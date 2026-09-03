@@ -15,5 +15,6 @@ services:
       - ./app:/app/app:ro
       - ./scripts:/app/scripts:ro
     ports:
-      # только localhost — снаружи HTTPS todo.baski.pro (Caddy), без сырого :8100 в LAN
+      # localhost — Caddy HTTPS; LAN IP — обход hairpin/DoH (http://192.168.0.6:8100/)
       - "127.0.0.1:8100:8100"
+      - "192.168.0.6:8100:8100"
