@@ -1,6 +1,13 @@
 # NoteTask / todo.baski.pro — context
 
-Updated: 2026-09-03 (~22:10 MSK)
+Updated: 2026-09-03 (~22:25 MSK)
+
+## Health unknown status + notes 2026-09-03 (~22:25 MSK)
+
+- Статус зоны: `ok` / `warn` / `bad` / `unknown` (Неизвестно). Карта: `.region.unknown` серый пунктир.
+- Заметки зоны — таблица `health_body_notes`; старая `health_body.note` мигрирует в первую запись.
+- API: `POST/DELETE /api/health-body/{region}/notes/{id}`; статус PUT без `note` не затирает журнал.
+- UI: select автосейв; список заметок + «Добавить заметку». Cache `app.js?v=62`, `styles.css?v=43`, SW `notetask-v15`.
 
 ## NLP cost parser 2026-09-03 (~22:10 MSK)
 
