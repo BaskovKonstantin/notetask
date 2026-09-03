@@ -316,6 +316,49 @@ async def migrate(db: aiosqlite.Connection) -> None:
     )
     await db.execute("DELETE FROM health_body WHERE region='forehead'")
     await ensure_column(db, "work_project_payments", "status", "TEXT NOT NULL DEFAULT 'received'")
+    await db.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS finance_categories (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          kind TEXT NOT NULL DEFAULT 'expense',
+          group_name TEXT NOT NULL DEFAULT '',
+          sort INTEGER NOT NULL DEFAULT 0,
+          deleted_at TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS finance_accounts (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          sort INTEGER NOT NULL DEFAULT 0,
+          opening_balance REAL NOT NULL DEFAULT 0,
+          deleted_at TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS finance_transactions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          category_id INTEGER REFERENCES finance_categories(id),
+          account_id INTEGER REFERENCES finance_accounts(id),
+          kind TEXT NOT NULL DEFAULT 'expense',
+          amount REAL NOT NULL,
+          day TEXT NOT NULL,
+          note TEXT NOT NULL DEFAULT '',
+          deleted_at TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS finance_budget (
+          year_month TEXT NOT NULL,
+          category_id INTEGER NOT NULL REFERENCES finance_categories(id),
+          planned REAL NOT NULL DEFAULT 0,
+          PRIMARY KEY (year_month, category_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_finance_tx_day ON finance_transactions(day);
+        CREATE INDEX IF NOT EXISTS idx_finance_tx_category ON finance_transactions(category_id);
+        """
+    )
 
 
 async def connect() -> aiosqlite.Connection:

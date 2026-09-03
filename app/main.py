@@ -27,6 +27,13 @@ from .db import (
     row_to_dict,
     utcnow,
 )
+from .deps import get_db
+from .finance_helpers import (
+    sum_work_payment_income,
+    work_payment_received_filter,
+    work_payments_has_status,
+)
+from .finance_sheet import ensure_finance_sheet_defaults, register_finance_sheet
 from .notify import notify_loop, send_telegram
 
 STATIC = Path(__file__).resolve().parents[1] / "static"
@@ -55,6 +62,7 @@ log = logging.getLogger("notetask")
 async def lifespan(app: FastAPI):
     db = await connect()
     await ensure_defaults(db)
+    await ensure_finance_sheet_defaults(db)
     cutoff = (datetime.now(timezone.utc).date() - timedelta(days=180)).isoformat()
     await db.execute("DELETE FROM action_log WHERE at < ?", (cutoff,))
     await db.commit()
@@ -70,27 +78,13 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="NoteTask", lifespan=lifespan)
 app.mount("/assets", StaticFiles(directory=STATIC), name="assets")
+register_finance_sheet(app)
 
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     log.exception("Unhandled error on %s %s", request.method, request.url.path)
     return JSONResponse({"detail": "Internal error"}, status_code=500)
-
-
-async def get_db() -> AsyncGenerator[aiosqlite.Connection, None]:
-    db = await aiosqlite.connect(DB_PATH)
-    db.row_factory = aiosqlite.Row
-    await db.execute("PRAGMA busy_timeout=5000")
-    await db.execute("PRAGMA foreign_keys=ON")
-    try:
-        yield db
-    except Exception:
-        await db.rollback()
-        raise
-    finally:
-        await db.close()
-
 
 
 REPEAT_RULES = {
@@ -1126,61 +1120,6 @@ async def stats(db: aiosqlite.Connection = Depends(get_db), _: dict = Depends(re
 
 # ---------- section panels ----------
 
-WORK_PAYMENT_PLANNED_STATUSES = ("planned", "future")
-
-
-async def work_payments_has_status(db: aiosqlite.Connection) -> bool:
-    cur = await db.execute("PRAGMA table_info(work_project_payments)")
-    return any(row[1] == "status" for row in await cur.fetchall())
-
-
-def work_payment_received_filter(has_status: bool, alias: str = "p") -> str:
-    if not has_status:
-        return ""
-    planned = ", ".join(f"'{s}'" for s in WORK_PAYMENT_PLANNED_STATUSES)
-    return f" AND COALESCE({alias}.status, 'received') NOT IN ({planned})"
-
-
-async def sum_work_payment_income(
-    db: aiosqlite.Connection,
-    *,
-    year_month: str | None = None,
-    since_day: str | None = None,
-    year_months: list[str] | None = None,
-) -> float | dict[str, float]:
-    has_status = await work_payments_has_status(db)
-    status_sql = work_payment_received_filter(has_status)
-    base = f"""
-        FROM work_project_payments p
-        JOIN work_projects w ON w.id = p.work_project_id AND w.deleted_at IS NULL
-        WHERE p.amount > 0{status_sql}
-    """
-    if year_month is not None:
-        cur = await db.execute(
-            f"SELECT COALESCE(SUM(p.amount), 0) AS total {base} AND SUBSTR(p.paid_at, 1, 7) = ?",
-            (year_month,),
-        )
-        return float((await cur.fetchone())["total"] or 0)
-    if since_day is not None:
-        cur = await db.execute(
-            f"SELECT COALESCE(SUM(p.amount), 0) AS total {base} AND SUBSTR(p.paid_at, 1, 10) >= ?",
-            (since_day,),
-        )
-        return float((await cur.fetchone())["total"] or 0)
-    if year_months:
-        placeholders = ",".join("?" * len(year_months))
-        cur = await db.execute(
-            f"""
-            SELECT SUBSTR(p.paid_at, 1, 7) AS ym, COALESCE(SUM(p.amount), 0) AS total
-            {base} AND SUBSTR(p.paid_at, 1, 7) IN ({placeholders})
-            GROUP BY ym
-            """,
-            year_months,
-        )
-        return {row["ym"]: float(row["total"] or 0) for row in await cur.fetchall()}
-    return 0.0
-
-
 @app.get("/api/finance/months")
 async def list_finance_months(
     months: int = 12,
@@ -1933,6 +1872,10 @@ async def backup(db: aiosqlite.Connection = Depends(get_db), _: dict = Depends(r
         "action_log",
         "daily_stats",
         "finance_months",
+        "finance_categories",
+        "finance_accounts",
+        "finance_transactions",
+        "finance_budget",
         "work_projects",
         "work_project_payments",
         "health_metrics",

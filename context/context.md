@@ -1,6 +1,22 @@
 # NoteTask / todo.baski.pro — context
 
-Updated: 2026-09-04 (~00:15 MSK)
+Updated: 2026-09-04 (~00:20 MSK)
+
+## Finance section (full page) 2026-09-04 (~00:20 MSK)
+
+- Google Sheet `1UrEntfxS-y7Ol0c6yUsvVZQcKV6GqxD4VcC4k0rp-cQ` — **private** (CSV export → login HTML). MVP по типовой структуре «Домашний бюджет».
+- **Sidebar:** кнопка **Финансы** (`data-view="finance"`) — отдельный экран `#view-finance`, не путать с fin-panel в «Личные дела».
+- **UI:** месяц ‹›, баланс/доход/расход, счета, таблица бюджета (Статья · План · Факт · Δ), форма операции, журнал (записи + задачи + work payments).
+- **DB:** `finance_categories`, `finance_accounts`, `finance_transactions`, `finance_budget` (+ старые `finance_months`).
+- **Seed при старте:** 21 категория (Доходы / Обязательные / Быт / Досуг / Прочее / Накопления), 3 счёта (Наличные, Дебетовая карта, Накопительный).
+- **API (новое):**
+  - `GET /api/finance/sheet?year_month=YYYY-MM` — overview
+  - CRUD `/api/finance/categories`, `/accounts`, `/transactions`
+  - `PUT /api/finance/budget/{year_month}/{category_id}` — план
+  - `POST /api/finance/import-csv` — `{ csv_text, year_month? }` (гибкий парсер колонок)
+- **Старое без изменений:** `/api/finance/months/*` — fin-panel «Личные дела» + stats 30d.
+- **Импорт таблицы:** Файл → «Опубликовать в интернете» → anyone with link, либо экспорт CSV и POST import-csv. Колонки: категория, сумма/факт, дата, план, тип.
+- Cache: `app.js?v=67`, `styles.css?v=45`, SW `notetask-v19`.
 
 ## Overdue notify null due_at fix 2026-09-04 (~00:15 MSK)
 
@@ -281,7 +297,7 @@ Personal tracker (not TreckBas):
 - **Разобрать (Inbox):** в сайдбаре только если есть open-задачи (`open_count` в `/api/projects`); пустой — скрыт
 - **Sidebar:** кнопка «←» в topbar — сворачивает меню, состояние в `localStorage` (`notetask_sidebar_collapsed`)
 - **Плашка задачи:** под каждой задачей чипы — раздел, P, срок/время, место, сумма (расход/доход)
-- **Финансы:** суммы в задачах; сводка в «Статистика» — расходы/доходы/баланс за 30д + список операций
+- **Финансы:** суммы в задачах; сводка в «Статистика» — расходы/доходы/баланс за 30д + список операций; **полный раздел «Финансы»** в sidebar — бюджет/счета/операции (`/api/finance/sheet`)
 - **Downloads:** https://todo.baski.pro/download — Windows `.exe` + Android `.apk` (`data/downloads/`, `scripts/publish-downloads.sh`)
 - **Desktop (Photino Win):** `desktop-win/` — WebView2 → `?client=desktop`; трей нет (окно); Ctrl+Space глобально; Startup shortcut. Build+publish: `dotnet publish …` + `scripts/publish-downloads.sh`
 - **Desktop (Tauri):** `desktop/` — то же URL с `?client=desktop`; трей; Ctrl+Space; autostart; close→tray. Build: `cd desktop && npm run build` (Windows)

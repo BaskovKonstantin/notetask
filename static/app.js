@@ -139,6 +139,7 @@ const HEALTH_METRIC_FIELDS = [
 
 const titles = {
   today: "Сегодня",
+  finance: "Финансы",
   history: "История",
   stats: "Статистика",
   project: "Раздел",
@@ -1557,6 +1558,223 @@ async function renderFinancePanel() {
   `;
 }
 
+function financeSourceLabel(source) {
+  if (source === "task") return "задача";
+  if (source === "work") return "работа";
+  if (source === "sheet") return "запись";
+  return "";
+}
+
+function groupFinanceCategories(categories) {
+  const groups = new Map();
+  for (const cat of categories || []) {
+    const key = cat.group_name || (cat.kind === "income" ? "Доходы" : "Расходы");
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(cat);
+  }
+  return groups;
+}
+
+async function loadFinancePage() {
+  if (!state.financeYm) state.financeYm = currentYearMonth();
+  $("finance-page").innerHTML = `<p class="sp-sub">Загрузка…</p>`;
+  try {
+    const data = await api(`/api/finance/sheet?year_month=${encodeURIComponent(state.financeYm)}`);
+    renderFinancePage(data);
+  } catch (err) {
+    $("finance-page").innerHTML = `<p class="error">${escapeHtml(err.message || "Ошибка")}</p>`;
+  }
+}
+
+function renderFinancePage(data) {
+  const ym = data.year_month || state.financeYm || currentYearMonth();
+  state.financeYm = ym;
+  const s = data.summary || {};
+  const income = Number(s.income) || 0;
+  const expense = Number(s.expense) || 0;
+  const bal = Number(s.balance) || 0;
+  const pct = financeBarPct(income, expense);
+  const balClass = bal > 0 ? "pos" : bal < 0 ? "neg" : "";
+  const accounts = data.accounts || [];
+  const entries = data.entries || [];
+  const groups = groupFinanceCategories(data.categories || []);
+
+  const accountHtml = accounts.length
+    ? accounts
+        .map(
+          (a) => `
+      <div class="fin-account-chip">
+        <span class="name">${escapeHtml(a.name)}</span>
+        <span class="bal">${escapeHtml(moneyPlain(a.balance))}</span>
+      </div>`,
+        )
+        .join("")
+    : `<p class="fin-empty">Нет счетов</p>`;
+
+  let budgetHtml = "";
+  for (const [groupName, cats] of groups) {
+    budgetHtml += `
+      <div class="fin-budget-group">
+        <div class="fin-budget-group-title">${escapeHtml(groupName)}</div>
+        <table class="fin-budget-table">
+          <thead>
+            <tr>
+              <th>Статья</th>
+              <th>План</th>
+              <th>Факт</th>
+              <th>Δ</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${cats
+              .map((cat) => {
+                const delta = Number(cat.delta) || 0;
+                const deltaClass = cat.kind === "expense" ? (delta >= 0 ? "pos" : "neg") : delta >= 0 ? "pos" : "neg";
+                return `
+              <tr data-fin-cat="${cat.id}">
+                <td class="cat-name">${escapeHtml(cat.name)}</td>
+                <td>
+                  <input type="number" class="fin-plan-input" data-fin-plan="${cat.id}"
+                    value="${Number(cat.planned) || ""}" min="0" step="100" placeholder="0" />
+                </td>
+                <td class="amt ${cat.kind}">${escapeHtml(moneySigned(cat.actual, cat.kind))}</td>
+                <td class="amt ${deltaClass}">${escapeHtml(moneyPlain(Math.abs(delta)))}${delta < 0 ? " −" : cat.kind === "expense" && delta > 0 ? " +" : ""}</td>
+              </tr>`;
+              })
+              .join("")}
+          </tbody>
+        </table>
+      </div>`;
+  }
+
+  const catOptions = (data.categories || [])
+    .map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`)
+    .join("");
+  const accOptions = accounts
+    .map((a) => `<option value="${a.id}">${escapeHtml(a.name)}</option>`)
+    .join("");
+
+  $("finance-page").innerHTML = `
+    <div class="fin-page">
+      <div class="fin-top">
+        <div class="fin-month-nav" role="group" aria-label="Месяц">
+          <button type="button" class="btn ghost small fin-nav-btn" data-finance-page-shift="-1" aria-label="Предыдущий месяц">‹</button>
+          <span class="fin-month-label">${escapeHtml(monthLabel(ym))}</span>
+          <button type="button" class="btn ghost small fin-nav-btn" data-finance-page-shift="1" aria-label="Следующий месяц">›</button>
+        </div>
+      </div>
+
+      <div class="fin-hero">
+        <span class="fin-hero-label">Баланс месяца</span>
+        <div class="fin-hero-value ${balClass}">${escapeHtml(moneyPlain(bal))}</div>
+      </div>
+
+      <div class="fin-split">
+        <div class="fin-split-card income">
+          <span class="label">Доход</span>
+          <span class="value">${escapeHtml(moneySigned(income, "income"))}</span>
+          <span class="fin-subhint">задачи ${escapeHtml(moneyPlain(s.task_income))} · работа ${escapeHtml(moneyPlain(s.work_income))}</span>
+        </div>
+        <div class="fin-split-card expense">
+          <span class="label">Расход</span>
+          <span class="value">${escapeHtml(moneySigned(expense, "expense"))}</span>
+          <span class="fin-subhint">задачи ${escapeHtml(moneyPlain(s.task_expense))} · записи ${escapeHtml(moneyPlain(s.transaction_expense))}</span>
+        </div>
+      </div>
+
+      <div class="fin-bar" title="Расход относительно дохода">
+        <div class="fin-bar-track">
+          <div class="fin-bar-fill" style="width:${pct}%"></div>
+        </div>
+        <div class="fin-bar-meta">${pct}% расхода от дохода</div>
+      </div>
+
+      <section class="fin-section">
+        <h3>Счета</h3>
+        <div class="fin-accounts">${accountHtml}</div>
+      </section>
+
+      <section class="fin-section">
+        <h3>Бюджет по статьям</h3>
+        ${budgetHtml || `<p class="fin-empty">Нет категорий</p>`}
+      </section>
+
+      <section class="fin-section">
+        <h3>Новая операция</h3>
+        <form class="fin-tx-form" id="fin-tx-form">
+          <label>
+            Тип
+            <select name="kind" required>
+              <option value="expense">Расход</option>
+              <option value="income">Доход</option>
+            </select>
+          </label>
+          <label>
+            Статья
+            <select name="category_id">
+              <option value="">—</option>
+              ${catOptions}
+            </select>
+          </label>
+          <label>
+            Счёт
+            <select name="account_id">
+              <option value="">—</option>
+              ${accOptions}
+            </select>
+          </label>
+          <label>
+            Сумма
+            <input name="amount" type="number" min="0.01" step="0.01" required placeholder="0" />
+          </label>
+          <label>
+            Дата
+            <input name="day" type="date" value="${escapeAttr(todayIso())}" required />
+          </label>
+          <label class="full">
+            Комментарий
+            <input name="note" type="text" placeholder="Описание…" />
+          </label>
+          <button class="btn" type="submit">Добавить</button>
+        </form>
+      </section>
+
+      <section class="fin-section">
+        <div class="fin-ops-head">
+          <h3>Операции</h3>
+          <span class="hint">${entries.length}</span>
+        </div>
+        <div class="fin-ops fin-ops-page">
+          ${
+            entries.length
+              ? entries
+                  .map((e) => {
+                    const type = e.cost_type === "income" ? "income" : "expense";
+                    const day = e.day ? fmtShortDay(e.day) : "";
+                    const src = financeSourceLabel(e.source);
+                    const delBtn =
+                      e.entry_type === "transaction"
+                        ? `<button type="button" class="btn ghost small btn-del" data-fin-tx-del="${e.id}" title="Удалить">×</button>`
+                        : "";
+                    const taskAttr = e.entry_type === "task" ? ` data-finance-task="${e.id}"` : "";
+                    return `
+            <div class="fin-op fin-op-row"${taskAttr}>
+              <div class="fin-op-main">
+                <span class="fin-op-title">${escapeHtml(e.title || "Без названия")}</span>
+                <span class="fin-op-day">${escapeHtml(day)}${src ? ` · ${src}` : ""}${e.category_name ? ` · ${escapeHtml(e.category_name)}` : ""}</span>
+              </div>
+              <span class="fin-op-amount ${type}">${escapeHtml(moneySigned(e.cost, type))}</span>
+              ${delBtn}
+            </div>`;
+                  })
+                  .join("")
+              : `<p class="fin-empty">Нет операций в этом месяце</p>`
+          }
+        </div>
+      </section>
+    </div>
+  `;
+}
 
 function workPayBlock(p) {
   const budget = p.budget != null ? Number(p.budget) : null;
@@ -1878,7 +2096,7 @@ function setView(view, opts = {}) {
     applySectionTheme(proj?.color || DEFAULT_THEME);
   } else {
     $("view-title").textContent = titles[view] || "";
-    applySectionTheme(DEFAULT_THEME);
+    applySectionTheme(view === "finance" ? "#2a7a4b" : DEFAULT_THEME);
   }
 
   const taskViews = ["today", "project"];
@@ -1887,6 +2105,7 @@ function setView(view, opts = {}) {
   $("view-workouts").classList.add("hidden");
   $("view-history").classList.toggle("hidden", view !== "history");
   $("view-stats").classList.toggle("hidden", view !== "stats");
+  $("view-finance").classList.toggle("hidden", view !== "finance");
 
   if (!taskViews.includes(view) || !currentPanelKind()) hideSectionPanel();
 
@@ -1915,6 +2134,7 @@ function showListError() {
   if (taskViews.includes(v)) root = $("task-list");
   else if (v === "history") root = $("history-list");
   else if (v === "stats") root = $("stats-cards");
+  else if (v === "finance") root = $("finance-page");
   else return;
   if (!root) return;
   root.innerHTML =
@@ -1933,6 +2153,7 @@ async function refresh() {
     await loadSectionPanel();
   } else if (v === "history") await loadHistory();
   else if (v === "stats") await loadStats();
+  else if (v === "finance") await loadFinancePage();
 }
 
 function priorityBadge(p) {
@@ -3400,6 +3621,67 @@ function initNotificationPoll() {
   window.setInterval(pollNotifications, 45_000);
   pollNotifications();
 }
+
+$("finance-page").addEventListener("click", async (e) => {
+  const shiftBtn = e.target.closest("[data-finance-page-shift]");
+  if (shiftBtn) {
+    e.preventDefault();
+    const delta = Number(shiftBtn.dataset.financePageShift) || 0;
+    state.financeYm = shiftYearMonth(state.financeYm || currentYearMonth(), delta);
+    await loadFinancePage();
+    return;
+  }
+  const delBtn = e.target.closest("[data-fin-tx-del]");
+  if (delBtn) {
+    e.preventDefault();
+    const id = Number(delBtn.dataset.finTxDel);
+    if (!id) return;
+    await api(`/api/finance/transactions/${id}`, { method: "DELETE" });
+    await loadFinancePage();
+    return;
+  }
+  const finTask = e.target.closest("[data-finance-task]");
+  if (finTask) {
+    e.preventDefault();
+    setView("today", { keepTaskForm: true });
+    return;
+  }
+});
+
+$("finance-page").addEventListener("change", async (e) => {
+  const planInput = e.target.closest("[data-fin-plan]");
+  if (!planInput) return;
+  const categoryId = Number(planInput.dataset.finPlan);
+  const planned = Number(planInput.value) || 0;
+  const ym = state.financeYm || currentYearMonth();
+  await api(`/api/finance/budget/${encodeURIComponent(ym)}/${categoryId}`, {
+    method: "PUT",
+    body: JSON.stringify({ planned }),
+  });
+});
+
+$("finance-page").addEventListener("submit", async (e) => {
+  const form = e.target.closest("#fin-tx-form");
+  if (!form) return;
+  e.preventDefault();
+  const fd = new FormData(form);
+  const categoryRaw = fd.get("category_id");
+  const accountRaw = fd.get("account_id");
+  await api("/api/finance/transactions", {
+    method: "POST",
+    body: JSON.stringify({
+      kind: String(fd.get("kind") || "expense"),
+      category_id: categoryRaw ? Number(categoryRaw) : null,
+      account_id: accountRaw ? Number(accountRaw) : null,
+      amount: Number(fd.get("amount")),
+      day: String(fd.get("day") || todayIso()),
+      note: String(fd.get("note") || "").trim(),
+    }),
+  });
+  form.reset();
+  form.querySelector('[name="day"]').value = todayIso();
+  await loadFinancePage();
+});
 
 async function boot() {
   consumeTokenRestore();

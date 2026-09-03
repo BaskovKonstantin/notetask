@@ -1826,6 +1826,139 @@ textarea { min-height: 90px; resize: vertical; }
   box-shadow: 0 0 0 4px rgba(var(--accent-rgb), 0.18), var(--shadow);
 }
 
+/* --- finance full page --- */
+.fin-page {
+  display: grid;
+  gap: 18px;
+  max-width: 920px;
+}
+
+.fin-section h3 {
+  margin: 0 0 10px;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  letter-spacing: -0.02em;
+}
+
+.fin-subhint {
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.fin-accounts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fin-account-chip {
+  display: grid;
+  gap: 2px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,0.65);
+  min-width: 120px;
+}
+.fin-account-chip .name {
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-weight: 650;
+}
+.fin-account-chip .bal {
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.fin-budget-group {
+  margin-bottom: 14px;
+}
+.fin-budget-group-title {
+  font-size: 0.78rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.fin-budget-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+.fin-budget-table th,
+.fin-budget-table td {
+  padding: 8px 6px;
+  border-bottom: 1px solid var(--line);
+  text-align: right;
+}
+.fin-budget-table th:first-child,
+.fin-budget-table td.cat-name {
+  text-align: left;
+}
+.fin-budget-table th {
+  font-size: 0.72rem;
+  font-weight: 650;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.fin-budget-table td.amt.income { color: var(--ok); }
+.fin-budget-table td.amt.expense { color: #b33; }
+.fin-budget-table td.amt.pos { color: var(--ok); }
+.fin-budget-table td.amt.neg { color: #b33; }
+
+.fin-plan-input {
+  width: 88px;
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+  text-align: right;
+  background: rgba(255,255,255,0.8);
+}
+
+.fin-tx-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+  align-items: end;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,0.55);
+}
+.fin-tx-form label {
+  display: grid;
+  gap: 4px;
+  font-size: 0.78rem;
+  font-weight: 650;
+  color: var(--muted);
+}
+.fin-tx-form label.full {
+  grid-column: 1 / -1;
+}
+.fin-tx-form input,
+.fin-tx-form select {
+  font: inherit;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: #fff;
+}
+
+.fin-ops-page {
+  max-height: none;
+}
+
+.fin-op-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 @media (max-width: 860px) {
   .app-shell { grid-template-columns: 1fr; }
   .app-shell.sidebar-collapsed .sidebar { display: none; }

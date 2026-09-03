@@ -52,7 +52,7 @@
         });
     })();
   </script>
-  <link rel="stylesheet" href="assets/styles.css?v=44" />
+  <link rel="stylesheet" href="assets/styles.css?v=45" />
   <script src="assets/pwa.js?v=7"></script>
 </head>
 <body>
@@ -79,6 +79,7 @@
       <p class="tagline">личное · с историей</p>
       <nav class="nav" id="nav">
         <button data-view="today" class="active">Сегодня</button>
+        <button data-view="finance">Финансы</button>
         <button data-view="history">История</button>
         <button data-view="stats">Статистика</button>
       </nav>
@@ -286,6 +287,10 @@
         <div id="workout-list" class="list"></div>
       </section>
 
+      <section id="view-finance" class="panel hidden">
+        <div id="finance-page"></div>
+      </section>
+
       <section id="view-history" class="panel hidden">
         <div class="timeline" id="history-list"></div>
       </section>
@@ -303,6 +308,6 @@
   </div>
 
   <script src="assets/pwa-install.js?v=3"></script>
-  <script src="assets/app.js?v=65"></script>
+  <script src="assets/app.js?v=67"></script>
 </body>
 </html>
