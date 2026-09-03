@@ -1,6 +1,16 @@
 # NoteTask / todo.baski.pro — context
 
-Updated: 2026-09-04 (~00:20 MSK)
+Updated: 2026-09-04 (~00:30 MSK)
+
+## Sidebar resize + collapse 2026-09-04 (~00:30 MSK)
+
+- Левое меню `.sidebar`: drag resize правый край (handle `#sidebar-resize`), min 180 / max 400 / default 240 px.
+- CSS `--sidebar-width` на `.app-shell`; grid `var(--sidebar-width) 1fr`; collapsed → `0 1fr` (как было).
+- localStorage: `notetask_sidebar_width` (число px), `notetask_sidebar_collapsed` (`"1"`/`"0"`).
+- Toggle «Скрыть меню» в topbar (`#sidebar-toggle`) — уже был; dblclick на handle → сброс 240px; ArrowLeft/Right на handle ±16px.
+- Touch: touchstart/move/end; класс `.sidebar-resizing` отключает transition при drag.
+- Mobile ≤860px: handle скрыт, collapse как раньше.
+- Cache: `styles.css?v=46`, `app.js?v=68`, SW `notetask-v20`.
 
 ## Finance section (full page) 2026-09-04 (~00:20 MSK)
 
