@@ -1832,6 +1832,10 @@ function renderFinancePage(data) {
       <div class="fin-budget-group">
         <div class="fin-budget-group-title">${escapeHtml(groupName)}</div>
         <table class="fin-budget-table">
+          <colgroup>
+            <col class="col-name" />
+            <col class="col-num" span="3" />
+          </colgroup>
           <thead>
             <tr>
               <th>Статья</th>
@@ -1871,47 +1875,51 @@ function renderFinancePage(data) {
 
   $("finance-page").innerHTML = `
     <div class="fin-page">
-      <div class="fin-top">
-        <div class="fin-month-nav" role="group" aria-label="Месяц">
-          <button type="button" class="btn ghost small fin-nav-btn" data-finance-page-shift="-1" aria-label="Предыдущий месяц">‹</button>
-          <span class="fin-month-label">${escapeHtml(monthLabel(ym))}</span>
-          <button type="button" class="btn ghost small fin-nav-btn" data-finance-page-shift="1" aria-label="Следующий месяц">›</button>
+      <div class="fin-page-summary">
+        <div class="fin-top">
+          <div class="fin-month-nav" role="group" aria-label="Месяц">
+            <button type="button" class="btn ghost small fin-nav-btn" data-finance-page-shift="-1" aria-label="Предыдущий месяц">‹</button>
+            <span class="fin-month-label">${escapeHtml(monthLabel(ym))}</span>
+            <button type="button" class="btn ghost small fin-nav-btn" data-finance-page-shift="1" aria-label="Следующий месяц">›</button>
+          </div>
         </div>
+
+        <div class="fin-hero">
+          <span class="fin-hero-label">Баланс месяца</span>
+          <div class="fin-hero-value ${balClass}">${escapeHtml(moneyPlain(bal))}</div>
+        </div>
+
+        <div class="fin-split">
+          <div class="fin-split-card income">
+            <span class="label">Доход</span>
+            <span class="value">${escapeHtml(moneySigned(income, "income"))}</span>
+            <span class="fin-subhint">задачи ${escapeHtml(moneyPlain(s.task_income))} · работа ${escapeHtml(moneyPlain(s.work_income))}</span>
+          </div>
+          <div class="fin-split-card expense">
+            <span class="label">Расход</span>
+            <span class="value">${escapeHtml(moneySigned(expense, "expense"))}</span>
+            <span class="fin-subhint">задачи ${escapeHtml(moneyPlain(s.task_expense))} · записи ${escapeHtml(moneyPlain(s.transaction_expense))}</span>
+          </div>
+        </div>
+
+        <div class="fin-bar" title="Расход относительно дохода">
+          <div class="fin-bar-track">
+            <div class="fin-bar-fill" style="width:${pct}%"></div>
+          </div>
+          <div class="fin-bar-meta">${pct}% расхода от дохода</div>
+        </div>
+
+        <section class="fin-section fin-accounts-section">
+          <h3>Счета</h3>
+          <div class="fin-accounts">${accountHtml}</div>
+        </section>
       </div>
 
-      <div class="fin-hero">
-        <span class="fin-hero-label">Баланс месяца</span>
-        <div class="fin-hero-value ${balClass}">${escapeHtml(moneyPlain(bal))}</div>
-      </div>
-
-      <div class="fin-split">
-        <div class="fin-split-card income">
-          <span class="label">Доход</span>
-          <span class="value">${escapeHtml(moneySigned(income, "income"))}</span>
-          <span class="fin-subhint">задачи ${escapeHtml(moneyPlain(s.task_income))} · работа ${escapeHtml(moneyPlain(s.work_income))}</span>
-        </div>
-        <div class="fin-split-card expense">
-          <span class="label">Расход</span>
-          <span class="value">${escapeHtml(moneySigned(expense, "expense"))}</span>
-          <span class="fin-subhint">задачи ${escapeHtml(moneyPlain(s.task_expense))} · записи ${escapeHtml(moneyPlain(s.transaction_expense))}</span>
-        </div>
-      </div>
-
-      <div class="fin-bar" title="Расход относительно дохода">
-        <div class="fin-bar-track">
-          <div class="fin-bar-fill" style="width:${pct}%"></div>
-        </div>
-        <div class="fin-bar-meta">${pct}% расхода от дохода</div>
-      </div>
-
-      <section class="fin-section">
-        <h3>Счета</h3>
-        <div class="fin-accounts">${accountHtml}</div>
-      </section>
-
-      <section class="fin-section">
+      <section class="fin-section fin-budget-section">
         <h3>Бюджет по статьям</h3>
-        ${budgetHtml || `<p class="fin-empty">Нет категорий</p>`}
+        <div class="fin-budget-sheet">
+          ${budgetHtml || `<p class="fin-empty">Нет категорий</p>`}
+        </div>
       </section>
 
       <section class="fin-section">
@@ -2333,10 +2341,13 @@ function setView(view, opts = {}) {
   updateTaskChips();
   syncWorkProjectChipVisibility();
   const main = document.querySelector(".main");
-  if (main && !prefersReducedMotion()) {
-    main.classList.remove("view-swap");
-    void main.offsetWidth;
-    main.classList.add("view-swap");
+  if (main) {
+    main.classList.toggle("finance-wide", view === "finance");
+    if (!prefersReducedMotion()) {
+      main.classList.remove("view-swap");
+      void main.offsetWidth;
+      main.classList.add("view-swap");
+    }
   }
   track("view_opened", "ui", null, { view, project_id: state.projectId });
   refresh().catch(showListError);
