@@ -1,6 +1,15 @@
 # NoteTask / todo.baski.pro — context
 
-Updated: 2026-09-06 (~18:40 MSK)
+Updated: 2026-09-06 (~18:50 MSK)
+
+## Daily repeat catch-up 2026-09-06 (~18:50 MSK)
+
+- Open `repeat_rule=daily` с `due_at < today` → на `GET /api/tasks` snap `due_at` на сегодня (время/дата-only сохранить). Не тянуть старую дату в чипе.
+- Complete daily: next due = завтра от **сегодня**, не +1 от просроченной даты (`next_daily_after_complete`).
+- Chip: если due сегодня и не overdue → «Сегодня» / «Сегодня HH:MM» (+ «· Каждый день»).
+- Helpers: `catch_up_daily_due_at`, `snap_due_to_day`, `next_daily_after_complete` в `app/due_utils.py`.
+- Tests: `tests/test_daily_catchup.py` (8 ok). Cache: `app.js?v=75`, `pwa.js?v=12`, SW `notetask-v27`.
+- Verify: task 161 Отжиматься `due=2026-09-06`; UI чип «Сегодня · Каждый день» (было «4 сент. · Каждый день»).
 
 ## Due period window (due_start…due_at) 2026-09-06 (~18:40 MSK)
 
