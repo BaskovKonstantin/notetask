@@ -1215,9 +1215,12 @@ function formatDueChipLabel(task) {
   const end = due.date;
   const overdue = isOpenTaskOverdue(task);
   const repeatRule = task.repeat_rule || "";
+  const today = todayIso();
   let base = "Срок";
   if (start && end && start !== end) {
     base = `${fmtShortDay(start)}–${fmtShortDay(end)}`;
+  } else if (end === today && !overdue) {
+    base = due.time ? `Сегодня ${due.time}` : "Сегодня";
   } else if (end) {
     base = due.time || fmtShortDay(end);
   } else if (due.time) {

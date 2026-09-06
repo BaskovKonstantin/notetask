@@ -28,7 +28,13 @@ from .db import (
     utcnow,
 )
 from .deps import get_db
-from .due_utils import normalize_due_start, task_in_today_view, task_in_upcoming_view
+from .due_utils import (
+    catch_up_daily_due_at,
+    normalize_due_start,
+    next_daily_after_complete,
+    task_in_today_view,
+    task_in_upcoming_view,
+)
 from .finance_helpers import (
     sum_work_payment_income,
     work_payment_received_filter,
@@ -515,6 +521,33 @@ async def create_project(
 
 # ---------- tasks ----------
 
+async def catch_up_open_daily_tasks(
+    db: aiosqlite.Connection,
+    rows: list[dict],
+    today: date,
+) -> list[dict]:
+    """Persist daily open tasks: overdue due_at → today (keep time)."""
+    changed = False
+    now = utcnow()
+    for t in rows:
+        if t.get("status") != "open" or t.get("kind") != "task":
+            continue
+        if (t.get("repeat_rule") or "") != "daily":
+            continue
+        new_due = catch_up_daily_due_at(t.get("due_at"), today)
+        if new_due == t.get("due_at"):
+            continue
+        await db.execute(
+            "UPDATE tasks SET due_at=?, updated_at=? WHERE id=?",
+            (new_due, now, t["id"]),
+        )
+        t["due_at"] = new_due
+        changed = True
+    if changed:
+        await db.commit()
+    return rows
+
+
 @app.get("/api/tasks")
 async def list_tasks(
     view: str = "all",
@@ -540,6 +573,7 @@ async def list_tasks(
         else:
             rows = [t for t in rows if t["project_id"] == project_id]
     today = date.today()
+    rows = await catch_up_open_daily_tasks(db, rows, today)
     if view == "today":
         return [t for t in rows if task_in_today_view(t, today)]
     if view == "upcoming":
@@ -784,7 +818,17 @@ async def complete_task(
     now = utcnow()
     rule = normalize_repeat_rule(old.get("repeat_rule"))
     if rule:
-        new_due = next_due_from_rule(old.get("due_at"), rule)
+        today = date.today()
+        if rule == "daily":
+            new_due = next_daily_after_complete(old.get("due_at"), today)
+        else:
+            new_due = next_due_from_rule(old.get("due_at"), rule)
+            # catch up other rules so next is after today if overdue many cycles
+            for _ in range(400):
+                d = new_due[:10] if new_due else ""
+                if not d or d > today.isoformat():
+                    break
+                new_due = next_due_from_rule(new_due, rule)
         await db.execute(
             """
             UPDATE tasks SET due_at=?, due_start=NULL, status='open', completed_at=NULL, updated_at=?

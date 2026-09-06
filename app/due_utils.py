@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any, Mapping
 from zoneinfo import ZoneInfo
 
@@ -23,6 +23,30 @@ def due_day(raw: str | None) -> date | None:
         return date.fromisoformat(text[:10])
     except ValueError:
         return None
+
+
+def snap_due_to_day(due_at: str | None, target: date) -> str:
+    """Replace calendar day, keep time fragment if present."""
+    if due_at and "T" in due_at:
+        return f"{target.isoformat()}T{due_at.split('T', 1)[1]}"
+    return target.isoformat()
+
+
+def catch_up_daily_due_at(due_at: str | None, today: date) -> str | None:
+    """Open daily task: overdue due snaps to today (do not drag old date)."""
+    if due_at is None:
+        return None
+    if not str(due_at).strip():
+        return due_at
+    day = due_day(due_at)
+    if day is None or day >= today:
+        return due_at
+    return snap_due_to_day(due_at, today)
+
+
+def next_daily_after_complete(due_at: str | None, today: date) -> str:
+    """After completing a daily: tomorrow from today, keep time from prior due."""
+    return snap_due_to_day(due_at, today + timedelta(days=1))
 
 
 def normalize_due_start(due_start: str | None, due_at: str | None) -> str | None:
