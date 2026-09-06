@@ -151,7 +151,7 @@
       if (/wrong password|auth/i.test(msg)) {
         err.textContent = "Неверный пароль";
       } else if (isNetworkError(ex)) {
-        if (isDesktopClient() && goLanFallback()) return;
+        if (goLanFallback()) return;
         err.innerHTML =
           'Сеть не отвечает. Дома: открой <a href="' +
           LAN_ORIGIN +

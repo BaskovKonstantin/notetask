@@ -196,6 +196,9 @@ async function api(path, opts = {}) {
   }
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
+    if (res.status === 503 || err.detail === "offline") {
+      throw new Error("network");
+    }
     throw new Error(err.detail || res.statusText);
   }
   if (res.status === 204) return null;
@@ -3842,7 +3845,7 @@ function showBootError() {
     '<button type="button" class="btn ghost" data-boot-retry>Повторить</button>' +
     '</div>';
   el.querySelector("[data-boot-retry]")?.addEventListener("click", () => {
-    if (isDesktopClient() && goLanFallback()) return;
+    if (!isLanHost() && goLanFallback()) return;
     location.reload();
   });
   el.querySelector("a")?.addEventListener("click", (e) => {
@@ -3981,7 +3984,7 @@ async function boot() {
     initNotificationPoll();
   } catch (err) {
     if (isAuthError(err)) showLogin();
-    else if ((isDesktopClient() || window.__notetaskLanNeeded) && goLanFallback()) return;
+    else if (!isLanHost() && goLanFallback()) return;
     else showBootError();
   }
 }

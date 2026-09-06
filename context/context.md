@@ -1,6 +1,29 @@
 # NoteTask / todo.baski.pro — context
 
-Updated: 2026-09-04 (~01:20 MSK)
+Updated: 2026-09-06 (~12:20 MSK)
+
+## Outage check 2026-09-06 (~12:20 MSK) — «почему перестал работать поддомен todo»
+
+**Вердикт: поддомен не падал.** Backend + Caddy + LE + публичный DNS живы. Ломается только путь клиент→сервер в домашнем Wi‑Fi (тот же hairpin, что 2026-08-29 / 2026-09-03).
+
+Доказательства:
+- `notetask` Up 2 days, RestartCount=0; `/api/health` 200 на `127.0.0.1:8100` (~1ms)
+- `https://todo.baski.pro/api/health` 200 с сервера (split-DNS → `192.168.0.6`) и **снаружи** (WebFetch isolated)
+- Публичный A `@8.8.8.8` = `5.144.98.126` (совпадает с WAN / `ifconfig.me`)
+- LE cert `CN=todo.baski.pro` до **2026-11-06**; Caddy ACME без error за 48h
+- Browser на сервере: логин-экран NoteTask, URL `https://todo.baski.pro/`
+- Caddy 24h `todo.baski.pro`: status почти все 200/304/308; клиенты — боты (185.213.175.92 и др.) + LAN `192.168.0.5` (55 req, Cursor 12:15 MSK, полный boot: `/` `app.js?v=71` `/api/health` `/api/projects` 200)
+- Router DNS `192.168.0.1` → `5.144.98.126`; dnsmasq `192.168.0.6` → `192.168.0.6`
+- WireGuard peers `10.66.0.2/3` — **нет handshake**
+- Caddyfile mtime 2026-09-03 21:19; `baski-web` Up since 2026-09-03, restarts 0
+
+Не чинилось: TP-Link без NAT loopback. С Wi‑Fi + публичный/DoH DNS пакет на `5.144.98.126` не доезжает до Caddy. Обход: hosts / DNS `192.168.0.6` / `http://192.168.0.6/` / LTE.
+
+Скрин юзера 2026-09-06 12:18 — `showBootError` («Нет связи» + «Повторить»). HTML из SW-кэша, API не доехал. Caddy с `.5` Cursor в те же минуты отдавал `/` + `/api/health` + `/api/tasks` 200 — другой браузер (YaBrowser DoH) бьёт в WAN и висит.
+
+Fix 2026-09-06: любой клиент при мёртвом `/api/health` → `http://192.168.0.6/` (раньше только desktop). `api()` 503/`offline` = `network`. Cache: `app.js?v=72`, `login.js?v=13`, `pwa.js?v=9`, SW `notetask-v24`. Старый SW-кэш фикс не подхватит, пока не открыть LAN.
+
+
 
 ## Main views full width 2026-09-04 (~01:20 MSK)
 
