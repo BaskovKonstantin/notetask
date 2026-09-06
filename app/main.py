@@ -28,6 +28,7 @@ from .db import (
     utcnow,
 )
 from .deps import get_db
+from .due_utils import normalize_due_start, task_in_today_view, task_in_upcoming_view
 from .finance_helpers import (
     sum_work_payment_income,
     work_payment_received_filter,
@@ -184,6 +185,7 @@ class TaskIn(BaseModel):
     kind: Literal["task", "idea", "plan"] = "task"
     priority: int = Field(default=4, ge=1, le=4)
     due_at: str | None = None
+    due_start: str | None = None
     remind_at: str | None = None
     project_id: int | None = None
     status: Literal["open", "done"] | None = None
@@ -200,6 +202,7 @@ class TaskPatchIn(BaseModel):
     kind: Literal["task", "idea", "plan"] | None = None
     priority: int | None = Field(default=None, ge=1, le=4)
     due_at: str | None = None
+    due_start: str | None = None
     remind_at: str | None = None
     project_id: int | None = None
     status: Literal["open", "done"] | None = None
@@ -536,21 +539,11 @@ async def list_tasks(
             rows = [t for t in rows if t["project_id"] == project_id or t["project_id"] is None]
         else:
             rows = [t for t in rows if t["project_id"] == project_id]
-    today = date.today().isoformat()
+    today = date.today()
     if view == "today":
-        return [
-            t
-            for t in rows
-            if t["kind"] == "task"
-            and t["due_at"]
-            and t["due_at"][:10] <= today
-        ]
+        return [t for t in rows if task_in_today_view(t, today)]
     if view == "upcoming":
-        return [
-            t
-            for t in rows
-            if t["kind"] == "task" and t["due_at"] and t["due_at"][:10] > today
-        ]
+        return [t for t in rows if task_in_upcoming_view(t, today)]
     if view == "inbox":
         return [t for t in rows if t["kind"] == "task" and not t["due_at"]]
     if view == "someday":
@@ -568,13 +561,14 @@ async def create_task(
 ):
     now = utcnow()
     work_project_id = await normalize_work_project_id(db, body.project_id, body.work_project_id)
+    due_start = normalize_due_start(body.due_start, body.due_at)
     cur = await db.execute(
         """
         INSERT INTO tasks(
-          project_id, title, notes, kind, priority, due_at, remind_at,
+          project_id, title, notes, kind, priority, due_at, due_start, remind_at,
           status, created_at, updated_at, location, cost, cost_type, work_project_id, repeat_rule
         )
-        VALUES(?,?,?,?,?,?,?,'open',?,?,?,?,?,?,?)
+        VALUES(?,?,?,?,?,?,?,?,'open',?,?,?,?,?,?,?)
         """,
         (
             body.project_id,
@@ -583,6 +577,7 @@ async def create_task(
             body.kind,
             body.priority,
             body.due_at,
+            due_start,
             body.remind_at,
             now,
             now,
@@ -599,7 +594,7 @@ async def create_task(
         "created",
         "task",
         tid,
-        {"title": body.title, "kind": body.kind, "due_at": body.due_at},
+        {"title": body.title, "kind": body.kind, "due_at": body.due_at, "due_start": due_start},
     )
     await db.commit()
     return await fetch_task(db, tid)
@@ -652,10 +647,13 @@ async def patch_task(
     next_values["work_project_id"] = await normalize_work_project_id(
         db, next_values.get("project_id"), next_values.get("work_project_id")
     )
+    next_values["due_start"] = normalize_due_start(
+        next_values.get("due_start"), next_values.get("due_at")
+    )
 
     await db.execute(
         """
-        UPDATE tasks SET project_id=?, title=?, notes=?, kind=?, priority=?, due_at=?, remind_at=?,
+        UPDATE tasks SET project_id=?, title=?, notes=?, kind=?, priority=?, due_at=?, due_start=?, remind_at=?,
           status=?, completed_at=?, updated_at=?, location=?, cost=?, cost_type=?, work_project_id=?,
           repeat_rule=?
         WHERE id=?
@@ -667,6 +665,7 @@ async def patch_task(
             next_values["kind"],
             next_values["priority"],
             next_values["due_at"],
+            next_values.get("due_start"),
             next_values["remind_at"],
             status,
             completed_at,
@@ -700,6 +699,7 @@ async def update_task(
         "kind": body.kind,
         "priority": body.priority,
         "due_at": body.due_at,
+        "due_start": normalize_due_start(body.due_start, body.due_at),
         "remind_at": body.remind_at,
         "status": status,
         "location": body.location,
@@ -743,7 +743,7 @@ async def update_task(
 
     await db.execute(
         """
-        UPDATE tasks SET project_id=?, title=?, notes=?, kind=?, priority=?, due_at=?, remind_at=?,
+        UPDATE tasks SET project_id=?, title=?, notes=?, kind=?, priority=?, due_at=?, due_start=?, remind_at=?,
           status=?, completed_at=?, updated_at=?, location=?, cost=?, cost_type=?, work_project_id=?,
           repeat_rule=?
         WHERE id=?
@@ -755,6 +755,7 @@ async def update_task(
             next_values["kind"],
             next_values["priority"],
             next_values["due_at"],
+            next_values.get("due_start"),
             next_values["remind_at"],
             status,
             completed_at,
@@ -786,7 +787,7 @@ async def complete_task(
         new_due = next_due_from_rule(old.get("due_at"), rule)
         await db.execute(
             """
-            UPDATE tasks SET due_at=?, status='open', completed_at=NULL, updated_at=?
+            UPDATE tasks SET due_at=?, due_start=NULL, status='open', completed_at=NULL, updated_at=?
             WHERE id=?
             """,
             (new_due, now, task_id),

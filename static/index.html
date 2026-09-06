@@ -51,8 +51,8 @@
         });
     })();
   </script>
-  <link rel="stylesheet" href="assets/styles.css?v=48" />
-  <script src="assets/pwa.js?v=10"></script>
+  <link rel="stylesheet" href="assets/styles.css?v=49" />
+  <script src="assets/pwa.js?v=11"></script>
 </head>
 <body>
   <div id="login" class="login-wrap">
@@ -170,7 +170,8 @@
                     <span class="chip-label" id="chip-due-label">Срок</span>
                   </button>
                   <div class="chip-menu chip-menu-wide hidden" id="pop-due" role="dialog" aria-label="Срок">
-                    <input type="date" id="task-due" />
+                    <label class="due-field-label">С <input type="date" id="task-due-start" title="Начало периода" /></label>
+                    <label class="due-field-label">По <input type="date" id="task-due" title="Конец / срок" /></label>
                     <input type="time" id="task-due-time" title="Время" />
                     <div class="due-quick">
                       <button type="button" class="chip-option" data-composer-quick-due="today">Сегодня</button>
@@ -322,6 +323,6 @@
   </div>
 
   <script src="assets/pwa-install.js?v=3"></script>
-  <script src="assets/app.js?v=73"></script>
+  <script src="assets/app.js?v=74"></script>
 </body>
 </html>

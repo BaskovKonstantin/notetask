@@ -984,6 +984,28 @@ button, input, select, textarea {
 }
 .chip-btn.has-value { color: var(--ink); font-weight: 600; border-color: rgba(var(--accent-rgb), 0.4); }
 .chip-btn.has-value .chip-label { font-weight: 650; }
+.chip-btn.is-overdue,
+.chip-btn.is-overdue.has-value {
+  color: #9b2c2c;
+  border-color: rgba(155, 44, 44, 0.45);
+}
+.chip-btn.is-overdue:hover,
+.chip-btn.is-overdue.active {
+  background: rgba(155, 44, 44, 0.08);
+}
+
+.due-field-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin: 4px 0;
+}
+.due-field-label input[type="date"] {
+  flex: 1;
+  min-width: 0;
+}
 
 .chip-btn.prio-1,
 .chip-btn.prio-1.has-value {

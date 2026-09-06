@@ -1,6 +1,19 @@
 # NoteTask / todo.baski.pro — context
 
-Updated: 2026-09-06 (~12:35 MSK)
+Updated: 2026-09-06 (~18:40 MSK)
+
+## Due period window (due_start…due_at) 2026-09-06 (~18:40 MSK)
+
+- DB: `tasks.due_start` TEXT (migrate `ensure_column`).
+- Semantics: `due_at` = конец/срок; `due_start` = начало окна (nullable). Без start — однодневный срок как раньше.
+- Повестка `view=today`: окно с `today >= due_start` (включая после конца = просрочка); до start — не в today, в `upcoming`.
+- UI поповер срока: поля **С** / **По** (+ время); чип `1 сент.–30 сент.`; просрочка `Просрочено · …` + класс `.is-overdue` (красн.). `due_at` не автосдвигается.
+- Quick-пресеты / «Без срока» сбрасывают `due_start`. Повтор при complete → `due_start=NULL`.
+- Helpers: `app/due_utils.py` — `due_day`, `normalize_due_start`, `task_in_today_view`, `task_in_upcoming_view`, `task_window_overdue`.
+- Tests: `tests/test_due_window.py` (13 ok). Cache: `app.js?v=74`, `styles.css?v=49`, `pwa.js?v=11`, SW `notetask-v26`.
+- Verify: task 138 Spider `2026-09-01…30` чип «1 сент.–30 сент.» в Сегодня; ЛЦТ/отжимания — «Просрочено · …».
+
+
 
 ## Due chip «Сегодня» + overdue group 2026-09-06 (~12:35 MSK)
 

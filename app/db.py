@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   kind TEXT NOT NULL DEFAULT 'task',
   priority INTEGER NOT NULL DEFAULT 4,
   due_at TEXT,
+  due_start TEXT,
   remind_at TEXT,
   status TEXT NOT NULL DEFAULT 'open',
   deleted_at TEXT,
@@ -200,6 +201,7 @@ async def migrate(db: aiosqlite.Connection) -> None:
     await ensure_column(db, "tasks", "cost_type", "TEXT")
     await ensure_column(db, "tasks", "work_project_id", "INTEGER")
     await ensure_column(db, "tasks", "repeat_rule", "TEXT")
+    await ensure_column(db, "tasks", "due_start", "TEXT")
     await db.execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_source_ext "
         "ON tasks(source, external_id) WHERE external_id IS NOT NULL"

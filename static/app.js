@@ -1198,6 +1198,38 @@ function fmtShortDay(isoDate) {
   }
 }
 
+function dueStartDay(task) {
+  const raw = task?.due_start;
+  if (!raw) return "";
+  return String(raw).slice(0, 10);
+}
+
+function isOpenTaskOverdue(task) {
+  if (!task || task.status === "done" || !task.due_at) return false;
+  return task.due_at.slice(0, 10) < todayIso();
+}
+
+function formatDueChipLabel(task) {
+  const due = taskDueParts(task);
+  const start = dueStartDay(task);
+  const end = due.date;
+  const overdue = isOpenTaskOverdue(task);
+  const repeatRule = task.repeat_rule || "";
+  let base = "Срок";
+  if (start && end && start !== end) {
+    base = `${fmtShortDay(start)}–${fmtShortDay(end)}`;
+  } else if (end) {
+    base = due.time || fmtShortDay(end);
+  } else if (due.time) {
+    base = due.time;
+  }
+  if (repeatRule) {
+    base = end || start ? `${base} · ${repeatLabel(repeatRule)}` : repeatLabel(repeatRule);
+  }
+  if (overdue && (end || start)) return `Просрочено · ${base}`;
+  return base;
+}
+
 function fmtShortDateTime(value) {
   if (!value) return "";
   try {
@@ -1264,18 +1296,19 @@ function updateTaskChips() {
   });
 
   const due = $("task-due").value;
+  const dueStart = $("task-due-start")?.value || "";
   const dueTime = $("task-due-time")?.value || "";
   const repeat = $("task-repeat")?.value || "";
+  let dueLabel = "Срок";
+  if (dueStart && due && dueStart !== due) dueLabel = `${fmtShortDay(dueStart)}–${fmtShortDay(due)}`;
+  else if (due) dueLabel = dueTime ? `${fmtShortDay(due)} ${dueTime}` : fmtShortDay(due);
+  else if (dueTime) dueLabel = dueTime;
   if (repeat) {
-    $("chip-due-label").textContent = due
-      ? `${fmtShortDay(due)}${dueTime ? ` ${dueTime}` : ""} · ${repeatLabel(repeat)}`
-      : repeatLabel(repeat);
-  } else if (due) {
-    $("chip-due-label").textContent = dueTime ? `${fmtShortDay(due)} ${dueTime}` : fmtShortDay(due);
+    $("chip-due-label").textContent = due || dueStart ? `${dueLabel} · ${repeatLabel(repeat)}` : repeatLabel(repeat);
   } else {
-    $("chip-due-label").textContent = dueTime || "Срок";
+    $("chip-due-label").textContent = dueLabel;
   }
-  $("chip-due").classList.toggle("has-value", !!due || !!dueTime || !!repeat);
+  $("chip-due").classList.toggle("has-value", !!due || !!dueStart || !!dueTime || !!repeat);
   document.querySelectorAll("#composer-repeat [data-set-repeat]").forEach((btn) => {
     btn.classList.toggle("selected", (btn.dataset.setRepeat || "") === repeat);
   });
@@ -1351,10 +1384,12 @@ function initTaskMetaChips() {
       const date = quickDueDate(btn.dataset.composerQuickDue);
       if (!date) return;
       $("task-due").value = date;
+      if ($("task-due-start")) $("task-due-start").value = "";
       updateTaskChips();
       closeTaskPopovers();
     });
   });
+  $("task-due-start")?.addEventListener("change", updateTaskChips);
   $("task-remind").addEventListener("change", updateTaskChips);
   $("task-location").addEventListener("input", updateTaskChips);
   $("task-cost").addEventListener("input", updateTaskChips);
@@ -1373,6 +1408,7 @@ function initTaskMetaChips() {
       if (btn.dataset.clear === "task-due") {
         if (el) delete el.dataset.dueTime;
         if ($("task-due-time")) $("task-due-time").value = "";
+        if ($("task-due-start")) $("task-due-start").value = "";
         if ($("task-repeat")) $("task-repeat").value = "";
       }
       updateTaskChips();
@@ -2437,7 +2473,7 @@ async function patchTask(taskId, patch) {
     patch.project_id !== undefined &&
     Number(patch.project_id) !== Number(state.projectId);
   if (leavesView) await animateLeave(item, "move");
-  else if (item && (patch.priority != null || patch.due_at !== undefined || patch.remind_at !== undefined || patch.work_project_id !== undefined)) {
+  else if (item && (patch.priority != null || patch.due_at !== undefined || patch.due_start !== undefined || patch.remind_at !== undefined || patch.work_project_id !== undefined)) {
     state.motion.pulseId = taskId;
   }
   await api(`/api/tasks/${taskId}`, { method: "PATCH", body: JSON.stringify(patch) });
@@ -2446,16 +2482,15 @@ async function patchTask(taskId, patch) {
 
 function renderTaskAttrs(t, projectMap) {
   const due = taskDueParts(t);
+  const dueStart = dueStartDay(t);
   const projectName = t.project_id ? projectMap[t.project_id] || "Раздел" : "Раздел";
   const hasProject = !!t.project_id;
   const hasPriority = t.priority !== 4;
-  const hasDue = !!due.date || !!due.time;
+  const hasDue = !!due.date || !!due.time || !!dueStart;
   const repeatRule = t.repeat_rule || "";
   const hasRepeat = !!repeatRule;
-  const dueLabel = due.date ? fmtShortDay(due.date) : "Срок";
-  const dueChipLabel = hasRepeat
-    ? `${due.time || dueLabel} · ${repeatLabel(repeatRule)}`
-    : due.time || dueLabel;
+  const overdue = isOpenTaskOverdue(t);
+  const dueChipLabel = formatDueChipLabel(t);
   const hasLocation = !!t.location;
   const hasCost = t.cost != null && Number(t.cost) !== 0;
   const hasRemind = !!t.remind_at;
@@ -2524,12 +2559,13 @@ function renderTaskAttrs(t, projectMap) {
         </div>
       </div>
       <div class="chip-popover">
-        <button type="button" class="chip-btn${hasDue || hasRepeat ? " has-value" : ""}" aria-expanded="false">
+        <button type="button" class="chip-btn${hasDue || hasRepeat ? " has-value" : ""}${overdue ? " is-overdue" : ""}" aria-expanded="false">
           <span class="chip-icon">${CHIP_ICON.time}</span>
           <span class="chip-label">${escapeHtml(dueChipLabel)}</span>
         </button>
         <div class="chip-menu chip-menu-wide hidden" role="dialog" aria-label="Срок и время">
-          <input type="date" data-task-field="due-date" value="${escapeAttr(due.date)}" />
+          <label class="due-field-label">С <input type="date" data-task-field="due-start" value="${escapeAttr(dueStart)}" title="Начало периода" /></label>
+          <label class="due-field-label">По <input type="date" data-task-field="due-date" value="${escapeAttr(due.date)}" title="Конец / срок" /></label>
           <input type="time" data-task-field="due-time" value="${escapeAttr(due.time)}" />
           ${
             hasDue || hasRepeat
@@ -2582,7 +2618,11 @@ function taskDayKey(task) {
   if (!task.due_at) return "none";
   const day = task.due_at.slice(0, 10);
   const today = todayIso();
-  if (task.status !== "done" && day < today) return today;
+  if (task.status !== "done") {
+    if (day < today) return today;
+    const start = dueStartDay(task);
+    if (start && start <= today && today <= day) return today;
+  }
   return day;
 }
 
@@ -3335,6 +3375,7 @@ $("task-form").addEventListener("submit", async (e) => {
       kind,
       priority,
       due_at: due,
+      due_start: $("task-due-start")?.value || null,
       remind_at: remind,
       project_id: parsed.meta.projectId || (state.view === "project" ? state.projectId : null) || null,
       location,
@@ -3353,6 +3394,7 @@ $("task-form").addEventListener("submit", async (e) => {
 
   $("task-title").value = "";
   if ($("task-due-time")) $("task-due-time").value = "";
+  if ($("task-due-start")) $("task-due-start").value = "";
   if ($("task-due")) delete $("task-due").dataset.dueTime;
   $("task-location").value = "";
   $("task-cost").value = "";
@@ -3415,13 +3457,18 @@ $("task-list").addEventListener("click", async (e) => {
       const timeInput = attrsRoot.querySelector('[data-task-field="due-time"]');
       await patchTask(Number(attrsRoot.dataset.taskId), {
         due_at: mergeTaskDue(date, timeInput?.value || ""),
+        due_start: null,
       });
       closeTaskPopovers();
       return;
     }
     if (e.target.closest("[data-task-clear-due]")) {
       e.stopPropagation();
-      await patchTask(Number(attrsRoot.dataset.taskId), { due_at: null, repeat_rule: null });
+      await patchTask(Number(attrsRoot.dataset.taskId), {
+        due_at: null,
+        due_start: null,
+        repeat_rule: null,
+      });
       closeTaskPopovers();
       return;
     }
@@ -3509,10 +3556,20 @@ $("task-list").addEventListener("change", async (e) => {
   if (!attrsRoot) return;
   const taskId = Number(attrsRoot.dataset.taskId);
   const field = e.target.dataset.taskField;
-  if (field === "due-date" || field === "due-time") {
+  if (field === "due-date" || field === "due-time" || field === "due-start") {
     const dateInput = attrsRoot.querySelector('[data-task-field="due-date"]');
+    const startInput = attrsRoot.querySelector('[data-task-field="due-start"]');
     const timeInput = attrsRoot.querySelector('[data-task-field="due-time"]');
-    await patchTask(taskId, { due_at: mergeTaskDue(dateInput.value, timeInput.value) });
+    let end = dateInput?.value || "";
+    const start = startInput?.value || "";
+    if (start && !end) {
+      end = start;
+      if (dateInput) dateInput.value = start;
+    }
+    await patchTask(taskId, {
+      due_at: mergeTaskDue(end, timeInput?.value || "") || end || null,
+      due_start: start || null,
+    });
     closeTaskPopovers();
     return;
   }
