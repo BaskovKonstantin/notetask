@@ -429,6 +429,8 @@ function quickDueDate(kind) {
   const now = new Date();
   now.setHours(12, 0, 0, 0);
   switch (kind) {
+    case "today":
+      return toIsoDate(now);
     case "tomorrow":
       return toIsoDate(addDays(now, 1));
     case "weekend": {
@@ -469,6 +471,7 @@ function repeatLabel(rule) {
 function quickDueButtonsHtml() {
   return `
     <div class="due-quick">
+      <button type="button" class="chip-option" data-quick-due="today">Сегодня</button>
       <button type="button" class="chip-option" data-quick-due="tomorrow">Завтра</button>
       <button type="button" class="chip-option" data-quick-due="weekend">На выходных</button>
       <button type="button" class="chip-option" data-quick-due="next_week">На след. неделе</button>
@@ -2577,7 +2580,10 @@ function renderTaskAttrs(t, projectMap) {
 
 function taskDayKey(task) {
   if (!task.due_at) return "none";
-  return task.due_at.slice(0, 10);
+  const day = task.due_at.slice(0, 10);
+  const today = todayIso();
+  if (task.status !== "done" && day < today) return today;
+  return day;
 }
 
 function taskTimeSortKey(task) {

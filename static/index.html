@@ -52,7 +52,7 @@
     })();
   </script>
   <link rel="stylesheet" href="assets/styles.css?v=48" />
-  <script src="assets/pwa.js?v=9"></script>
+  <script src="assets/pwa.js?v=10"></script>
 </head>
 <body>
   <div id="login" class="login-wrap">
@@ -173,6 +173,7 @@
                     <input type="date" id="task-due" />
                     <input type="time" id="task-due-time" title="Время" />
                     <div class="due-quick">
+                      <button type="button" class="chip-option" data-composer-quick-due="today">Сегодня</button>
                       <button type="button" class="chip-option" data-composer-quick-due="tomorrow">Завтра</button>
                       <button type="button" class="chip-option" data-composer-quick-due="weekend">На выходных</button>
                       <button type="button" class="chip-option" data-composer-quick-due="next_week">На след. неделе</button>
@@ -321,6 +322,6 @@
   </div>
 
   <script src="assets/pwa-install.js?v=3"></script>
-  <script src="assets/app.js?v=72"></script>
+  <script src="assets/app.js?v=73"></script>
 </body>
 </html>
