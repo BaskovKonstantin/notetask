@@ -1,6 +1,17 @@
 # NoteTask / todo.baski.pro — context
 
-Updated: 2026-09-06 (~18:50 MSK)
+Updated: 2026-09-08 (~17:30 MSK)
+
+## Outage check 2026-09-08 (~17:30 MSK) — «домен не грузится / проверь nginx»
+
+**Вердикт: nginx не участвует; Caddy + backend живы; снаружи 200.**
+
+- Host `nginx` = **inactive**. Прокси = Docker `baski-web` (**Caddy**), Caddyfile `todo.baski.pro` → `127.0.0.1:8100`.
+- `notetask` Up; `/api/health` 200: `127.0.0.1:8100`, `http://192.168.0.6`, `https://todo.baski.pro` (LAN + `--resolve` на WAN `5.144.98.126`).
+- LE cert `CN=todo.baski.pro` до **2026-11-06**.
+- DNS: `@8.8.8.8` / router `192.168.0.1` → `5.144.98.126`; dnsmasq `192.168.0.6` → `192.168.0.6`; `/etc/hosts` тоже.
+- Caddy access: внешние клиенты (YaBrowser, Photino) на `todo.baski.pro` — 200 прямо сейчас.
+- Скорее снова **hairpin** домашнего Wi‑Fi (router DNS/DoH → WAN IP, NAT loopback нет). Обход: DNS/`hosts` на `192.168.0.6` или `http://192.168.0.6/`.
 
 ## Daily repeat catch-up 2026-09-06 (~18:50 MSK)
 
