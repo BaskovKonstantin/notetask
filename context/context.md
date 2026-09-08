@@ -1,6 +1,12 @@
 # NoteTask / todo.baski.pro — context
 
-Updated: 2026-09-08 (~17:30 MSK)
+Updated: 2026-09-08 (~17:40 MSK)
+
+## Treck LAN hairpin (parallel to todo) 2026-09-08 (~17:40 MSK)
+
+- Treck: client fallback → `http://192.168.0.6:8000` + cookie Secure via X-Forwarded-Proto (see treckbas context).
+- hosts script (`fix-windows-hosts.ps1`) already lists `treck.baski.pro`; health check now also pings treck.
+- Caddy `http://192.168.0.6/` остаётся NoteTask only (`:8100`); treck — порт `:8000`.
 
 ## Outage check 2026-09-08 (~17:30 MSK) — «домен не грузится / проверь nginx»
 
