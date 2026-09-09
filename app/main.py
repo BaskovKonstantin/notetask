@@ -42,7 +42,8 @@ from .finance_helpers import (
     work_payments_has_status,
 )
 from .finance_sheet import ensure_finance_sheet_defaults, register_finance_sheet
-from .notify import notify_loop, send_telegram
+from .notify import configure_complete_helpers, notify_loop, send_telegram
+from .task_complete import complete_task_row
 
 STATIC = Path(__file__).resolve().parents[1] / "static"
 DOWNLOADS_DIR = DATA_DIR / "downloads"
@@ -75,6 +76,7 @@ async def lifespan(app: FastAPI):
     await db.execute("DELETE FROM action_log WHERE at < ?", (cutoff,))
     await db.commit()
     await db.close()
+    configure_complete_helpers(normalize_repeat_rule, next_due_from_rule)
     stop = asyncio.Event()
     task = asyncio.create_task(notify_loop(stop))
     try:
@@ -845,50 +847,15 @@ async def complete_task(
     db: aiosqlite.Connection = Depends(get_db),
     _: dict = Depends(require_auth),
 ):
-    old = await fetch_task(db, task_id)
-    if old["status"] == "done":
-        return old
-    now = utcnow()
-    rule = normalize_repeat_rule(old.get("repeat_rule"))
-    if rule:
-        today = date.today()
-        if rule == "daily":
-            new_due = next_daily_after_complete(old.get("due_at"), today)
-        else:
-            new_due = next_due_from_rule(old.get("due_at"), rule)
-            # catch up other rules so next is after today if overdue many cycles
-            for _ in range(400):
-                d = new_due[:10] if new_due else ""
-                if not d or d > today.isoformat():
-                    break
-                new_due = next_due_from_rule(new_due, rule)
-        await db.execute(
-            """
-            UPDATE tasks SET due_at=?, due_start=NULL, status='open', completed_at=NULL, updated_at=?
-            WHERE id=?
-            """,
-            (new_due, now, task_id),
-        )
-        await bump_completions(db)
-        await log_action(
-            db,
-            "completed",
-            "task",
-            task_id,
-            {"title": old["title"], "recurring": True, "repeat_rule": rule, "next_due": new_due},
-        )
-        await db.commit()
-        task = await fetch_task(db, task_id)
-        task["rescheduled"] = True
-        return task
-    await db.execute(
-        "UPDATE tasks SET status='done', completed_at=?, updated_at=? WHERE id=?",
-        (now, now, task_id),
+    result = await complete_task_row(
+        db,
+        task_id,
+        normalize_repeat_rule=normalize_repeat_rule,
+        next_due_from_rule=next_due_from_rule,
     )
-    await bump_completions(db)
-    await log_action(db, "completed", "task", task_id, {"title": old["title"]})
-    await db.commit()
-    return await fetch_task(db, task_id)
+    if result is None:
+        raise HTTPException(404, "Not found")
+    return result
 
 
 @app.post("/api/tasks/{task_id}/promote")

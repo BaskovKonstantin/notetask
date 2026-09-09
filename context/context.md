@@ -1,6 +1,14 @@
 # NoteTask / todo.baski.pro — context
 
-Updated: 2026-09-09 (~12:40 MSK)
+Updated: 2026-09-09 (~13:05 MSK)
+
+## TG remind «Выполнить» button 2026-09-09 (~13:05 MSK)
+
+- Remind + due TG messages: inline `✅ Выполнить` (`callback_data=done:{id}`).
+- Notify loop long-polls `getUpdates` (callback_query); only `TELEGRAM_CHAT_ID`.
+- Tap → `complete_task_row` (same as API): recurring rolls due, clears `remind_*` so hourly stops; edits message to ✓.
+- Shared: `app/task_complete.py`, `app/tg_callbacks.py`.
+- Tests: `tests/test_tg_complete_callback.py`.
 
 ## Hourly remind until done 2026-09-09 (~12:40 MSK)
 
