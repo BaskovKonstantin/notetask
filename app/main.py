@@ -31,7 +31,6 @@ from .deps import get_db
 from .due_utils import (
     catch_up_daily_due_at,
     normalize_due_start,
-    next_daily_after_complete,
     task_in_today_view,
     task_in_upcoming_view,
 )
