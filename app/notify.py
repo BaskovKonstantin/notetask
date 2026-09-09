@@ -22,8 +22,10 @@ from .config import (
 )
 from .db import utcnow
 from .due_utils import due_at_present, is_task_overdue, parse_task_dt
+from .remind_utils import hourly_dedupe_key, in_hour_fire_window, next_hour_boundary_iso
 
 log = logging.getLogger("notetask.notify")
+
 
 TZ = ZoneInfo(NOTIFY_TZ)
 
@@ -116,7 +118,7 @@ async def tick_once() -> None:
     try:
         cur = await db.execute(
             """
-            SELECT id, title, due_at, remind_at, status
+            SELECT id, title, due_at, remind_at, remind_rule, status
             FROM tasks
             WHERE deleted_at IS NULL AND status='open' AND kind='task'
             """
@@ -124,20 +126,41 @@ async def tick_once() -> None:
         tasks = [dict(r) for r in await cur.fetchall()]
 
         for task in tasks:
-            remind_dt = parse_task_dt(task.get("remind_at"))
-            if remind_dt and remind_dt <= now <= remind_dt + timedelta(minutes=5):
-                key = f"remind:{task['id']}:{task.get('remind_at')}"
-                title = "Напоминание"
-                body = task["title"]
-                await _deliver(
-                    db,
-                    kind="remind",
-                    dedupe_key=key,
-                    task_id=task["id"],
-                    title=title,
-                    body=body,
-                    tg_text=f"⏰ {title}: {body}",
-                )
+            if (task.get("remind_rule") or "").strip().lower() == "hourly":
+                if in_hour_fire_window(now):
+                    key = hourly_dedupe_key(task["id"], now)
+                    title = "Напоминание · каждый час"
+                    body = task["title"]
+                    await _deliver(
+                        db,
+                        kind="remind",
+                        dedupe_key=key,
+                        task_id=task["id"],
+                        title=title,
+                        body=body,
+                        tg_text=f"⏰ {title}: {body}",
+                    )
+                    nxt = next_hour_boundary_iso(now + timedelta(minutes=1))
+                    await db.execute(
+                        "UPDATE tasks SET remind_at=?, updated_at=? WHERE id=?",
+                        (nxt, utcnow(), task["id"]),
+                    )
+                    await db.commit()
+            else:
+                remind_dt = parse_task_dt(task.get("remind_at"))
+                if remind_dt and remind_dt <= now <= remind_dt + timedelta(minutes=5):
+                    key = f"remind:{task['id']}:{task.get('remind_at')}"
+                    title = "Напоминание"
+                    body = task["title"]
+                    await _deliver(
+                        db,
+                        kind="remind",
+                        dedupe_key=key,
+                        task_id=task["id"],
+                        title=title,
+                        body=body,
+                        tg_text=f"⏰ {title}: {body}",
+                    )
 
             due_raw = task.get("due_at")
             if not due_at_present(due_raw):

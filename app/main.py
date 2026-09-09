@@ -35,6 +35,7 @@ from .due_utils import (
     task_in_today_view,
     task_in_upcoming_view,
 )
+from .remind_utils import next_hour_boundary_iso, normalize_remind_rule as _normalize_remind_rule
 from .finance_helpers import (
     sum_work_payment_income,
     work_payment_received_filter,
@@ -174,6 +175,23 @@ def normalize_repeat_rule(rule: str | None) -> str | None:
     return rule
 
 
+def normalize_remind_rule(rule: str | None) -> str | None:
+    try:
+        return _normalize_remind_rule(rule)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+def prepare_remind_fields(
+    remind_at: str | None,
+    remind_rule: str | None,
+) -> tuple[str | None, str | None]:
+    rule = normalize_remind_rule(remind_rule)
+    if rule == "hourly":
+        return next_hour_boundary_iso(), rule
+    return remind_at, None
+
+
 # ---------- schemas ----------
 
 class LoginIn(BaseModel):
@@ -193,6 +211,7 @@ class TaskIn(BaseModel):
     due_at: str | None = None
     due_start: str | None = None
     remind_at: str | None = None
+    remind_rule: str | None = None
     project_id: int | None = None
     status: Literal["open", "done"] | None = None
     location: str | None = None
@@ -210,6 +229,7 @@ class TaskPatchIn(BaseModel):
     due_at: str | None = None
     due_start: str | None = None
     remind_at: str | None = None
+    remind_rule: str | None = None
     project_id: int | None = None
     status: Literal["open", "done"] | None = None
     location: str | None = None
@@ -596,13 +616,14 @@ async def create_task(
     now = utcnow()
     work_project_id = await normalize_work_project_id(db, body.project_id, body.work_project_id)
     due_start = normalize_due_start(body.due_start, body.due_at)
+    remind_at, remind_rule = prepare_remind_fields(body.remind_at, body.remind_rule)
     cur = await db.execute(
         """
         INSERT INTO tasks(
-          project_id, title, notes, kind, priority, due_at, due_start, remind_at,
+          project_id, title, notes, kind, priority, due_at, due_start, remind_at, remind_rule,
           status, created_at, updated_at, location, cost, cost_type, work_project_id, repeat_rule
         )
-        VALUES(?,?,?,?,?,?,?,?,'open',?,?,?,?,?,?,?)
+        VALUES(?,?,?,?,?,?,?,?,?,'open',?,?,?,?,?,?,?)
         """,
         (
             body.project_id,
@@ -612,7 +633,8 @@ async def create_task(
             body.priority,
             body.due_at,
             due_start,
-            body.remind_at,
+            remind_at,
+            remind_rule,
             now,
             now,
             body.location,
@@ -684,11 +706,18 @@ async def patch_task(
     next_values["due_start"] = normalize_due_start(
         next_values.get("due_start"), next_values.get("due_at")
     )
+    if "remind_at" in patch and "remind_rule" not in patch:
+        next_values["remind_rule"] = None
+    remind_at, remind_rule = prepare_remind_fields(
+        next_values.get("remind_at"), next_values.get("remind_rule")
+    )
+    next_values["remind_at"] = remind_at
+    next_values["remind_rule"] = remind_rule
 
     await db.execute(
         """
         UPDATE tasks SET project_id=?, title=?, notes=?, kind=?, priority=?, due_at=?, due_start=?, remind_at=?,
-          status=?, completed_at=?, updated_at=?, location=?, cost=?, cost_type=?, work_project_id=?,
+          remind_rule=?, status=?, completed_at=?, updated_at=?, location=?, cost=?, cost_type=?, work_project_id=?,
           repeat_rule=?
         WHERE id=?
         """,
@@ -701,6 +730,7 @@ async def patch_task(
             next_values["due_at"],
             next_values.get("due_start"),
             next_values["remind_at"],
+            next_values.get("remind_rule"),
             status,
             completed_at,
             utcnow(),
@@ -726,6 +756,7 @@ async def update_task(
     old = await fetch_task(db, task_id)
     status = body.status or old["status"]
     completed_at = old["completed_at"]
+    remind_at, remind_rule = prepare_remind_fields(body.remind_at, body.remind_rule)
     next_values = {
         "project_id": body.project_id,
         "title": body.title.strip(),
@@ -734,7 +765,8 @@ async def update_task(
         "priority": body.priority,
         "due_at": body.due_at,
         "due_start": normalize_due_start(body.due_start, body.due_at),
-        "remind_at": body.remind_at,
+        "remind_at": remind_at,
+        "remind_rule": remind_rule,
         "status": status,
         "location": body.location,
         "cost": body.cost,
@@ -778,7 +810,7 @@ async def update_task(
     await db.execute(
         """
         UPDATE tasks SET project_id=?, title=?, notes=?, kind=?, priority=?, due_at=?, due_start=?, remind_at=?,
-          status=?, completed_at=?, updated_at=?, location=?, cost=?, cost_type=?, work_project_id=?,
+          remind_rule=?, status=?, completed_at=?, updated_at=?, location=?, cost=?, cost_type=?, work_project_id=?,
           repeat_rule=?
         WHERE id=?
         """,
@@ -791,6 +823,7 @@ async def update_task(
             next_values["due_at"],
             next_values.get("due_start"),
             next_values["remind_at"],
+            next_values.get("remind_rule"),
             status,
             completed_at,
             utcnow(),

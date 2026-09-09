@@ -1,6 +1,16 @@
 # NoteTask / todo.baski.pro — context
 
-Updated: 2026-09-08 (~17:40 MSK)
+Updated: 2026-09-09 (~12:40 MSK)
+
+## Hourly remind until done 2026-09-09 (~12:40 MSK)
+
+- `tasks.remind_rule` TEXT (`hourly` | NULL). One-shot `remind_at` без rule — как раньше.
+- Worker: open + hourly → на локальном `:00`…`:04` шлёт TG/in-app, dedupe `remind:{id}:{YYYY-MM-DDTHH}`, двигает `remind_at` на след. час.
+- Стоп: status≠open или «Без напоминания» (`remind_rule`+`remind_at` null). Daily complete не сбрасывает hourly.
+- UI: пресет **Каждый час** (composer + список). Чип `Каждый час · HH:00`.
+- NLP: `каждый час`, `напоминай/напомни/долби каждый час`, `hourly` → strip + highlight.
+- Включено на #161 Отжиматься, #16 Почистить зубы. Cache: `app.js?v=76`, `pwa.js?v=13`, SW `notetask-v28`.
+- Tests: `tests/test_hourly_remind.py` (7 ok).
 
 ## Treck LAN hairpin (parallel to todo) 2026-09-08 (~17:40 MSK)
 

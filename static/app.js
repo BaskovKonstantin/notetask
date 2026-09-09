@@ -490,6 +490,36 @@ function taskRemindInputValue(task) {
   }
 }
 
+function nextHourBoundaryLocal(from = new Date()) {
+  const d = new Date(from);
+  d.setMinutes(0, 0, 0);
+  if (from.getTime() > d.getTime()) d.setHours(d.getHours() + 1);
+  return d;
+}
+
+function formatRemindChipLabel(task) {
+  if (task?.remind_rule === "hourly") {
+    if (task.remind_at) {
+      try {
+        const d = new Date(task.remind_at);
+        if (!Number.isNaN(d.getTime())) {
+          const pad = (n) => String(n).padStart(2, "0");
+          return `Каждый час · ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        }
+      } catch (_) {}
+    }
+    return "Каждый час";
+  }
+  if (!task?.remind_at) return "";
+  try {
+    const d = new Date(task.remind_at);
+    if (Number.isNaN(d.getTime())) return "";
+    return fmtShortDateTime(task.remind_at);
+  } catch (_) {
+    return "";
+  }
+}
+
 function remindAtIso(localValue) {
   if (!localValue) return null;
   const d = new Date(localValue);
@@ -506,6 +536,7 @@ function dueAtForRemindPreset(dueAt) {
 
 function computeRemindPreset(preset, dueAt) {
   const now = new Date();
+  if (preset === "hourly") return nextHourBoundaryLocal(now).toISOString();
   if (preset === "15m") return new Date(now.getTime() + 15 * 60_000).toISOString();
   if (preset === "1h") return new Date(now.getTime() + 3600_000).toISOString();
   const dueIso = dueAtForRemindPreset(dueAt);
@@ -520,9 +551,11 @@ function computeRemindPreset(preset, dueAt) {
   return null;
 }
 
-function remindPresetButtonsHtml(attrName) {
+function remindPresetButtonsHtml(attrName, selectedRule = "") {
+  const hourlySel = selectedRule === "hourly" ? " selected" : "";
   return `
     <div class="due-quick">
+      <button type="button" class="chip-option${hourlySel}" ${attrName}="hourly">Каждый час</button>
       <button type="button" class="chip-option" ${attrName}="15m">Через 15 мин</button>
       <button type="button" class="chip-option" ${attrName}="1h">Через 1 час</button>
       <button type="button" class="chip-option" ${attrName}="before_1h">За 1 час до срока</button>
@@ -704,6 +737,13 @@ function collectTaskTokens(text) {
   const patterns = [
     {
       type: "remind",
+      re: ruTokenRe(
+        "(?:напоминай|напомни|долби)\\s+каждый\\s+час|каждый\\s+час|hourly",
+      ),
+      meta: () => ({ remindHourly: true }),
+    },
+    {
+      type: "remind",
       re: ruTokenRe("через\\s+\\d+\\s*(?:мин(?:ут[уы]?)?|м|час(?:а|ов)?|ч)"),
       meta: (m) => parseRemindToken(m[0]),
     },
@@ -880,7 +920,7 @@ function collectTaskTokens(text) {
     for (const match of text.matchAll(rule.re)) {
       const meta = rule.meta(match);
       if (rule.type === "date" && !meta.due && !meta.dueTime) continue;
-      if (rule.type === "remind" && !meta.remindAt && meta.remindBeforeMinutes == null && !meta.remindAtDue) continue;
+      if (rule.type === "remind" && !meta.remindAt && meta.remindBeforeMinutes == null && !meta.remindAtDue && !meta.remindHourly) continue;
       if (rule.type === "cost" && (meta.cost == null || !meta.costType)) continue;
       found.push({
         type: rule.type,
@@ -917,6 +957,12 @@ function mergeTaskMeta(tokens) {
     }
     if (m.label) meta.labels.push(m.label);
     if (m.repeat) meta.repeat = m.repeat;
+    if (m.remindHourly) {
+      meta.remindHourly = true;
+      delete meta.remindAt;
+      delete meta.remindBeforeMinutes;
+      delete meta.remindAtDue;
+    }
     if (m.remindAt) meta.remindAt = m.remindAt;
     if (m.remindBeforeMinutes != null) meta.remindBeforeMinutes = m.remindBeforeMinutes;
     if (m.remindAtDue) meta.remindAtDue = true;
@@ -944,6 +990,7 @@ function defaultRemindLocal() {
 }
 
 function resolveRemindLocal(meta, fallbackDate = "", fallbackTime = "") {
+  if (meta.remindHourly) return localInputValue(nextHourBoundaryLocal());
   if (meta.remindAt) return meta.remindAt;
   if (meta.remindBeforeMinutes != null) {
     const dueIso = resolveParsedDue(meta, fallbackDate, fallbackTime);
@@ -995,7 +1042,7 @@ function highlightableTokens(tokens) {
       case "repeat":
         return !!m.repeat;
       case "remind":
-        return !!m.remindAt || m.remindBeforeMinutes != null || !!m.remindAtDue;
+        return !!m.remindAt || m.remindBeforeMinutes != null || !!m.remindAtDue || !!m.remindHourly;
       case "cost":
         return m.cost != null && !!m.costType;
       default: {
@@ -1053,6 +1100,8 @@ function applyParsedMeta(meta) {
   if (remindInput) {
     const remindLocal = resolveRemindLocal(meta, dueInput.value, timeInput?.value || "");
     if (remindLocal) remindInput.value = remindLocal;
+    const ruleInput = $("task-remind-rule");
+    if (ruleInput) ruleInput.value = meta.remindHourly ? "hourly" : "";
   }
   updateTaskChips();
 }
@@ -1317,8 +1366,18 @@ function updateTaskChips() {
   });
 
   const remind = $("task-remind").value;
-  $("chip-remind-label").textContent = remind ? fmtShortDateTime(remind) : "Напомн.";
-  $("chip-remind").classList.toggle("has-value", !!remind);
+  const remindRule = $("task-remind-rule")?.value || "";
+  if (remindRule === "hourly") {
+    $("chip-remind-label").textContent = remind
+      ? `Каждый час · ${String(new Date(remind).getHours()).padStart(2, "0")}:${String(new Date(remind).getMinutes()).padStart(2, "0")}`
+      : "Каждый час";
+  } else {
+    $("chip-remind-label").textContent = remind ? fmtShortDateTime(remind) : "Напомн.";
+  }
+  $("chip-remind").classList.toggle("has-value", !!remind || remindRule === "hourly");
+  document.querySelectorAll("#pop-remind [data-composer-remind-preset]").forEach((btn) => {
+    btn.classList.toggle("selected", remindRule === "hourly" && btn.dataset.composerRemindPreset === "hourly");
+  });
 
   const location = $("task-location").value.trim();
   $("chip-location-label").textContent = location ? truncateText(location, 14) : "Место";
@@ -1414,6 +1473,9 @@ function initTaskMetaChips() {
         if ($("task-due-start")) $("task-due-start").value = "";
         if ($("task-repeat")) $("task-repeat").value = "";
       }
+      if (btn.dataset.clear === "task-remind" && $("task-remind-rule")) {
+        $("task-remind-rule").value = "";
+      }
       updateTaskChips();
       closeTaskPopovers();
     });
@@ -1440,10 +1502,12 @@ function initTaskMetaChips() {
   $("pop-remind")?.addEventListener("click", (e) => {
     const btn = e.target.closest("[data-composer-remind-preset]");
     if (!btn) return;
+    const preset = btn.dataset.composerRemindPreset;
     const due = mergeTaskDue($("task-due")?.value || "", $("task-due-time")?.value || "") || $("task-due")?.value || null;
-    const iso = computeRemindPreset(btn.dataset.composerRemindPreset, due);
+    const iso = computeRemindPreset(preset, due);
     if (!iso) return;
     $("task-remind").value = localInputValue(new Date(iso));
+    if ($("task-remind-rule")) $("task-remind-rule").value = preset === "hourly" ? "hourly" : "";
     updateTaskChips();
   });
 
@@ -2476,7 +2540,7 @@ async function patchTask(taskId, patch) {
     patch.project_id !== undefined &&
     Number(patch.project_id) !== Number(state.projectId);
   if (leavesView) await animateLeave(item, "move");
-  else if (item && (patch.priority != null || patch.due_at !== undefined || patch.due_start !== undefined || patch.remind_at !== undefined || patch.work_project_id !== undefined)) {
+  else if (item && (patch.priority != null || patch.due_at !== undefined || patch.due_start !== undefined || patch.remind_at !== undefined || patch.remind_rule !== undefined || patch.work_project_id !== undefined)) {
     state.motion.pulseId = taskId;
   }
   await api(`/api/tasks/${taskId}`, { method: "PATCH", body: JSON.stringify(patch) });
@@ -2496,9 +2560,10 @@ function renderTaskAttrs(t, projectMap) {
   const dueChipLabel = formatDueChipLabel(t);
   const hasLocation = !!t.location;
   const hasCost = t.cost != null && Number(t.cost) !== 0;
-  const hasRemind = !!t.remind_at;
+  const hasRemind = !!t.remind_at || t.remind_rule === "hourly";
   const remindInput = taskRemindInputValue(t);
-  const remindLabel = hasRemind ? fmtShortDateTime(t.remind_at) : "Напомн.";
+  const remindLabel = formatRemindChipLabel(t) || "Напомн.";
+  const remindRule = t.remind_rule || "";
   const costType = t.cost_type === "income" ? "income" : "expense";
   const showWork = isWorkSectionId(t.project_id) || t.work_project_id != null;
   const workTitle = workProjectTitle(t.work_project_id);
@@ -2586,7 +2651,7 @@ function renderTaskAttrs(t, projectMap) {
         </button>
         <div class="chip-menu chip-menu-wide hidden" role="dialog" aria-label="Напоминание" data-task-due-at="${escapeAttr(t.due_at || "")}">
           <input type="datetime-local" data-task-field="remind" value="${escapeAttr(remindInput)}" title="Напоминание" />
-          ${remindPresetButtonsHtml("data-task-remind-preset")}
+          ${remindPresetButtonsHtml("data-task-remind-preset", remindRule)}
           ${hasRemind ? `<button type="button" class="chip-clear" data-task-clear-remind>Без напоминания</button>` : ""}
         </div>
       </div>
@@ -2822,7 +2887,13 @@ function startInlineTitleEdit(titleEl) {
     if (due) patch.due_at = due;
     if (parsed.meta.repeat) patch.repeat_rule = parsed.meta.repeat;
     const remindLocal = resolveRemindLocal(parsed.meta, fbDate, fbTime);
-    if (remindLocal) patch.remind_at = new Date(remindLocal).toISOString();
+    if (parsed.meta.remindHourly) {
+      patch.remind_rule = "hourly";
+      patch.remind_at = new Date(remindLocal || nextHourBoundaryLocal()).toISOString();
+    } else if (remindLocal) {
+      patch.remind_at = new Date(remindLocal).toISOString();
+      patch.remind_rule = null;
+    }
     if (parsed.meta.projectId) patch.project_id = parsed.meta.projectId;
 
     const onlyTitle = Object.keys(patch).length === 1;
@@ -3357,7 +3428,13 @@ $("task-form").addEventListener("submit", async (e) => {
     $("task-due-time")?.value || "",
   );
   if (kind === "task" && !due && state.view === "today") due = todayIso();
-  const remind = $("task-remind").value ? new Date($("task-remind").value).toISOString() : null;
+  const remindRule =
+    $("task-remind-rule")?.value || (parsed.meta.remindHourly ? "hourly" : "") || null;
+  const remind = $("task-remind").value
+    ? new Date($("task-remind").value).toISOString()
+    : remindRule === "hourly"
+      ? nextHourBoundaryLocal().toISOString()
+      : null;
   const priority = parsed.meta.priority || Number($("task-priority").value);
   const title = parsed.cleanTitle || $("task-title").value.trim();
   const labelsNote = parsed.meta.labels?.length ? `Метки: ${parsed.meta.labels.join(", ")}` : "";
@@ -3380,6 +3457,7 @@ $("task-form").addEventListener("submit", async (e) => {
       due_at: due,
       due_start: $("task-due-start")?.value || null,
       remind_at: remind,
+      remind_rule: remindRule || null,
       project_id: parsed.meta.projectId || (state.view === "project" ? state.projectId : null) || null,
       location,
       cost: costVal,
@@ -3397,6 +3475,8 @@ $("task-form").addEventListener("submit", async (e) => {
 
   $("task-title").value = "";
   if ($("task-due-time")) $("task-due-time").value = "";
+  if ($("task-remind-rule")) $("task-remind-rule").value = "";
+  if ($("task-remind")) $("task-remind").value = "";
   if ($("task-due-start")) $("task-due-start").value = "";
   if ($("task-due")) delete $("task-due").dataset.dueTime;
   $("task-location").value = "";
@@ -3482,15 +3562,20 @@ $("task-list").addEventListener("click", async (e) => {
       const dueAt = menu?.dataset.taskDueAt || attrsRoot.querySelector('[data-task-field="due-date"]')?.value || "";
       const dueTime = attrsRoot.querySelector('[data-task-field="due-time"]')?.value || "";
       const mergedDue = mergeTaskDue(dueAt, dueTime) || dueAt || null;
-      const iso = computeRemindPreset(remindPreset.dataset.taskRemindPreset, mergedDue);
+      const preset = remindPreset.dataset.taskRemindPreset;
+      const iso = computeRemindPreset(preset, mergedDue);
       if (!iso) return;
-      await patchTask(Number(attrsRoot.dataset.taskId), { remind_at: iso });
+      const patch =
+        preset === "hourly"
+          ? { remind_rule: "hourly", remind_at: iso }
+          : { remind_rule: null, remind_at: iso };
+      await patchTask(Number(attrsRoot.dataset.taskId), patch);
       closeTaskPopovers();
       return;
     }
     if (e.target.closest("[data-task-clear-remind]")) {
       e.stopPropagation();
-      await patchTask(Number(attrsRoot.dataset.taskId), { remind_at: null });
+      await patchTask(Number(attrsRoot.dataset.taskId), { remind_at: null, remind_rule: null });
       closeTaskPopovers();
       return;
     }
@@ -3577,7 +3662,7 @@ $("task-list").addEventListener("change", async (e) => {
     return;
   }
   if (field === "remind") {
-    await patchTask(taskId, { remind_at: remindAtIso(e.target.value) });
+    await patchTask(taskId, { remind_at: remindAtIso(e.target.value), remind_rule: null });
     closeTaskPopovers();
     return;
   }

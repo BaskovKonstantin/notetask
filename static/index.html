@@ -52,7 +52,7 @@
     })();
   </script>
   <link rel="stylesheet" href="assets/styles.css?v=49" />
-  <script src="assets/pwa.js?v=12"></script>
+  <script src="assets/pwa.js?v=13"></script>
 </head>
 <body>
   <div id="login" class="login-wrap">
@@ -204,7 +204,9 @@
                   </button>
                   <div class="chip-menu chip-menu-wide hidden" id="pop-remind" role="dialog" aria-label="Напоминание">
                     <input type="datetime-local" id="task-remind" title="Напоминание" />
+                    <input type="hidden" id="task-remind-rule" value="" />
                     <div class="due-quick">
+                      <button type="button" class="chip-option" data-composer-remind-preset="hourly">Каждый час</button>
                       <button type="button" class="chip-option" data-composer-remind-preset="15m">Через 15 мин</button>
                       <button type="button" class="chip-option" data-composer-remind-preset="1h">Через 1 час</button>
                       <button type="button" class="chip-option" data-composer-remind-preset="before_1h">За 1 час до срока</button>
@@ -323,6 +325,6 @@
   </div>
 
   <script src="assets/pwa-install.js?v=3"></script>
-  <script src="assets/app.js?v=75"></script>
+  <script src="assets/app.js?v=76"></script>
 </body>
 </html>
