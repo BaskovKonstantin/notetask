@@ -97,6 +97,9 @@ const state = {
   healthSelected: "chest",
   motion: { enterId: null, completeId: null, pulseId: null },
   financeYm: null,
+  financeSheet: null,
+  financeSelectedCatId: null,
+  financeDrawerCatId: null,
   taskSort: loadTaskSort(),
 };
 
@@ -1899,6 +1902,211 @@ function groupFinanceCategories(categories) {
   return groups;
 }
 
+function financeCatById(id) {
+  return (state.financeSheet?.categories || []).find((c) => Number(c.id) === Number(id)) || null;
+}
+
+function financeCatRows() {
+  return [...document.querySelectorAll("#finance-page tr[data-fin-cat]")];
+}
+
+function selectFinanceRow(id) {
+  state.financeSelectedCatId = id ? Number(id) : null;
+  financeCatRows().forEach((tr) => {
+    tr.classList.toggle("is-selected", Number(tr.dataset.finCat) === Number(id));
+  });
+}
+
+function currentFinanceCol(el) {
+  if (el?.closest?.("[data-fin-plan]")) return "plan";
+  return "name";
+}
+
+function focusFinanceCell(row, col) {
+  if (!row) return;
+  if (col === "plan") {
+    const input = row.querySelector("[data-fin-plan]");
+    if (!input) return;
+    input.focus();
+    input.select();
+    return;
+  }
+  const name = row.querySelector("[data-fin-name]");
+  if (!name) return;
+  name.focus();
+  const range = document.createRange();
+  range.selectNodeContents(name);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
+
+function closeFinanceDrawer() {
+  state.financeDrawerCatId = null;
+  const el = $("fin-fact-drawer");
+  if (!el) return;
+  el.classList.add("hidden");
+  el.setAttribute("hidden", "");
+  el.innerHTML = "";
+}
+
+function openFinanceDrawer(catId) {
+  const cat = financeCatById(catId);
+  const el = $("fin-fact-drawer");
+  if (!el || !cat) {
+    closeFinanceDrawer();
+    return;
+  }
+  state.financeDrawerCatId = Number(cat.id);
+  selectFinanceRow(cat.id);
+  el.classList.remove("hidden");
+  el.removeAttribute("hidden");
+  const entries = cat.fact_entries || [];
+  const kind = cat.kind === "income" ? "income" : "expense";
+  const list = entries.length
+    ? entries
+        .map((entry) => {
+          const taskId = entry.task_id || (entry.source === "task" ? entry.id : null);
+          const src = financeSourceLabel(entry.source);
+          const day = entry.day ? fmtShortDay(entry.day) : "";
+          const delBtn =
+            entry.source === "sheet"
+              ? `<button type="button" class="btn ghost small btn-del" data-fin-tx-del="${entry.id}" title="Удалить">×</button>`
+              : "";
+          const taskAttr = taskId
+            ? ` data-fin-open-task="${taskId}" data-finance-task="${taskId}"`
+            : "";
+          const tag = taskId ? "button" : "div";
+          const typeAttr = taskId ? ` type="button"` : "";
+          return `
+            <${tag} class="fin-op fin-op-row"${typeAttr}${taskAttr}>
+              <div class="fin-op-main">
+                <span class="fin-op-title">${escapeHtml(entry.title || "Без названия")}</span>
+                <span class="fin-op-day">${escapeHtml(day)}${src ? ` · ${src}` : ""}</span>
+              </div>
+              <span class="fin-op-amount ${kind}">${escapeHtml(moneySigned(entry.amount, kind))}</span>
+              ${delBtn}
+            </${tag}>`;
+        })
+        .join("")
+    : `<p class="fin-empty">Нет записей</p>`;
+  el.innerHTML = `
+    <div class="fin-drawer-head">
+      <h3>Факт · ${escapeHtml(cat.name)}</h3>
+      <button type="button" class="btn ghost small" data-fin-drawer-close aria-label="Закрыть">×</button>
+    </div>
+    <div class="fin-ops">${list}</div>
+    <button type="button" class="btn" data-fin-new-task="${cat.id}" data-fin-kind="${escapeAttr(cat.kind)}">+ задача</button>
+  `;
+}
+
+function financeDueForSheetMonth() {
+  const ym = state.financeYm || currentYearMonth();
+  return ym === currentYearMonth() ? todayIso() : `${ym}-01`;
+}
+
+async function createTaskFromFinanceCategory(catId) {
+  const cat = financeCatById(catId);
+  if (!cat) return;
+  const title = window.prompt("Название задачи");
+  if (title == null || !String(title).trim()) return;
+  const amountRaw = window.prompt("Сумма, ₽");
+  if (amountRaw == null) return;
+  const amount = Number(String(amountRaw).replace(/\s/g, "").replace(",", "."));
+  if (!Number.isFinite(amount) || amount <= 0) return;
+  const project = (state.projects || []).find((p) => p.name === cat.name);
+  const kind = cat.kind === "income" ? "income" : "expense";
+  await api("/api/tasks", {
+    method: "POST",
+    body: JSON.stringify({
+      title: String(title).trim(),
+      cost: amount,
+      cost_type: kind,
+      finance_category_id: cat.id,
+      project_id: project ? project.id : null,
+      due_at: financeDueForSheetMonth(),
+    }),
+  });
+  await loadFinancePage();
+}
+
+async function deleteFinanceCategoryRow(id) {
+  if (!id) return;
+  try {
+    await api(`/api/finance/categories/${id}`, { method: "DELETE" });
+    if (state.financeSelectedCatId === Number(id)) state.financeSelectedCatId = null;
+    if (state.financeDrawerCatId === Number(id)) closeFinanceDrawer();
+    await loadFinancePage();
+  } catch (err) {
+    alert(err.message || "Нельзя удалить");
+  }
+}
+
+function cycleFinanceEdit(back) {
+  const rows = financeCatRows();
+  if (!rows.length) return;
+  let idx = rows.findIndex((r) => r.classList.contains("is-selected"));
+  if (idx < 0) idx = 0;
+  const col = currentFinanceCol(document.activeElement);
+  if (!back) {
+    if (col === "name") {
+      focusFinanceCell(rows[idx], "plan");
+      return;
+    }
+    const next = rows[idx + 1] || rows[0];
+    selectFinanceRow(Number(next.dataset.finCat));
+    focusFinanceCell(next, "name");
+    return;
+  }
+  if (col === "plan") {
+    focusFinanceCell(rows[idx], "name");
+    return;
+  }
+  const prev = rows[idx - 1] || rows[rows.length - 1];
+  selectFinanceRow(Number(prev.dataset.finCat));
+  focusFinanceCell(prev, "plan");
+}
+
+function moveFinanceEdit(delta) {
+  const rows = financeCatRows();
+  if (!rows.length) return;
+  const col = currentFinanceCol(document.activeElement);
+  let idx = rows.findIndex((r) => r.classList.contains("is-selected"));
+  if (idx < 0) idx = 0;
+  const nextIdx = idx + delta;
+  if (nextIdx < 0 || nextIdx >= rows.length) {
+    document.activeElement?.blur?.();
+    return;
+  }
+  const next = rows[nextIdx];
+  selectFinanceRow(Number(next.dataset.finCat));
+  focusFinanceCell(next, col);
+}
+
+function moveFinanceSelection(delta, keepColumn) {
+  const rows = financeCatRows();
+  if (!rows.length) return;
+  let idx = rows.findIndex((r) => r.classList.contains("is-selected"));
+  if (idx < 0) idx = delta > 0 ? -1 : 0;
+  const nextIdx = Math.min(rows.length - 1, Math.max(0, idx + delta));
+  const row = rows[nextIdx];
+  selectFinanceRow(Number(row.dataset.finCat));
+  if (keepColumn) focusFinanceCell(row, currentFinanceCol(document.activeElement));
+}
+
+async function openFinanceTask(taskId) {
+  if (!taskId) return;
+  state.motion.pulseId = taskId;
+  await setView("today");
+  const item = findTaskItem(taskId) || document.querySelector(`.item[data-id="${taskId}"]`);
+  if (!item) return;
+  item.classList.add("anim-pulse");
+  item.scrollIntoView({
+    behavior: prefersReducedMotion() ? "auto" : "smooth",
+    block: "center",
+  });
+}
+
 async function loadFinancePage() {
   if (!state.financeYm) state.financeYm = currentYearMonth();
   $("finance-page").innerHTML = `<p class="sp-sub">Загрузка…</p>`;
@@ -1911,6 +2119,7 @@ async function loadFinancePage() {
 }
 
 function renderFinancePage(data) {
+  state.financeSheet = data;
   const ym = data.year_month || state.financeYm || currentYearMonth();
   state.financeYm = ym;
   const s = data.summary || {};
@@ -1920,7 +2129,6 @@ function renderFinancePage(data) {
   const pct = financeBarPct(income, expense);
   const balClass = bal > 0 ? "pos" : bal < 0 ? "neg" : "";
   const accounts = data.accounts || [];
-  const entries = data.entries || [];
   const groups = groupFinanceCategories(data.categories || []);
 
   const accountHtml = accounts.length
@@ -1937,6 +2145,7 @@ function renderFinancePage(data) {
 
   let budgetHtml = "";
   for (const [groupName, cats] of groups) {
+    const firstCat = cats[0];
     budgetHtml += `
       <div class="fin-budget-group">
         <div class="fin-budget-group-title">${escapeHtml(groupName)}</div>
@@ -1944,6 +2153,7 @@ function renderFinancePage(data) {
           <colgroup>
             <col class="col-name" />
             <col class="col-num" span="3" />
+            <col class="col-plus" />
           </colgroup>
           <thead>
             <tr>
@@ -1951,6 +2161,7 @@ function renderFinancePage(data) {
               <th>План</th>
               <th>Факт</th>
               <th>Δ</th>
+              <th class="col-plus">+</th>
             </tr>
           </thead>
           <tbody>
@@ -1960,27 +2171,29 @@ function renderFinancePage(data) {
                 const deltaClass = cat.kind === "expense" ? (delta >= 0 ? "pos" : "neg") : delta >= 0 ? "pos" : "neg";
                 return `
               <tr data-fin-cat="${cat.id}">
-                <td class="cat-name">${escapeHtml(cat.name)}</td>
+                <td class="cat-name" contenteditable="true" data-fin-name="${cat.id}" data-fin-kind="${escapeAttr(cat.kind)}" spellcheck="false">${escapeHtml(cat.name)}</td>
                 <td>
                   <input type="number" class="fin-plan-input" data-fin-plan="${cat.id}"
                     value="${Number(cat.planned) || ""}" min="0" step="100" placeholder="0" />
                 </td>
-                <td class="amt ${cat.kind}">${escapeHtml(moneySigned(cat.actual, cat.kind))}</td>
+                <td class="amt ${cat.kind} is-fact" data-fin-fact="${cat.id}">${escapeHtml(moneySigned(cat.actual, cat.kind))}</td>
                 <td class="amt ${deltaClass}">${escapeHtml(moneyPlain(Math.abs(delta)))}${delta < 0 ? " −" : cat.kind === "expense" && delta > 0 ? " +" : ""}</td>
+                <td class="col-plus">
+                  <button type="button" class="btn ghost small" data-fin-new-task="${cat.id}" data-fin-kind="${escapeAttr(cat.kind)}">+</button>
+                  <button type="button" class="btn ghost small fin-row-del" data-fin-del-cat="${cat.id}" title="Удалить">×</button>
+                </td>
               </tr>`;
               })
               .join("")}
           </tbody>
         </table>
+        ${
+          firstCat
+            ? `<button type="button" class="btn ghost small fin-row-add" data-fin-add-row data-fin-kind="${escapeAttr(firstCat.kind)}" data-fin-group="${escapeAttr(groupName)}">+ строка</button>`
+            : ""
+        }
       </div>`;
   }
-
-  const catOptions = (data.categories || [])
-    .map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`)
-    .join("");
-  const accOptions = accounts
-    .map((a) => `<option value="${a.id}">${escapeHtml(a.name)}</option>`)
-    .join("");
 
   $("finance-page").innerHTML = `
     <div class="fin-page">
@@ -2031,81 +2244,12 @@ function renderFinancePage(data) {
         </div>
       </section>
 
-      <section class="fin-section">
-        <h3>Новая операция</h3>
-        <form class="fin-tx-form" id="fin-tx-form">
-          <label>
-            Тип
-            <select name="kind" required>
-              <option value="expense">Расход</option>
-              <option value="income">Доход</option>
-            </select>
-          </label>
-          <label>
-            Статья
-            <select name="category_id">
-              <option value="">—</option>
-              ${catOptions}
-            </select>
-          </label>
-          <label>
-            Счёт
-            <select name="account_id">
-              <option value="">—</option>
-              ${accOptions}
-            </select>
-          </label>
-          <label>
-            Сумма
-            <input name="amount" type="number" min="0.01" step="0.01" required placeholder="0" />
-          </label>
-          <label>
-            Дата
-            <input name="day" type="date" value="${escapeAttr(todayIso())}" required />
-          </label>
-          <label class="full">
-            Комментарий
-            <input name="note" type="text" placeholder="Описание…" />
-          </label>
-          <button class="btn" type="submit">Добавить</button>
-        </form>
-      </section>
-
-      <section class="fin-section">
-        <div class="fin-ops-head">
-          <h3>Операции</h3>
-          <span class="hint">${entries.length}</span>
-        </div>
-        <div class="fin-ops fin-ops-page">
-          ${
-            entries.length
-              ? entries
-                  .map((e) => {
-                    const type = e.cost_type === "income" ? "income" : "expense";
-                    const day = e.day ? fmtShortDay(e.day) : "";
-                    const src = financeSourceLabel(e.source);
-                    const delBtn =
-                      e.entry_type === "transaction"
-                        ? `<button type="button" class="btn ghost small btn-del" data-fin-tx-del="${e.id}" title="Удалить">×</button>`
-                        : "";
-                    const taskAttr = e.entry_type === "task" ? ` data-finance-task="${e.id}"` : "";
-                    return `
-            <div class="fin-op fin-op-row"${taskAttr}>
-              <div class="fin-op-main">
-                <span class="fin-op-title">${escapeHtml(e.title || "Без названия")}</span>
-                <span class="fin-op-day">${escapeHtml(day)}${src ? ` · ${src}` : ""}${e.category_name ? ` · ${escapeHtml(e.category_name)}` : ""}</span>
-              </div>
-              <span class="fin-op-amount ${type}">${escapeHtml(moneySigned(e.cost, type))}</span>
-              ${delBtn}
-            </div>`;
-                  })
-                  .join("")
-              : `<p class="fin-empty">Нет операций в этом месяце</p>`
-          }
-        </div>
-      </section>
+      <div id="fin-fact-drawer" class="fin-drawer hidden" hidden></div>
     </div>
   `;
+
+  if (state.financeSelectedCatId) selectFinanceRow(state.financeSelectedCatId);
+  if (state.financeDrawerCatId) openFinanceDrawer(state.financeDrawerCatId);
 }
 
 function workPayBlock(p) {
@@ -2460,7 +2604,7 @@ function setView(view, opts = {}) {
     }
   }
   track("view_opened", "ui", null, { view, project_id: state.projectId });
-  refresh().catch(showListError);
+  return refresh().catch(showListError);
 }
 
 function showListError() {
@@ -4055,21 +4199,72 @@ $("finance-page").addEventListener("click", async (e) => {
     await loadFinancePage();
     return;
   }
+  const drawerClose = e.target.closest("[data-fin-drawer-close]");
+  if (drawerClose) {
+    e.preventDefault();
+    closeFinanceDrawer();
+    return;
+  }
+  const delCat = e.target.closest("[data-fin-del-cat]");
+  if (delCat) {
+    e.preventDefault();
+    await deleteFinanceCategoryRow(Number(delCat.dataset.finDelCat));
+    return;
+  }
   const delBtn = e.target.closest("[data-fin-tx-del]");
   if (delBtn) {
     e.preventDefault();
+    e.stopPropagation();
     const id = Number(delBtn.dataset.finTxDel);
     if (!id) return;
     await api(`/api/finance/transactions/${id}`, { method: "DELETE" });
     await loadFinancePage();
     return;
   }
-  const finTask = e.target.closest("[data-finance-task]");
+  const finTask = e.target.closest("[data-finance-task], [data-fin-open-task]");
   if (finTask) {
     e.preventDefault();
-    setView("today", { keepTaskForm: true });
+    const taskId = Number(finTask.dataset.finOpenTask || finTask.dataset.financeTask);
+    await openFinanceTask(taskId);
     return;
   }
+  const newTask = e.target.closest("[data-fin-new-task]");
+  if (newTask) {
+    e.preventDefault();
+    const row = newTask.closest("tr[data-fin-cat]");
+    if (row) selectFinanceRow(Number(row.dataset.finCat));
+    await createTaskFromFinanceCategory(Number(newTask.dataset.finNewTask));
+    return;
+  }
+  const addRow = e.target.closest("[data-fin-add-row]");
+  if (addRow) {
+    e.preventDefault();
+    try {
+      const created = await api("/api/finance/categories", {
+        method: "POST",
+        body: JSON.stringify({
+          name: "Новая статья",
+          kind: addRow.dataset.finKind === "income" ? "income" : "expense",
+          group_name: addRow.dataset.finGroup || "",
+        }),
+      });
+      state.financeSelectedCatId = created?.id || null;
+      await loadFinancePage();
+      const row = document.querySelector(`#finance-page tr[data-fin-cat="${created?.id}"]`);
+      if (row) focusFinanceCell(row, "name");
+    } catch (err) {
+      alert(err.message || "Не удалось добавить");
+    }
+    return;
+  }
+  const factCell = e.target.closest("[data-fin-fact]");
+  if (factCell) {
+    e.preventDefault();
+    openFinanceDrawer(Number(factCell.dataset.finFact));
+    return;
+  }
+  const row = e.target.closest("tr[data-fin-cat]");
+  if (row) selectFinanceRow(Number(row.dataset.finCat));
 });
 
 $("finance-page").addEventListener("change", async (e) => {
@@ -4084,27 +4279,87 @@ $("finance-page").addEventListener("change", async (e) => {
   });
 });
 
-$("finance-page").addEventListener("submit", async (e) => {
-  const form = e.target.closest("#fin-tx-form");
-  if (!form) return;
-  e.preventDefault();
-  const fd = new FormData(form);
-  const categoryRaw = fd.get("category_id");
-  const accountRaw = fd.get("account_id");
-  await api("/api/finance/transactions", {
-    method: "POST",
-    body: JSON.stringify({
-      kind: String(fd.get("kind") || "expense"),
-      category_id: categoryRaw ? Number(categoryRaw) : null,
-      account_id: accountRaw ? Number(accountRaw) : null,
-      amount: Number(fd.get("amount")),
-      day: String(fd.get("day") || todayIso()),
-      note: String(fd.get("note") || "").trim(),
-    }),
-  });
-  form.reset();
-  form.querySelector('[name="day"]').value = todayIso();
-  await loadFinancePage();
+$("finance-page").addEventListener("focusin", (e) => {
+  const row = e.target.closest("tr[data-fin-cat]");
+  if (row) selectFinanceRow(Number(row.dataset.finCat));
+});
+
+$("finance-page").addEventListener("focusout", async (e) => {
+  const nameEl = e.target.closest("[data-fin-name]");
+  if (!nameEl || nameEl !== e.target) return;
+  const id = Number(nameEl.dataset.finName);
+  const cat = financeCatById(id);
+  if (!cat) return;
+  const name = String(nameEl.textContent || "").replace(/\u00a0/g, " ").trim();
+  if (!name) {
+    nameEl.textContent = cat.name;
+    return;
+  }
+  if (name === cat.name) return;
+  try {
+    await api(`/api/finance/categories/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        name,
+        kind: cat.kind,
+        group_name: cat.group_name || "",
+        sort: Number(cat.sort) || 0,
+      }),
+    });
+    cat.name = name;
+  } catch (err) {
+    nameEl.textContent = cat.name;
+    alert(err.message || "Не удалось переименовать");
+  }
+});
+
+$("finance-page").addEventListener("keydown", async (e) => {
+  const drawer = e.target.closest("#fin-fact-drawer");
+  const inEdit = e.target.closest("[data-fin-name], [data-fin-plan]");
+  const inField = e.target.closest("input, textarea, select, [contenteditable]");
+
+  if (e.key === "Escape") {
+    if (state.financeDrawerCatId) {
+      e.preventDefault();
+      closeFinanceDrawer();
+    }
+    if (inEdit) e.target.blur();
+    return;
+  }
+
+  if (drawer && !inEdit) return;
+
+  if (e.key === "Tab") {
+    e.preventDefault();
+    cycleFinanceEdit(e.shiftKey);
+    return;
+  }
+
+  if (e.key === "Enter" && inEdit) {
+    e.preventDefault();
+    moveFinanceEdit(1);
+    return;
+  }
+
+  if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+    e.preventDefault();
+    moveFinanceSelection(e.key === "ArrowDown" ? 1 : -1, !!inEdit);
+    return;
+  }
+
+  if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && inEdit) {
+    e.preventDefault();
+    const row = e.target.closest("tr[data-fin-cat]");
+    if (!row) return;
+    focusFinanceCell(row, e.key === "ArrowRight" ? "plan" : "name");
+    return;
+  }
+
+  if ((e.key === "Delete" || e.key === "Backspace") && !inField) {
+    if (!state.financeSelectedCatId) return;
+    e.preventDefault();
+    await deleteFinanceCategoryRow(state.financeSelectedCatId);
+  }
 });
 
 async function boot() {
