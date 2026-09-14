@@ -52,7 +52,9 @@ Updated: 2026-09-14 (~20:25 MSK)
 - Two independent pieces. Finance spec written. Goals later, own spec.
 - Spec: `docs/superpowers/specs/2026-09-14-finance-excel-task-sync-design.md`
 - Plan: `docs/superpowers/plans/2026-09-14-finance-excel-task-sync.md`
-- Approach A + split income/expense rows per project name. Spec+plan written. Waiting execution choice. No code yet.
+- Shipped on `feat/finance-excel-task-sync` (not merged). Live via mounted `app/`+`static/` after `docker restart notetask`.
+- Browser 2026-09-14: grid Статья|План|Факт|Δ|+; no txn form; Fact drawer lists tasks; Sep Покупки −530k / Работа −320k; Aug Работа +250k work (not Подработка). Cache `app.js?v=77`.
+- Goals still later, own spec.
 - Decisions so far:
   - First: Finance (Goals later).
   - Rows stay budget articles (Статья / План / Факт / Δ), not task-per-row.
