@@ -1906,6 +1906,26 @@ function financeCatById(id) {
   return (state.financeSheet?.categories || []).find((c) => Number(c.id) === Number(id)) || null;
 }
 
+function uniqueFinanceCategoryName(kind) {
+  const live = new Set(
+    (state.financeSheet?.categories || [])
+      .filter((c) => c.kind === kind)
+      .map((c) => String(c.name || "").trim()),
+  );
+  const base = "Новая статья";
+  if (!live.has(base)) return base;
+  let n = 2;
+  while (live.has(`${base} ${n}`)) n += 1;
+  return `${base} ${n}`;
+}
+
+function financeGridNavTarget(el) {
+  const catRow = el?.closest?.("tr[data-fin-cat]");
+  if (!catRow) return false;
+  if (el.closest("[data-fin-name], [data-fin-plan]")) return true;
+  return Number(catRow.dataset.finCat) === Number(state.financeSelectedCatId);
+}
+
 function financeCatRows() {
   return [...document.querySelectorAll("#finance-page tr[data-fin-cat]")];
 }
@@ -4240,11 +4260,12 @@ $("finance-page").addEventListener("click", async (e) => {
   if (addRow) {
     e.preventDefault();
     try {
+      const kind = addRow.dataset.finKind === "income" ? "income" : "expense";
       const created = await api("/api/finance/categories", {
         method: "POST",
         body: JSON.stringify({
-          name: "Новая статья",
-          kind: addRow.dataset.finKind === "income" ? "income" : "expense",
+          name: uniqueFinanceCategoryName(kind),
+          kind,
           group_name: addRow.dataset.finGroup || "",
         }),
       });
@@ -4277,6 +4298,7 @@ $("finance-page").addEventListener("change", async (e) => {
     method: "PUT",
     body: JSON.stringify({ planned }),
   });
+  await loadFinancePage();
 });
 
 $("finance-page").addEventListener("focusin", (e) => {
@@ -4317,6 +4339,7 @@ $("finance-page").addEventListener("keydown", async (e) => {
   const drawer = e.target.closest("#fin-fact-drawer");
   const inEdit = e.target.closest("[data-fin-name], [data-fin-plan]");
   const inField = e.target.closest("input, textarea, select, [contenteditable]");
+  const inGridNav = financeGridNavTarget(e.target);
 
   if (e.key === "Escape") {
     if (state.financeDrawerCatId) {
@@ -4330,6 +4353,7 @@ $("finance-page").addEventListener("keydown", async (e) => {
   if (drawer && !inEdit) return;
 
   if (e.key === "Tab") {
+    if (!inGridNav) return;
     e.preventDefault();
     cycleFinanceEdit(e.shiftKey);
     return;
@@ -4342,6 +4366,7 @@ $("finance-page").addEventListener("keydown", async (e) => {
   }
 
   if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+    if (!inGridNav) return;
     e.preventDefault();
     moveFinanceSelection(e.key === "ArrowDown" ? 1 : -1, !!inEdit);
     return;

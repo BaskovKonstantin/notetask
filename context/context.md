@@ -1,6 +1,16 @@
 # NoteTask / todo.baski.pro — context
 
-Updated: 2026-09-14 (~20:10 MSK)
+Updated: 2026-09-14 (~20:25 MSK)
+
+## Review fixes: finance Excel branch (2026-09-14 ~20:25)
+
+- Branch: `feat/finance-excel-task-sync` (do not switch to main; keep `e8a9602` hourly notify).
+- `+ строка`: unique live name «Новая статья» / «Новая статья 2»… (`uniqueFinanceCategoryName`).
+- Plan PUT: `await loadFinancePage()` after success so Δ refreshes.
+- `patch_task`: rematch category when `cost_type` or `cost` changes (same as `project_id`), if `finance_category_id` not in patch and `has_cost`.
+- Keyboard: Tab/Enter/Arrow steal only inside `tr[data-fin-cat]` name/plan or selected row.
+- Removed unused `Any` from `app/finance_task_sync.py`.
+- Tests: `test_cost_type_change_rematch_different_id`; 33 ok.
 
 ## Fix: hourly reminds after complete (2026-09-14 ~20:08)
 

@@ -735,7 +735,9 @@ async def patch_task(
             finance_category_id=patch.get("finance_category_id"),
             has_cost=has_cost,
         )
-    elif "project_id" in patch and has_cost:
+    elif has_cost and (
+        "project_id" in patch or "cost_type" in patch or "cost" in patch
+    ):
         next_values["finance_category_id"] = await resolve_finance_category_id(
             db,
             project_id=next_values.get("project_id"),

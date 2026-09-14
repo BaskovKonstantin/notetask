@@ -81,6 +81,17 @@ class ResolveCategoryTests(unittest.IsolatedAsyncioTestCase):
         rows = [(r["name"], r["kind"]) for r in await cur.fetchall()]
         self.assertEqual(rows, [("Здоровье", "expense"), ("Здоровье", "income")])
 
+    async def test_cost_type_change_rematch_different_id(self) -> None:
+        old_id = await resolve_finance_category_id(
+            self.db, project_id=1, cost_type="expense", has_cost=True
+        )
+        new_id = await resolve_finance_category_id(
+            self.db, project_id=1, cost_type="income", has_cost=True
+        )
+        self.assertIsNotNone(old_id)
+        self.assertIsNotNone(new_id)
+        self.assertNotEqual(old_id, new_id)
+
     async def test_no_project_uses_uncategorized(self) -> None:
         cid = await resolve_finance_category_id(
             self.db, project_id=None, cost_type="expense", has_cost=True
