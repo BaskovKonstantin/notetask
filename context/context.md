@@ -1,6 +1,25 @@
 # NoteTask / todo.baski.pro — context
 
-Updated: 2026-09-14 (~11:55 MSK)
+Updated: 2026-09-14 (~15:56 MSK)
+
+## Brainstorm: Finance Excel + Goals game-graph (2026-09-14 ~15:56 MSK)
+
+- User ask (started in treckbas by mistake, switched here): (1) Finance as Excel table synced with tasks; (2) new Goals section, several tabs, game-style graph we design together — graph = plan to reach a goal.
+- Current: sidebar Сегодня / Финансы / История / Статистика + project sections. **No Цели.**
+- Finance now: month, balance, accounts, budget grid (Статья · План · Факт · Δ), txn form, journal (manual + task amounts + work payments). API `/api/finance/sheet`. Tasks already have `cost` / `costType`.
+- Two independent pieces. Finance spec written. Goals later, own spec.
+- Spec: `docs/superpowers/specs/2026-09-14-finance-excel-task-sync-design.md`
+- Approach A + split income/expense rows per project name. Waiting user review of spec. No code yet.
+- Decisions so far:
+  - First: Finance (Goals later).
+  - Rows stay budget articles (Статья / План / Факт / Δ), not task-per-row.
+  - Excel feel: click cell, Tab/Enter, add/delete row. No formulas.
+  - Page: hero (balance + accounts) + grid; journal = click Fact.
+  - Fact = tasks + manual txns + work payments.
+  - Task month = due_at; no due → created_at.
+  - Default article = task project/section name (Здоровье, Работа, …).
+
+## TG reminds outage 2026-09-14 (~11:55 MSK)
 
 ## TG reminds outage 2026-09-14 (~11:55 MSK)
 
