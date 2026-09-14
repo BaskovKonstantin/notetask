@@ -555,6 +555,9 @@ async def patch_finance_category(
     db: aiosqlite.Connection = Depends(get_db),
     _: dict = Depends(require_auth),
 ):
+    await assert_unique_live_category(
+        db, body.name, body.kind, exclude_id=category_id
+    )
     now = utcnow()
     cur = await db.execute(
         """

@@ -277,6 +277,15 @@ class SheetFactByCategoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(ctx.exception.status_code, 409)
         self.assertEqual(ctx.exception.detail, "Category already exists")
 
+    async def test_patch_rename_duplicate_name_kind_409(self) -> None:
+        education_id = await self._cat_id("Образование", "expense")
+        with self.assertRaises(HTTPException) as ctx:
+            await assert_unique_live_category(
+                self.db, "ЖКХ", "expense", exclude_id=education_id
+            )
+        self.assertEqual(ctx.exception.status_code, 409)
+        self.assertEqual(ctx.exception.detail, "Category already exists")
+
 
 if __name__ == "__main__":
     unittest.main()
