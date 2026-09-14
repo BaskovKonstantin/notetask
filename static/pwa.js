@@ -26,7 +26,7 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register(`${base}sw.js?v=28`, { scope: base }).catch(() => {});
+      navigator.serviceWorker.register(`${base}sw.js?v=29`, { scope: base }).catch(() => {});
     });
   }
 })();
