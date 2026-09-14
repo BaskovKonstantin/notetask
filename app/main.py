@@ -41,6 +41,7 @@ from .finance_helpers import (
     work_payments_has_status,
 )
 from .finance_sheet import ensure_finance_sheet_defaults, register_finance_sheet
+from .finance_task_sync import resolve_finance_category_id
 from .notify import configure_complete_helpers, notify_loop, send_telegram
 from .task_complete import complete_task_row
 
@@ -218,6 +219,7 @@ class TaskIn(BaseModel):
     location: str | None = None
     cost: float | None = None
     cost_type: Literal["expense", "income"] | None = None
+    finance_category_id: int | None = None
     work_project_id: int | None = None
     repeat_rule: str | None = None
 
@@ -236,6 +238,7 @@ class TaskPatchIn(BaseModel):
     location: str | None = None
     cost: float | None = None
     cost_type: Literal["expense", "income"] | None = None
+    finance_category_id: int | None = None
     work_project_id: int | None = None
     repeat_rule: str | None = None
 
@@ -618,13 +621,21 @@ async def create_task(
     work_project_id = await normalize_work_project_id(db, body.project_id, body.work_project_id)
     due_start = normalize_due_start(body.due_start, body.due_at)
     remind_at, remind_rule = prepare_remind_fields(body.remind_at, body.remind_rule)
+    finance_category_id = await resolve_finance_category_id(
+        db,
+        project_id=body.project_id,
+        cost_type=body.cost_type,
+        finance_category_id=body.finance_category_id,
+        has_cost=body.cost is not None and float(body.cost) != 0,
+    )
     cur = await db.execute(
         """
         INSERT INTO tasks(
           project_id, title, notes, kind, priority, due_at, due_start, remind_at, remind_rule,
-          status, created_at, updated_at, location, cost, cost_type, work_project_id, repeat_rule
+          status, created_at, updated_at, location, cost, cost_type, finance_category_id,
+          work_project_id, repeat_rule
         )
-        VALUES(?,?,?,?,?,?,?,?,?,'open',?,?,?,?,?,?,?)
+        VALUES(?,?,?,?,?,?,?,?,?,'open',?,?,?,?,?,?,?,?)
         """,
         (
             body.project_id,
@@ -641,6 +652,7 @@ async def create_task(
             body.location,
             body.cost,
             body.cost_type,
+            finance_category_id,
             work_project_id,
             normalize_repeat_rule(body.repeat_rule),
         ),
@@ -714,12 +726,28 @@ async def patch_task(
     )
     next_values["remind_at"] = remind_at
     next_values["remind_rule"] = remind_rule
+    has_cost = next_values.get("cost") is not None and float(next_values.get("cost") or 0) != 0
+    if "finance_category_id" in patch:
+        next_values["finance_category_id"] = await resolve_finance_category_id(
+            db,
+            project_id=next_values.get("project_id"),
+            cost_type=next_values.get("cost_type"),
+            finance_category_id=patch.get("finance_category_id"),
+            has_cost=has_cost,
+        )
+    elif "project_id" in patch and has_cost:
+        next_values["finance_category_id"] = await resolve_finance_category_id(
+            db,
+            project_id=next_values.get("project_id"),
+            cost_type=next_values.get("cost_type"),
+            has_cost=True,
+        )
 
     await db.execute(
         """
         UPDATE tasks SET project_id=?, title=?, notes=?, kind=?, priority=?, due_at=?, due_start=?, remind_at=?,
           remind_rule=?, status=?, completed_at=?, updated_at=?, location=?, cost=?, cost_type=?, work_project_id=?,
-          repeat_rule=?
+          finance_category_id=?, repeat_rule=?
         WHERE id=?
         """,
         (
@@ -739,6 +767,7 @@ async def patch_task(
             next_values.get("cost"),
             next_values.get("cost_type"),
             next_values.get("work_project_id"),
+            next_values.get("finance_category_id"),
             normalize_repeat_rule(next_values.get("repeat_rule")),
             task_id,
         ),
@@ -772,11 +801,19 @@ async def update_task(
         "location": body.location,
         "cost": body.cost,
         "cost_type": body.cost_type,
+        "finance_category_id": body.finance_category_id,
         "work_project_id": body.work_project_id,
         "repeat_rule": body.repeat_rule,
     }
     next_values["work_project_id"] = await normalize_work_project_id(
         db, next_values.get("project_id"), next_values.get("work_project_id")
+    )
+    next_values["finance_category_id"] = await resolve_finance_category_id(
+        db,
+        project_id=next_values.get("project_id"),
+        cost_type=next_values.get("cost_type"),
+        finance_category_id=body.finance_category_id,
+        has_cost=body.cost is not None and float(body.cost) != 0,
     )
     if status == "done" and old["status"] != "done":
         completed_at = utcnow()
@@ -812,7 +849,7 @@ async def update_task(
         """
         UPDATE tasks SET project_id=?, title=?, notes=?, kind=?, priority=?, due_at=?, due_start=?, remind_at=?,
           remind_rule=?, status=?, completed_at=?, updated_at=?, location=?, cost=?, cost_type=?, work_project_id=?,
-          repeat_rule=?
+          finance_category_id=?, repeat_rule=?
         WHERE id=?
         """,
         (
@@ -832,6 +869,7 @@ async def update_task(
             next_values["cost"],
             next_values["cost_type"],
             next_values["work_project_id"],
+            next_values["finance_category_id"],
             normalize_repeat_rule(next_values.get("repeat_rule")),
             task_id,
         ),
