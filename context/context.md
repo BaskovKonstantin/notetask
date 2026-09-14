@@ -1,6 +1,18 @@
 # NoteTask / todo.baski.pro — context
 
-Updated: 2026-09-09 (~13:05 MSK)
+Updated: 2026-09-14 (~11:55 MSK)
+
+## TG reminds outage 2026-09-14 (~11:55 MSK)
+
+**Причины (две):**
+1. `TELEGRAM_PROXY=http://127.0.0.1:7890` без auth → mihomo **407**. getMe/send/getUpdates fail. Fix in `.env`: proxy URL with mihomo `authentication` user (не в git).
+2. Complete (TG «Выполнить» / API) с `cleared_remind` снимал `remind_rule` у daily → #161/#16 без hourly с ~10–13 сент.
+
+**Фикс:**
+- `.env` proxy auth (recreate container).
+- Recurring+hourly: keep `remind_rule`, pause until next due day 09:00 (`_hourly_resume_at`).
+- Re-enabled hourly on #161 Отжиматься, #16 Почистить зубы.
+- Verify: getMe/send True; test TG message delivered.
 
 ## TG remind «Выполнить» button 2026-09-09 (~13:05 MSK)
 
