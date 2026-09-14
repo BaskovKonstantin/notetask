@@ -1,6 +1,17 @@
 # NoteTask / todo.baski.pro — context
 
-Updated: 2026-09-14 (~15:56 MSK)
+Updated: 2026-09-14 (~19:45 MSK)
+
+## Task 3: Sheet Fact by category + 409s (2026-09-14)
+
+- Branch: `feat/finance-excel-task-sync`
+- `GET /api/finance/sheet`: Fact per category = tasks (`task_month_key` due then created) + sheet txns + work payments on **Работа/income** only. No lump into «Прочие *» / «Подработка». `_rollup_task_work_budget` removed.
+- Each `categories[]` item: `planned`, `actual`, `delta`, `fact_entries[]` (`source` task|sheet|work, id, title, amount, day, task_id).
+- Helpers: `category_actuals_for_month`, `category_has_entries`, `assert_unique_live_category` in `app/finance_sheet.py`.
+- 409: duplicate live `(name, kind)` on create; delete if tasks/txns/any work payment on Работа/income.
+- Month bucket change only on sheet path, not `/api/finance/months`.
+- Tests: `tests/test_finance_sheet_fact.py` (8). Host `.venv` is Python 3.14 — fastapi/pydantic stubs in that test file.
+- `sum_work_payment_income(..., year_month=)` still 250k in August.
 
 ## Brainstorm: Finance Excel + Goals game-graph (2026-09-14 ~15:56 MSK)
 

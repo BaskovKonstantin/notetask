@@ -19,6 +19,12 @@ from .finance_helpers import (
     work_payment_received_filter,
     work_payments_has_status,
 )
+from .finance_task_sync import (
+    WORK_CATEGORY_NAME,
+    backfill_task_categories,
+    get_or_create_category,
+    task_month_key,
+)
 
 router = APIRouter(prefix="/api/finance", tags=["finance-sheet"])
 
@@ -128,34 +134,146 @@ async def ensure_finance_sheet_defaults(db: aiosqlite.Connection) -> None:
     await db.commit()
 
 
-def _rollup_task_work_budget(
-    categories: list[dict[str, Any]],
-    income_by_cat: dict[int | None, float],
-    expense_by_cat: dict[int | None, float],
-    *,
-    task_income: float,
-    task_expense: float,
-    work_income: float,
-) -> tuple[dict[int | None, float], dict[int | None, float]]:
-    """Map task/work totals into default budget categories for plan/fact table."""
-    income = dict(income_by_cat)
-    expense = dict(expense_by_cat)
-    income_names = {c["name"]: c["id"] for c in categories if c["kind"] == "income"}
-    expense_names = {c["name"]: c["id"] for c in categories if c["kind"] == "expense"}
-    sidework_id = income_names.get("Подработка")
-    other_income_id = income_names.get("Прочие доходы")
-    other_expense_id = expense_names.get("Прочие расходы")
-    if sidework_id is not None and work_income:
-        income[sidework_id] = income.get(sidework_id, 0) + work_income
-    if other_income_id is not None and task_income:
-        income[other_income_id] = income.get(other_income_id, 0) + task_income
-    if other_expense_id is not None and task_expense:
-        expense[other_expense_id] = expense.get(other_expense_id, 0) + task_expense
-    return income, expense
+async def category_has_entries(db: aiosqlite.Connection, category_id: int) -> bool:
+    cur = await db.execute(
+        "SELECT 1 FROM tasks WHERE deleted_at IS NULL AND finance_category_id=? AND cost IS NOT NULL AND cost != 0 LIMIT 1",
+        (category_id,),
+    )
+    if await cur.fetchone():
+        return True
+    cur = await db.execute(
+        "SELECT 1 FROM finance_transactions WHERE deleted_at IS NULL AND category_id=? LIMIT 1",
+        (category_id,),
+    )
+    if await cur.fetchone():
+        return True
+    cur = await db.execute(
+        "SELECT name, kind FROM finance_categories WHERE id=?",
+        (category_id,),
+    )
+    row = await cur.fetchone()
+    if row and row["name"] == WORK_CATEGORY_NAME and row["kind"] == "income":
+        cur = await db.execute(
+            """
+            SELECT 1 FROM work_project_payments p
+            JOIN work_projects w ON w.id = p.work_project_id AND w.deleted_at IS NULL
+            WHERE p.amount > 0 LIMIT 1
+            """
+        )
+        return await cur.fetchone() is not None
+    return False
+
+
+async def assert_unique_live_category(
+    db: aiosqlite.Connection,
+    name: str,
+    kind: str,
+    exclude_id: int | None = None,
+) -> None:
+    params: list[Any] = [name.strip(), kind]
+    sql = """
+        SELECT id FROM finance_categories
+        WHERE deleted_at IS NULL AND name=? AND kind=?
+    """
+    if exclude_id is not None:
+        sql += " AND id!=?"
+        params.append(exclude_id)
+    cur = await db.execute(sql, params)
+    if await cur.fetchone():
+        raise HTTPException(409, "Category already exists")
+
+
+async def category_actuals_for_month(
+    db: aiosqlite.Connection, year_month: str
+) -> dict[int, list[dict]]:
+    by_cat: dict[int, list[dict]] = {}
+
+    def add(cid: int | None, entry: dict) -> None:
+        if cid is None:
+            return
+        by_cat.setdefault(int(cid), []).append(entry)
+
+    cur = await db.execute(
+        """
+        SELECT t.id, t.category_id, t.amount, t.day, t.note, c.name AS category_name
+        FROM finance_transactions t
+        LEFT JOIN finance_categories c ON c.id = t.category_id
+        WHERE t.deleted_at IS NULL AND SUBSTR(t.day, 1, 7) = ?
+        """,
+        (year_month,),
+    )
+    for row in await cur.fetchall():
+        d = row_to_dict(row)
+        title = d.get("note") or d.get("category_name") or "Операция"
+        add(
+            d.get("category_id"),
+            {
+                "source": "sheet",
+                "id": d["id"],
+                "title": title,
+                "amount": float(d["amount"] or 0),
+                "day": d["day"][:10] if d.get("day") else None,
+                "task_id": None,
+            },
+        )
+
+    cur = await db.execute(
+        """
+        SELECT id, title, cost, due_at, created_at, finance_category_id
+        FROM tasks
+        WHERE deleted_at IS NULL AND cost IS NOT NULL AND cost != 0
+        """
+    )
+    for row in await cur.fetchall():
+        d = row_to_dict(row)
+        if task_month_key(d.get("due_at"), d.get("created_at")) != year_month:
+            continue
+        day_raw = d.get("due_at") or d.get("created_at")
+        add(
+            d.get("finance_category_id"),
+            {
+                "source": "task",
+                "id": d["id"],
+                "title": d["title"] or "Задача",
+                "amount": float(d["cost"] or 0),
+                "day": str(day_raw)[:10] if day_raw else None,
+                "task_id": d["id"],
+            },
+        )
+
+    work_cat_id = await get_or_create_category(db, name=WORK_CATEGORY_NAME, kind="income")
+    has_status = await work_payments_has_status(db)
+    status_sql = work_payment_received_filter(has_status, alias="p")
+    cur = await db.execute(
+        f"""
+        SELECT p.id, p.amount, p.paid_at, p.note, w.title AS project_title
+        FROM work_project_payments p
+        JOIN work_projects w ON w.id = p.work_project_id AND w.deleted_at IS NULL
+        WHERE p.amount > 0{status_sql}
+          AND SUBSTR(p.paid_at, 1, 7) = ?
+        """,
+        (year_month,),
+    )
+    for row in await cur.fetchall():
+        d = row_to_dict(row)
+        note = (d.get("note") or "").strip()
+        title = f"{d['project_title']}: {note}" if note else str(d["project_title"])
+        add(
+            work_cat_id,
+            {
+                "source": "work",
+                "id": d["id"],
+                "title": title,
+                "amount": float(d["amount"] or 0),
+                "day": str(d["paid_at"])[:10] if d.get("paid_at") else None,
+                "task_id": None,
+            },
+        )
+    return by_cat
 
 
 async def _task_totals_for_month(db: aiosqlite.Connection, year_month: str) -> tuple[float, float]:
-    day_expr = "COALESCE(SUBSTR(completed_at,1,10), SUBSTR(due_at,1,10), SUBSTR(created_at,1,10))"
+    day_expr = "COALESCE(NULLIF(TRIM(due_at), ''), created_at)"
     cur = await db.execute(
         f"""
         SELECT cost_type, SUM(cost) AS total
@@ -178,7 +296,7 @@ async def _task_totals_for_month(db: aiosqlite.Connection, year_month: str) -> t
 
 
 async def _merged_entries(db: aiosqlite.Connection, year_month: str) -> list[dict[str, Any]]:
-    day_expr = "COALESCE(SUBSTR(completed_at,1,10), SUBSTR(due_at,1,10), SUBSTR(created_at,1,10))"
+    day_expr = "COALESCE(NULLIF(TRIM(due_at), ''), created_at)"
     entries: list[dict[str, Any]] = []
 
     cur = await db.execute(
@@ -212,7 +330,7 @@ async def _merged_entries(db: aiosqlite.Connection, year_month: str) -> list[dic
 
     cur = await db.execute(
         f"""
-        SELECT id, title, cost, cost_type, due_at, completed_at, created_at
+        SELECT id, title, cost, cost_type, due_at, created_at
         FROM tasks
         WHERE deleted_at IS NULL AND cost IS NOT NULL AND cost != 0
           AND SUBSTR({day_expr},1,7) = ?
@@ -223,11 +341,8 @@ async def _merged_entries(db: aiosqlite.Connection, year_month: str) -> list[dic
     )
     for row in await cur.fetchall():
         d = row_to_dict(row)
-        day = None
-        for key in ("completed_at", "due_at", "created_at"):
-            if d.get(key):
-                day = str(d[key])[:10]
-                break
+        day_raw = d.get("due_at") or d.get("created_at")
+        day = str(day_raw)[:10] if day_raw else None
         entries.append(
             {
                 "id": d["id"],
@@ -283,6 +398,8 @@ async def get_finance_sheet(
     ym = year_month or utcnow()[:7]
     _validate_year_month(ym)
     await ensure_finance_sheet_defaults(db)
+    await backfill_task_categories(db)
+    await get_or_create_category(db, name=WORK_CATEGORY_NAME, kind="income")
 
     cur = await db.execute(
         """
@@ -301,28 +418,6 @@ async def get_finance_sheet(
         """
     )
     accounts = [row_to_dict(r) for r in await cur.fetchall()]
-
-    cur = await db.execute(
-        """
-        SELECT category_id, SUM(amount) AS total
-        FROM finance_transactions
-        WHERE deleted_at IS NULL AND kind = 'expense' AND SUBSTR(day, 1, 7) = ?
-        GROUP BY category_id
-        """,
-        (ym,),
-    )
-    expense_by_cat = {row["category_id"]: float(row["total"] or 0) for row in await cur.fetchall()}
-
-    cur = await db.execute(
-        """
-        SELECT category_id, SUM(amount) AS total
-        FROM finance_transactions
-        WHERE deleted_at IS NULL AND kind = 'income' AND SUBSTR(day, 1, 7) = ?
-        GROUP BY category_id
-        """,
-        (ym,),
-    )
-    income_by_cat = {row["category_id"]: float(row["total"] or 0) for row in await cur.fetchall()}
 
     cur = await db.execute(
         "SELECT category_id, planned FROM finance_budget WHERE year_month=?",
@@ -370,19 +465,13 @@ async def get_finance_sheet(
     income = tx_income + task_income + work_income
     expense = tx_expense + task_expense
 
-    rolled_income, rolled_expense = _rollup_task_work_budget(
-        categories,
-        income_by_cat,
-        expense_by_cat,
-        task_income=task_income,
-        task_expense=task_expense,
-        work_income=work_income,
-    )
+    actuals = await category_actuals_for_month(db, ym)
     budget_rows = []
     for cat in categories:
         cid = cat["id"]
         kind = cat["kind"]
-        actual = rolled_income.get(cid, 0) if kind == "income" else rolled_expense.get(cid, 0)
+        fact_entries = list(actuals.get(cid, []))
+        actual = sum(float(e.get("amount") or 0) for e in fact_entries)
         planned = planned_by_cat.get(cid, 0)
         budget_rows.append(
             {
@@ -390,6 +479,7 @@ async def get_finance_sheet(
                 "planned": planned,
                 "actual": actual,
                 "delta": planned - actual if kind == "expense" else actual - planned,
+                "fact_entries": fact_entries,
             }
         )
 
@@ -443,6 +533,7 @@ async def create_finance_category(
     db: aiosqlite.Connection = Depends(get_db),
     _: dict = Depends(require_auth),
 ):
+    await assert_unique_live_category(db, body.name, body.kind)
     now = utcnow()
     cur = await db.execute(
         """
@@ -487,6 +578,14 @@ async def delete_finance_category(
     db: aiosqlite.Connection = Depends(get_db),
     _: dict = Depends(require_auth),
 ):
+    cur = await db.execute(
+        "SELECT id FROM finance_categories WHERE id=? AND deleted_at IS NULL",
+        (category_id,),
+    )
+    if not await cur.fetchone():
+        raise HTTPException(404, "Category not found")
+    if await category_has_entries(db, category_id):
+        raise HTTPException(409, "Category has entries")
     now = utcnow()
     cur = await db.execute(
         "UPDATE finance_categories SET deleted_at=?, updated_at=? WHERE id=? AND deleted_at IS NULL",
