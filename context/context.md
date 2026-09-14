@@ -9,7 +9,8 @@ Updated: 2026-09-14 (~15:56 MSK)
 - Finance now: month, balance, accounts, budget grid (Статья · План · Факт · Δ), txn form, journal (manual + task amounts + work payments). API `/api/finance/sheet`. Tasks already have `cost` / `costType`.
 - Two independent pieces. Finance spec written. Goals later, own spec.
 - Spec: `docs/superpowers/specs/2026-09-14-finance-excel-task-sync-design.md`
-- Approach A + split income/expense rows per project name. Waiting user review of spec. No code yet.
+- Plan: `docs/superpowers/plans/2026-09-14-finance-excel-task-sync.md`
+- Approach A + split income/expense rows per project name. Spec+plan written. Waiting execution choice. No code yet.
 - Decisions so far:
   - First: Finance (Goals later).
   - Rows stay budget articles (Статья / План / Факт / Δ), not task-per-row.
