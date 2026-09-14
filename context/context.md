@@ -1,6 +1,27 @@
 # NoteTask / todo.baski.pro — context
 
-Updated: 2026-09-14 (~19:45 MSK)
+Updated: 2026-09-14 (~20:10 MSK)
+
+## Fix: hourly reminds after complete (2026-09-14 ~20:08)
+
+- Symptom: TG hourly nags for #16/#161 after «Выполнить» same day.
+- Root: `complete_task_row` sets pause `remind_at` = next due morning 09:00; `notify.tick_once` hourly branch ignored `remind_at`, fired every hour and overwrote pause to next `:00`.
+- Fix: `hourly_ready(now, remind_at)` in `app/remind_utils.py`; notify fires hourly only if ready. Live DB #16/#161 resume restored `2026-09-15T09:00:00+03:00`.
+- Tests: `HourlyReadyTests` in `tests/test_hourly_remind.py`.
+- Pending (separate): TG Mini Apps + bot UX — brainstorm, not started.
+
+## Task 4: Excel grid UI + Fact drawer (2026-09-14)
+
+- Branch: `feat/finance-excel-task-sync` (do not switch to main).
+- UI: `static/app.js` + `static/styles.css`. No cache bump (Task 5). No Python.
+- `#view-finance` grid columns: Статья | План | Факт | Δ | +. Name = contenteditable `data-fin-name`. Plan = `input.fin-plan-input`. Fact = `td.is-fact` (not input).
+- Removed `#fin-tx-form` and page journal `.fin-ops-page`. Journal = drawer `#fin-fact-drawer` from `categories[].fact_entries`.
+- `state.financeSheet = data` in `renderFinancePage`. Click Fact → drawer. Click task → `setView("today")` + `anim-pulse` + `scrollIntoView` on `.item[data-id]`.
+- Row `+` / drawer «+ задача»: `prompt` title then amount; cancel amount = no POST. `POST /api/tasks` with `finance_category_id`, `cost_type=kind`, `project_id` if `projects.name === category.name`, `due_at` = today or `{ym}-01`.
+- `+ строка`: `POST /api/finance/categories` `{ name: "Новая статья", kind, group_name }`. Duplicate live `(name, kind)` → 409 alert.
+- Delete: selected row Delete/Backspace or × → `DELETE /api/finance/categories/{id}`; 409 shows `detail`.
+- Rename blur: `PATCH` `{ name, kind, group_name, sort }`. Keys: Tab name↔plan, Enter next row, arrows, Esc closes drawer.
+- Commit: `feat(finance): Excel grid and Fact drawer`. Do not commit `.superpowers/` or `scripts/backup-db.sh`.
 
 ## Task 3: Sheet Fact by category + 409s (2026-09-14)
 

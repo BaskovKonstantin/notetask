@@ -43,3 +43,21 @@ def hourly_dedupe_key(task_id: int, when: datetime) -> str:
 def in_hour_fire_window(now: datetime, window_minutes: int = 5) -> bool:
     local = now.astimezone(TZ) if now.tzinfo else now.replace(tzinfo=TZ)
     return local.minute < window_minutes
+
+
+def hourly_ready(now: datetime, resume_at: str | None) -> bool:
+    """True when hourly nag may fire (pause until remind_at reached)."""
+    if resume_at is None or not str(resume_at).strip():
+        return True
+    text = str(resume_at).strip()
+    try:
+        if text.endswith("Z"):
+            resume = datetime.fromisoformat(text[:-1] + "+00:00")
+        else:
+            resume = datetime.fromisoformat(text)
+    except ValueError:
+        return True
+    if resume.tzinfo is None:
+        resume = resume.replace(tzinfo=TZ)
+    local_now = now.astimezone(TZ) if now.tzinfo else now.replace(tzinfo=TZ)
+    return resume.astimezone(TZ) <= local_now

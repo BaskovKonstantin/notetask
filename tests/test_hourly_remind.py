@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 
 from app.remind_utils import (
     hourly_dedupe_key,
+    hourly_ready,
     in_hour_fire_window,
     next_hour_boundary,
     normalize_remind_rule,
@@ -48,6 +49,23 @@ class HourlyWindowTests(unittest.TestCase):
     def test_dedupe_key(self):
         key = hourly_dedupe_key(16, datetime(2026, 9, 9, 13, 2, 0, tzinfo=TZ))
         self.assertEqual(key, "remind:16:2026-09-09T13")
+
+
+class HourlyReadyTests(unittest.TestCase):
+    def test_no_resume_ready(self):
+        now = datetime(2026, 9, 14, 18, 0, 0, tzinfo=TZ)
+        self.assertTrue(hourly_ready(now, None))
+        self.assertTrue(hourly_ready(now, ""))
+
+    def test_future_resume_paused(self):
+        now = datetime(2026, 9, 14, 18, 0, 0, tzinfo=TZ)
+        resume = "2026-09-15T09:00:00+03:00"
+        self.assertFalse(hourly_ready(now, resume))
+
+    def test_past_or_equal_resume_ready(self):
+        now = datetime(2026, 9, 15, 9, 0, 0, tzinfo=TZ)
+        self.assertTrue(hourly_ready(now, "2026-09-15T09:00:00+03:00"))
+        self.assertTrue(hourly_ready(now, "2026-09-15T08:00:00+03:00"))
 
 
 if __name__ == "__main__":

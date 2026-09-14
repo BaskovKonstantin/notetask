@@ -22,7 +22,7 @@ from .config import (
 )
 from .db import utcnow
 from .due_utils import due_at_present, is_task_overdue, parse_task_dt
-from .remind_utils import hourly_dedupe_key, in_hour_fire_window, next_hour_boundary_iso
+from .remind_utils import hourly_dedupe_key, hourly_ready, in_hour_fire_window, next_hour_boundary_iso
 from .task_complete import complete_task_row
 from .tg_callbacks import parse_done_callback_data
 
@@ -266,7 +266,7 @@ async def tick_once() -> None:
 
         for task in tasks:
             if (task.get("remind_rule") or "").strip().lower() == "hourly":
-                if in_hour_fire_window(now):
+                if hourly_ready(now, task.get("remind_at")) and in_hour_fire_window(now):
                     key = hourly_dedupe_key(task["id"], now)
                     title = "Напоминание · каждый час"
                     body = task["title"]
