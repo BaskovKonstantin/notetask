@@ -11,6 +11,7 @@ import aiosqlite
 from .config import MORNING_DUE_HOUR, NOTIFY_TZ
 from .db import bump_completions, log_action, row_to_dict, utcnow
 from .due_utils import next_daily_after_complete
+from .goals import mark_goal_nodes_for_task
 
 
 TZ = ZoneInfo(NOTIFY_TZ)
@@ -98,6 +99,7 @@ async def complete_task_row(
             },
         )
         await db.commit()
+        await mark_goal_nodes_for_task(db, task_id)
         task = await fetch_task_row(db, task_id)
         if task is not None:
             task["rescheduled"] = True
@@ -113,4 +115,5 @@ async def complete_task_row(
     await bump_completions(db)
     await log_action(db, "completed", "task", task_id, {"title": old["title"], "cleared_remind": True})
     await db.commit()
+    await mark_goal_nodes_for_task(db, task_id)
     return await fetch_task_row(db, task_id)

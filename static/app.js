@@ -146,6 +146,7 @@ const HEALTH_METRIC_FIELDS = [
 
 const titles = {
   today: "Сегодня",
+  goals: "Цели",
   finance: "Финансы",
   history: "История",
   stats: "Статистика",
@@ -207,6 +208,8 @@ async function api(path, opts = {}) {
   if (res.status === 204) return null;
   return res.json();
 }
+
+window.notetaskApi = api;
 
 async function track(action, entityType = "ui", entityId = null, payload = {}) {
   if (!state.token) return;
@@ -2592,7 +2595,7 @@ function setView(view, opts = {}) {
     applySectionTheme(proj?.color || DEFAULT_THEME);
   } else {
     $("view-title").textContent = titles[view] || "";
-    applySectionTheme(view === "finance" ? "#2a7a4b" : DEFAULT_THEME);
+    applySectionTheme(view === "finance" ? "#2a7a4b" : view === "goals" ? "#c9a227" : DEFAULT_THEME);
   }
 
   const taskViews = ["today", "project"];
@@ -2602,6 +2605,7 @@ function setView(view, opts = {}) {
   $("view-history").classList.toggle("hidden", view !== "history");
   $("view-stats").classList.toggle("hidden", view !== "stats");
   $("view-finance").classList.toggle("hidden", view !== "finance");
+  $("view-goals")?.classList.toggle("hidden", view !== "goals");
 
   if (!taskViews.includes(view) || !currentPanelKind()) hideSectionPanel();
 
@@ -2616,7 +2620,7 @@ function setView(view, opts = {}) {
   const main = document.querySelector(".main");
   if (main) {
     main.classList.add("content-wide");
-    main.classList.toggle("finance-wide", view === "finance");
+    main.classList.toggle("finance-wide", view === "finance" || view === "goals");
     if (!prefersReducedMotion()) {
       main.classList.remove("view-swap");
       void main.offsetWidth;
@@ -2635,6 +2639,7 @@ function showListError() {
   else if (v === "history") root = $("history-list");
   else if (v === "stats") root = $("stats-cards");
   else if (v === "finance") root = $("finance-page");
+  else if (v === "goals") root = $("goals-stage");
   else return;
   if (!root) return;
   root.innerHTML =
@@ -2654,6 +2659,7 @@ async function refresh() {
   } else if (v === "history") await loadHistory();
   else if (v === "stats") await loadStats();
   else if (v === "finance") await loadFinancePage();
+  else if (v === "goals") await window.notetaskGoals?.load?.();
 }
 
 function priorityBadge(p) {

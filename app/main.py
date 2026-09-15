@@ -42,6 +42,7 @@ from .finance_helpers import (
 )
 from .finance_sheet import ensure_finance_sheet_defaults, register_finance_sheet
 from .finance_task_sync import resolve_finance_category_id
+from .goals import ensure_goals_tables, mark_goal_nodes_for_task, register_goals
 from .notify import configure_complete_helpers, notify_loop, send_telegram
 from .task_complete import complete_task_row
 
@@ -72,6 +73,7 @@ async def lifespan(app: FastAPI):
     db = await connect()
     await ensure_defaults(db)
     await ensure_finance_sheet_defaults(db)
+    await ensure_goals_tables(db)
     cutoff = (datetime.now(timezone.utc).date() - timedelta(days=180)).isoformat()
     await db.execute("DELETE FROM action_log WHERE at < ?", (cutoff,))
     await db.commit()
@@ -89,6 +91,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="NoteTask", lifespan=lifespan)
 app.mount("/assets", StaticFiles(directory=STATIC), name="assets")
 register_finance_sheet(app)
+register_goals(app)
 
 
 @app.exception_handler(Exception)
@@ -775,6 +778,8 @@ async def patch_task(
         ),
     )
     await db.commit()
+    if status == "done" and old["status"] != "done":
+        await mark_goal_nodes_for_task(db, task_id)
     return await fetch_task(db, task_id)
 
 
@@ -877,6 +882,8 @@ async def update_task(
         ),
     )
     await db.commit()
+    if status == "done" and old["status"] != "done":
+        await mark_goal_nodes_for_task(db, task_id)
     return await fetch_task(db, task_id)
 
 

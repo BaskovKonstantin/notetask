@@ -1,6 +1,50 @@
 # NoteTask / todo.baski.pro — context
 
-Updated: 2026-09-14 (~20:25 MSK)
+Updated: 2026-09-15 (~18:05 MSK)
+
+## Task 2: Ledger grid UI (2026-09-15 ~18:05)
+
+- Branch: `feat/finance-ledger-table`. Files: `static/app.js`, `static/styles.css`.
+- `#view-finance`: table **Проект | Направление | Цена | Месяц | Статус**. Filters ▾ per column. Hero **Баланс** from `ledgerVisibleRows()`. Accounts = `GET /api/finance/sheet?year_month=` current month `.accounts` only.
+- State: `financeLedger`, `financeLedgerFilters` (col → Set|null), `financeDrafts=[]`. `+ строка` (`data-fin-add-ledger`) no-op until Task 3.
+- No month ‹ ›, no Статья/План/Факт, no `#fin-fact-drawer`. Old `data-fin-cat` handlers remain, no such rows.
+- Cache still `app.js?v=77` (Task 5). Commit blocked: Author identity unknown; UI files staged. Do not `git config`.
+- Report: `.superpowers/sdd/task-2-report.md`
+
+## Brainstorm: Finance ledger table (2026-09-15)
+
+User Sheet columns: Проект · Направление · Цена ± · Месяц · Статус. Replace Статья/План/Факт/Δ.
+
+Approved:
+- Approach A: `GET /api/finance/ledger` over tasks-with-cost + work payments. No `finance_ledger` table.
+- Row = task (Направление=title, Проект=section) or work payment (Проект locked Работа, title=work_projects.name).
+- Sheet labels Спортики/Снеговоики → Работа, Жизнь/Кредитка → Личные дела (mapping only). Column shows sidebar section. Any section with cost.
+- Статус: open/planned=План, done/received=Подтверждено.
+- All months, Excel column filters. Месяц = real due_at/paid_at.
+- Hero stays; numbers = visible filtered rows; no month arrows; accounts unchanged. No totals row.
+- Inline Excel edit. `+` = local draft, POST when price ≠ 0.
+- No recurring month-clone. No live money during verify.
+- Spec: `docs/superpowers/specs/2026-09-15-finance-ledger-table-design.md`
+- Plan: `docs/superpowers/plans/2026-09-15-finance-ledger-table.md`
+- Gate: user picks execution (subagent vs inline). Do not code until then.
+
+Sample Sheet rows: CRM +255k, Манаков −50k (Aug); Снеговики +250k, Работник −100k, Компьютер −170k, Cursor −20k, Еда −20k, Дом −60k (Sep); Cursor −20k, Еда −20k, Снеговики +506k (Oct). Sum 551k not shown in UI.
+
+## Brainstorm: Goals game-graph (2026-09-15 ~17:07)
+
+- User: start Goals now (Finance done; graph not built).
+- Status: clarifying — no code yet. Separate from workout_goals in Тренировки.
+- Prior note: sidebar section Цели, several tabs, game-style graph = plan to reach a goal.
+- Decision: **A** skill tree — root = big goal, branches = steps, unlock as completed.
+- Decision: **C** complete node = manual check OR linked NoteTask done.
+- Decision: **B** sidebar «Цели» → tabs (goal = tab) + skill tree graph.
+- Decision: **A** unlock: all parents done → child unlocked.
+- Decision: **A** build: «+» on node → child by title; no free drag-edges in v1.
+- Decision: **B** v1 already game look: medal nodes, path lines, glow/unlock anim.
+- Approach: **2** Cytoscape.js (+ dagre/elk layout for tree).
+- Design §1 data/API: approved (goals, goal_nodes, goal_edges; unlock all parents; complete manual|task).
+- Design §2 UI: approved (sidebar Цели, tabs, Cytoscape medals, side panel, workout_goals untouched).
+- Design §3 tech: approved (app/goals.py, cytoscape+dagre vendor, task→node hook, one parent v1).
 
 ## Review fixes: finance Excel branch (2026-09-14 ~20:25)
 

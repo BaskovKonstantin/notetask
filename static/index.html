@@ -51,8 +51,8 @@
         });
     })();
   </script>
-  <link rel="stylesheet" href="assets/styles.css?v=50" />
-  <script src="assets/pwa.js?v=13"></script>
+  <link rel="stylesheet" href="assets/styles.css?v=51" />
+  <script src="assets/pwa.js?v=14"></script>
 </head>
 <body>
   <div id="login" class="login-wrap">
@@ -78,6 +78,7 @@
       <p class="tagline">личное · с историей</p>
       <nav class="nav" id="nav">
         <button data-view="today" class="active">Сегодня</button>
+        <button data-view="goals">Цели</button>
         <button data-view="finance">Финансы</button>
         <button data-view="history">История</button>
         <button data-view="stats">Статистика</button>
@@ -304,6 +305,20 @@
         <div id="workout-list" class="list"></div>
       </section>
 
+      <section id="view-goals" class="panel hidden">
+        <div class="goals-toolbar">
+          <div class="goals-tabs" id="goals-tabs"></div>
+          <button type="button" class="btn ghost" id="goals-delete" title="Удалить цель">Удалить цель</button>
+        </div>
+        <div class="goals-stage">
+          <div id="goals-cy" class="goals-cy"></div>
+          <aside class="goals-panel" id="goals-panel">
+            <p class="goals-panel-empty">Выбери узел на дереве</p>
+          </aside>
+          <p class="goals-empty empty hidden" id="goals-empty">Нет целей. Нажми + во вкладках.</p>
+        </div>
+      </section>
+
       <section id="view-finance" class="panel hidden">
         <div id="finance-page"></div>
       </section>
@@ -325,6 +340,8 @@
   </div>
 
   <script src="assets/pwa-install.js?v=3"></script>
-  <script src="assets/app.js?v=77"></script>
+  <script src="assets/vendor/cytoscape.min.js"></script>
+  <script src="assets/goals.js?v=1"></script>
+  <script src="assets/app.js?v=78"></script>
 </body>
 </html>
