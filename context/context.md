@@ -1,6 +1,14 @@
 # NoteTask / todo.baski.pro — context
 
-Updated: 2026-09-15 (~18:05 MSK)
+Updated: 2026-09-15 (~18:20 MSK)
+
+## Goals skill-tree shipped (2026-09-15 ~18:15)
+
+- Commit: `c8c7d83` on `feat/finance-ledger-table`.
+- Spec/plan: `docs/superpowers/specs/2026-09-15-goals-skill-tree-design.md`, `plans/2026-09-15-goals-skill-tree.md`.
+- Backend: `app/goals.py` + hook in `task_complete` / PATCH/PUT done.
+- UI: sidebar **Цели**, Cytoscape `breadthfirst`, `static/goals.js` + `vendor/cytoscape.min.js`. Cache `app.js?v=78`, `styles?v=51`, SW v30, `pwa.js?v=14`.
+- Smoke goal id=1 «Smoke цель» in DB.
 
 ## Task 2: Ledger grid UI (2026-09-15 ~18:05)
 
@@ -33,7 +41,7 @@ Sample Sheet rows: CRM +255k, Манаков −50k (Aug); Снеговики +2
 ## Brainstorm: Goals game-graph (2026-09-15 ~17:07)
 
 - User: start Goals now (Finance done; graph not built).
-- Status: clarifying — no code yet. Separate from workout_goals in Тренировки.
+- Status: **shipped** (see section above). Separate from workout_goals.
 - Prior note: sidebar section Цели, several tabs, game-style graph = plan to reach a goal.
 - Decision: **A** skill tree — root = big goal, branches = steps, unlock as completed.
 - Decision: **C** complete node = manual check OR linked NoteTask done.
