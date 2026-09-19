@@ -2191,6 +2191,46 @@ body.nav-open {
   padding: 18px;
 }
 
+.fin-compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+.fin-compare-card {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 252, 245, 0.72);
+  padding: 4px 8px 12px;
+}
+
+.fin-compare-card .fin-hero {
+  padding: 14px 8px 6px;
+}
+
+.fin-hero-hint {
+  margin: 8px 0 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.fin-compare-card.plan .fin-hero-value {
+  font-size: clamp(1.2rem, 3vw, 1.65rem);
+  font-weight: 650;
+  color: var(--ink);
+}
+
+.fin-compare-card.plan .fin-hero-value.plan {
+  color: var(--ink);
+}
+
+.fin-compare-card.plan .fin-split-card.income .value,
+.fin-compare-card.plan .fin-split-card.expense .value {
+  color: var(--ink);
+}
+
 .fin-section {
   padding: 0 18px 18px;
 }
@@ -2428,6 +2468,7 @@ body.nav-open {
 .fin-filter-menu label { display: flex; gap: 6px; align-items: center; font-weight: 400; }
 @media (max-width: 860px) {
   .fin-ledger-scroll { overflow-x: auto; }
+  .fin-compare { grid-template-columns: 1fr; }
 }
 
 .fin-plan-input {

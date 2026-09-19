@@ -1922,6 +1922,59 @@ function ledgerHeroTotals(rows) {
   return { income, expense, balance: income - expense };
 }
 
+function ledgerSplitTotals(rows) {
+  return {
+    confirmed: ledgerHeroTotals(rows.filter((row) => row.status === "confirmed")),
+    plan: ledgerHeroTotals(rows.filter((row) => row.status !== "confirmed")),
+  };
+}
+
+function financeToneClass(balance, tone) {
+  if (tone === "plan") return "plan";
+  if (balance > 0) return "pos";
+  if (balance < 0) return "neg";
+  return "";
+}
+
+function financeSplitHtml(totals) {
+  return `
+        <div class="fin-split">
+          <div class="fin-split-card income">
+            <span class="label">Доход</span>
+            <span class="value">${escapeHtml(moneySigned(totals.income, "income"))}</span>
+          </div>
+          <div class="fin-split-card expense">
+            <span class="label">Расход</span>
+            <span class="value">${escapeHtml(moneySigned(totals.expense, "expense"))}</span>
+          </div>
+        </div>`;
+}
+
+function financeCompareCardHtml({ label, hint, totals, tone, showBar }) {
+  const balClass = financeToneClass(totals.balance, tone);
+  const pct = financeBarPct(totals.income, totals.expense);
+  const bar = showBar
+    ? `
+        <div class="fin-bar" title="Расход относительно дохода">
+          <div class="fin-bar-track">
+            <div class="fin-bar-fill" style="width:${pct}%"></div>
+          </div>
+          <div class="fin-bar-meta">${pct}% расхода от дохода</div>
+        </div>`
+    : "";
+  const hintHtml = hint ? `<p class="fin-hero-hint">${escapeHtml(hint)}</p>` : "";
+  return `
+      <div class="fin-compare-card ${escapeHtml(tone)}">
+        <div class="fin-hero">
+          <span class="fin-hero-label">${escapeHtml(label)}</span>
+          <div class="fin-hero-value ${balClass}">${escapeHtml(moneyPlain(totals.balance))}</div>
+          ${hintHtml}
+        </div>
+        ${financeSplitHtml(totals)}
+        ${bar}
+      </div>`;
+}
+
 function ledgerRowAttr(row) {
   if (row.source === "draft") return `draft:${row.id}`;
   return `${row.source}:${row.id}`;
@@ -2373,9 +2426,7 @@ function renderFinancePage() {
   if (!Array.isArray(state.financeDrafts)) state.financeDrafts = [];
   if (!state.financeLedgerFilters) state.financeLedgerFilters = {};
   const visible = ledgerVisibleRows();
-  const { income, expense, balance: bal } = ledgerHeroTotals(visible);
-  const pct = financeBarPct(income, expense);
-  const balClass = bal > 0 ? "pos" : bal < 0 ? "neg" : "";
+  const split = ledgerSplitTotals(visible);
   const accounts = state.financeSheet?.accounts || [];
 
   const accountHtml = accounts.length
@@ -2421,27 +2472,20 @@ function renderFinancePage() {
   $("finance-page").innerHTML = `
     <div class="fin-page">
       <div class="fin-page-summary">
-        <div class="fin-hero">
-          <span class="fin-hero-label">Баланс</span>
-          <div class="fin-hero-value ${balClass}">${escapeHtml(moneyPlain(bal))}</div>
-        </div>
-
-        <div class="fin-split">
-          <div class="fin-split-card income">
-            <span class="label">Доход</span>
-            <span class="value">${escapeHtml(moneySigned(income, "income"))}</span>
-          </div>
-          <div class="fin-split-card expense">
-            <span class="label">Расход</span>
-            <span class="value">${escapeHtml(moneySigned(expense, "expense"))}</span>
-          </div>
-        </div>
-
-        <div class="fin-bar" title="Расход относительно дохода">
-          <div class="fin-bar-track">
-            <div class="fin-bar-fill" style="width:${pct}%"></div>
-          </div>
-          <div class="fin-bar-meta">${pct}% расхода от дохода</div>
+        <div class="fin-compare">
+          ${financeCompareCardHtml({
+            label: "Подтверждено",
+            totals: split.confirmed,
+            tone: "confirmed",
+            showBar: true,
+          })}
+          ${financeCompareCardHtml({
+            label: "План",
+            hint: "ещё не произошло",
+            totals: split.plan,
+            tone: "plan",
+            showBar: false,
+          })}
         </div>
 
         <section class="fin-section fin-accounts-section">
