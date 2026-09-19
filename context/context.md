@@ -1,6 +1,15 @@
 # NoteTask / todo.baski.pro — context
 
-Updated: 2026-09-19 (~16:35 MSK)
+Updated: 2026-09-19 (~16:50 MSK)
+
+## Workout plan section — shipped (2026-09-19)
+
+- Branch: `feat/workout-plan-section` (HEAD `23b8f96`).
+- Training page: A/B/C queue + calendar slots, muted inline media (image/gif/video) per exercise, muscle chips.
+- Goals trees: Подтягивание прямым хватом, Жим 100 кг, Сушка 88 кг. TG tab untouched. #161/#163 hourly unchanged.
+- Final-review fixes: queue advances only if `day_code == next_code`; submit guard + try/catch; MediaError after module reload. Tests: 37 OK (`tests.test_workout_plan` + `tests.test_workout_media`).
+- Cache: `styles.css?v=59`, `app.js?v=85`, `pwa.js?v=16`, SW `notetask-v33` / `sw.js?v=33`.
+- Live: `http://192.168.0.6/` (Cursor browser: `127.0.0.1:8100` chrome-error). Docker bind-mount `app/` + `static/`.
 
 ## Task 7: Browser verify + context (2026-09-19)
 
