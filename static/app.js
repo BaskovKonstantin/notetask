@@ -5,6 +5,7 @@ const SIDEBAR_WIDTH_MIN = 180;
 const SIDEBAR_WIDTH_MAX = 400;
 const SIDEBAR_WIDTH_DEFAULT = 240;
 const SORT_KEY = "notetask_task_sort";
+const VALID_VIEWS = new Set(["today", "goals", "finance", "history", "stats", "project"]);
 const LAN_ORIGIN = "http://192.168.0.6";
 const BASE = window.NOTETASK_BASE ?? (() => {
   const path = window.location.pathname;
@@ -27,6 +28,53 @@ function isDesktopClient() {
   if (window.chrome && window.chrome.webview) return true;
   if (/NoteTaskDesktop|Photino/i.test(navigator.userAgent || "")) return true;
   return false;
+}
+
+function readViewFromUrl() {
+  const q = new URLSearchParams(location.search);
+  const raw = q.get("view") || "today";
+  const view = VALID_VIEWS.has(raw) ? raw : "today";
+  const section = Number(q.get("section"));
+  const task = Number(q.get("task"));
+  const projectId = view === "project" && Number.isFinite(section) && section > 0 ? section : null;
+  const taskId = Number.isFinite(task) && task > 0 ? task : null;
+  if (view === "project" && !projectId) return { view: "today", projectId: null, taskId };
+  return { view, projectId, taskId };
+}
+
+function syncViewToUrl({ push = false } = {}) {
+  const url = new URL(location.href);
+  const q = url.searchParams;
+  if (state.view === "today") q.delete("view");
+  else q.set("view", state.view);
+  if (state.view === "project" && state.projectId) q.set("section", String(state.projectId));
+  else q.delete("section");
+  if (state.focusTaskId) q.set("task", String(state.focusTaskId));
+  else q.delete("task");
+  const next = `${url.pathname}${q.toString() ? `?${q}` : ""}${url.hash}`;
+  const cur = `${location.pathname}${location.search}${location.hash}`;
+  if (next === cur) return;
+  const snap = { view: state.view, projectId: state.projectId, taskId: state.focusTaskId };
+  if (push) history.pushState(snap, "", next);
+  else history.replaceState(snap, "", next);
+}
+
+function applyUrlView(opts = {}) {
+  const parsed = readViewFromUrl();
+  state.focusTaskId = parsed.taskId;
+  return setView(parsed.view, { projectId: parsed.projectId, replaceUrl: true, ...opts });
+}
+
+let urlSyncReady = false;
+
+function initUrlSync() {
+  if (urlSyncReady) return;
+  urlSyncReady = true;
+  window.addEventListener("popstate", () => {
+    const parsed = readViewFromUrl();
+    state.focusTaskId = parsed.taskId;
+    setView(parsed.view, { projectId: parsed.projectId, fromPopstate: true, keepTaskForm: true });
+  });
 }
 
 function isLanHost() {
@@ -105,6 +153,7 @@ const state = {
   financeSelectedRowKey: null,
   taskSort: loadTaskSort(),
   expandedTaskAttrs: new Set(),
+  focusTaskId: null,
 };
 
 const SECTION_PANELS = {
@@ -348,8 +397,8 @@ window.__notetaskAfterLogin = async (token) => {
   showApp();
   hideDesktopDownloads();
   await loadProjectsCache();
-  setView("today");
-  await refresh();
+  initUrlSync();
+  await applyUrlView();
   track("app_opened", "ui", null, { path: location.pathname, client: "login" });
 };
 
@@ -1183,7 +1232,7 @@ function leaveEmptyInboxIfNeeded() {
   const inbox = inboxProject();
   if (!inbox || inbox.id !== state.projectId) return false;
   if ((inbox.open_count || 0) > 0) return false;
-  setView("today", { keepTaskForm: true });
+  setView("today", { keepTaskForm: true, replaceUrl: true });
   return true;
 }
 
@@ -2732,8 +2781,11 @@ async function renderWorkoutPanel() {
 
 function setView(view, opts = {}) {
   if (!opts.keepTaskForm) hideTaskForm();
+  const nextProjectId = opts.projectId ?? null;
+  const same = state.view === view && state.projectId === nextProjectId;
   state.view = view;
-  state.projectId = opts.projectId ?? null;
+  state.projectId = nextProjectId;
+  if (view !== "today" && view !== "project") state.focusTaskId = null;
 
   document.querySelectorAll("#nav button, #project-nav button").forEach((b) => {
     const pid = b.dataset.projectId ? Number(b.dataset.projectId) : null;
@@ -2748,7 +2800,7 @@ function setView(view, opts = {}) {
     applySectionTheme(proj?.color || DEFAULT_THEME);
   } else {
     $("view-title").textContent = titles[view] || "";
-    applySectionTheme(view === "finance" ? "#2a7a4b" : view === "goals" ? "#c9a227" : DEFAULT_THEME);
+    applySectionTheme(view === "finance" ? "#2a7a4b" : DEFAULT_THEME);
   }
 
   const taskViews = ["today", "project"];
@@ -2782,6 +2834,10 @@ function setView(view, opts = {}) {
   }
   track("view_opened", "ui", null, { view, project_id: state.projectId });
   closeMobileNav();
+  if (!opts.fromPopstate) {
+    const push = !opts.replaceUrl && !same;
+    syncViewToUrl({ push });
+  }
   return refresh().catch(showListError);
 }
 
@@ -3299,6 +3355,7 @@ async function loadTasks(view) {
 
   root.innerHTML = html;
   applyListMotion(root, ".item");
+  focusTaskFromUrl();
 }
 
 function renderTaskItem(t, view, projectMap) {
@@ -3520,8 +3577,22 @@ function formatChanges(changes) {
     .join(" · ");
 }
 
+function focusTaskFromUrl() {
+  const id = state.focusTaskId;
+  if (!id) return;
+  const item = findTaskItem(id);
+  if (!item) return;
+  item.classList.add("anim-pulse");
+  item.scrollIntoView({ block: "center", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+}
+
+const HIDE_HISTORY_ACTIONS = new Set(["view_opened", "shortcut_used", "app_opened"]);
+
 async function loadHistory() {
-  const rows = await api("/api/history?limit=150");
+  const raw = await api("/api/history?limit=150");
+  const rows = (raw || []).filter(
+    (r) => r.entity_type !== "ui" && !HIDE_HISTORY_ACTIONS.has(r.action),
+  );
   const root = $("history-list");
   if (!rows.length) {
     root.innerHTML = '<div class="empty">История появится после первых действий.</div>';
@@ -4543,7 +4614,8 @@ async function boot() {
     showApp();
     hideDesktopDownloads();
     track("app_opened", "ui", null, { path: location.pathname });
-    setView("today");
+    initUrlSync();
+    await applyUrlView();
     handleCaptureHash();
     initNotificationPoll();
   } catch (err) {

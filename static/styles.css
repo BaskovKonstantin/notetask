@@ -1972,7 +1972,7 @@ body.nav-open {
   overflow: hidden;
 }
 
-/* --- Goals skill tree --- */
+/* --- Goals outline (paper) --- */
 #view-goals.panel {
   padding: 0;
   overflow: hidden;
@@ -1986,8 +1986,8 @@ body.nav-open {
   align-items: center;
   gap: 12px;
   padding: 12px 18px;
-  border-bottom: 1px solid color-mix(in srgb, var(--border, #333) 80%, transparent);
-  background: linear-gradient(180deg, color-mix(in srgb, #c9a227 12%, transparent), transparent);
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--accent) 6%, var(--panel));
 }
 
 .goals-tabs {
@@ -1999,20 +1999,20 @@ body.nav-open {
 }
 
 .goals-tab {
-  border: 1px solid #6b5a28;
-  background: #2a2418;
-  color: #e8e0d0;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--ink);
   border-radius: 999px;
-  padding: 6px 14px;
+  padding: 8px 14px;
+  min-height: 36px;
   cursor: pointer;
   font: inherit;
 }
 
 .goals-tab.active {
-  background: #c9a227;
-  color: #1a1408;
-  border-color: #f0d878;
-  box-shadow: 0 0 16px color-mix(in srgb, #c9a227 45%, transparent);
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--accent);
 }
 
 .goals-tab-add {
@@ -2028,25 +2028,84 @@ body.nav-open {
   min-height: 420px;
 }
 
-.goals-cy {
+.goals-outline {
+  overflow: auto;
+  padding: 10px 8px 24px;
+  background: transparent;
+}
+
+.goal-node {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   width: 100%;
-  height: 100%;
-  min-height: 420px;
-  background:
-    radial-gradient(ellipse at 50% 20%, color-mix(in srgb, #c9a227 14%, transparent), transparent 55%),
-    radial-gradient(circle at 20% 80%, color-mix(in srgb, #2a7a4b 10%, transparent), transparent 40%),
-    #14120e;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  min-height: 44px;
+  margin: 2px 0;
+  font: inherit;
+}
+
+.goal-node:hover {
+  background: rgba(var(--accent-rgb), 0.08);
+}
+
+.goal-node.is-selected {
+  background: rgba(var(--accent-rgb), 0.14);
+}
+
+.goal-node-mark {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex: none;
+  border: 2px solid var(--line);
+  background: transparent;
+}
+
+.goal-node-open .goal-node-mark {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.goal-node-done .goal-node-mark {
+  border-color: var(--accent);
+  background: var(--accent);
+  box-shadow: inset 0 0 0 2px #fff;
+}
+
+.goal-node-locked {
+  color: var(--muted);
+}
+
+.goal-node-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.goal-node-status {
+  font-size: 0.72rem;
+  color: var(--muted);
+  flex: none;
+}
+
+.goals-cy {
+  display: none;
 }
 
 .goals-panel {
-  border-left: 1px solid #3a3428;
-  background: #1a1712;
+  border-left: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel) 88%, #fff);
   padding: 16px;
   overflow: auto;
 }
 
 .goals-panel-empty {
-  color: #9a9080;
+  color: var(--muted);
   margin: 0;
 }
 
@@ -2058,7 +2117,7 @@ body.nav-open {
 }
 
 .goals-panel-meta {
-  color: #9a9080;
+  color: var(--muted);
   font-size: 0.9rem;
   margin: 0 0 14px;
 }
@@ -2075,21 +2134,24 @@ body.nav-open {
   font-size: 0.75rem;
   padding: 2px 8px;
   border-radius: 999px;
-  border: 1px solid #555;
+  border: 1px solid var(--line);
+  color: var(--muted);
 }
 
 .goals-status-open {
-  background: color-mix(in srgb, #c9a227 25%, transparent);
-  border-color: #c9a227;
+  background: rgba(var(--accent-rgb), 0.12);
+  border-color: rgba(var(--accent-rgb), 0.4);
+  color: var(--accent);
 }
 
 .goals-status-done {
-  background: color-mix(in srgb, #2a7a4b 35%, transparent);
-  border-color: #5ecf8a;
+  background: rgba(var(--accent-rgb), 0.18);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .goals-status-locked {
-  opacity: 0.7;
+  opacity: 0.8;
 }
 
 .goals-empty {
@@ -2108,11 +2170,11 @@ body.nav-open {
 @media (max-width: 860px) {
   .goals-stage {
     grid-template-columns: 1fr;
-    grid-template-rows: minmax(320px, 55vh) auto;
+    grid-template-rows: minmax(240px, 1fr) auto;
   }
   .goals-panel {
     border-left: none;
-    border-top: 1px solid #3a3428;
+    border-top: 1px solid var(--line);
   }
 }
 

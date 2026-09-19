@@ -51,7 +51,7 @@
         });
     })();
   </script>
-  <link rel="stylesheet" href="assets/styles.css?v=56" />
+  <link rel="stylesheet" href="assets/styles.css?v=57" />
   <script src="assets/pwa.js?v=15"></script>
 </head>
 <body>
@@ -315,9 +315,10 @@
           <button type="button" class="btn ghost" id="goals-delete" title="Удалить цель">Удалить цель</button>
         </div>
         <div class="goals-stage">
-          <div id="goals-cy" class="goals-cy"></div>
+          <div id="goals-outline" class="goals-outline"></div>
+          <div id="goals-cy" class="goals-cy hidden" hidden></div>
           <aside class="goals-panel" id="goals-panel">
-            <p class="goals-panel-empty">Выбери узел на дереве</p>
+            <p class="goals-panel-empty">Выбери шаг в списке</p>
           </aside>
           <p class="goals-empty empty hidden" id="goals-empty">Нет целей. Нажми + во вкладках.</p>
         </div>
@@ -345,7 +346,7 @@
 
   <script src="assets/pwa-install.js?v=3"></script>
   <script src="assets/vendor/cytoscape.min.js"></script>
-  <script src="assets/goals.js?v=1"></script>
-  <script src="assets/app.js?v=81"></script>
+  <script src="assets/goals.js?v=2"></script>
+  <script src="assets/app.js?v=82"></script>
 </body>
 </html>
