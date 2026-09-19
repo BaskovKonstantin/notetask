@@ -154,14 +154,39 @@ const state = {
   taskSort: loadTaskSort(),
   expandedTaskAttrs: new Set(),
   focusTaskId: null,
+  workoutPlan: null,
+  workoutMediaUrls: [],
 };
 
 const SECTION_PANELS = {
   "Личные дела": "finance",
   Работа: "work",
   Здоровье: "health",
-  Тренировки: "workout",
 };
+
+const WORKOUT_PROJECT_NAME = "Тренировки";
+const WO_MUSCLE_LABELS = {
+  chest: "грудь",
+  front_delt: "передняя дельта",
+  side_delt: "средняя дельта",
+  rear_delt: "задняя дельта",
+  triceps: "трицепс",
+  biceps: "бицепс",
+  forearm: "предплечье",
+  lats: "широчайшие",
+  upper_back: "верх спины",
+  traps: "трапеции",
+  abs: "пресс",
+  obliques: "косые",
+  quads: "квадрицепс",
+  hamstrings: "бицепс бедра",
+  glutes: "ягодицы",
+  calves: "икры",
+  adductors: "приводящие",
+  lower_back: "поясница",
+  cardio: "кардио",
+};
+const WO_WEEKDAY_LABELS = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
 
 const HEALTH_REGIONS = [
   { id: "head", label: "Голова" },
@@ -263,6 +288,70 @@ async function api(path, opts = {}) {
 }
 
 window.notetaskApi = api;
+
+function authHeaders(extra = {}) {
+  const headers = { ...extra };
+  if (state.token) headers.Authorization = `Bearer ${state.token}`;
+  return headers;
+}
+
+async function fetchAuthBlob(path) {
+  const url = path.startsWith("http") ? path : `${BASE}${path}`;
+  const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timer = ctrl ? setTimeout(() => ctrl.abort(), API_TIMEOUT_MS) : null;
+  let res;
+  try {
+    res = await fetch(url, { headers: authHeaders(), signal: ctrl?.signal });
+  } catch (ex) {
+    if (ex?.name === "AbortError" || /Failed to fetch|NetworkError|LoadFailed/i.test(String(ex?.message || ""))) {
+      throw new Error("network");
+    }
+    throw ex;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+  if (res.status === 401) {
+    logout(false);
+    throw new Error("auth");
+  }
+  if (!res.ok) throw new Error(res.statusText || "media");
+  const blob = await res.blob();
+  const mime = res.headers.get("content-type") || blob.type || "";
+  return { blob, mime };
+}
+
+async function putWorkoutMedia(exerciseId, file) {
+  const fd = new FormData();
+  fd.append("file", file);
+  const url = `${BASE}/api/workout-exercises/${exerciseId}/media`;
+  const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timer = ctrl ? setTimeout(() => ctrl.abort(), API_TIMEOUT_MS) : null;
+  let res;
+  try {
+    res = await fetch(url, {
+      method: "PUT",
+      headers: authHeaders(),
+      body: fd,
+      signal: ctrl?.signal,
+    });
+  } catch (ex) {
+    if (ex?.name === "AbortError" || /Failed to fetch|NetworkError|LoadFailed/i.test(String(ex?.message || ""))) {
+      throw new Error("network");
+    }
+    throw ex;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+  if (res.status === 401) {
+    logout(false);
+    throw new Error("auth");
+  }
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || res.statusText);
+  }
+  return res.json();
+}
 
 async function track(action, entityType = "ui", entityId = null, payload = {}) {
   if (!state.token) return;
@@ -2847,16 +2936,19 @@ function setView(view, opts = {}) {
     applySectionTheme(view === "finance" ? "#2a7a4b" : DEFAULT_THEME);
   }
 
+  const workoutPage = view === "project" && isWorkoutProject();
   const taskViews = ["today", "project"];
-  $("view-tasks").classList.toggle("hidden", !taskViews.includes(view));
+  $("view-tasks").classList.toggle("hidden", !taskViews.includes(view) || workoutPage);
   $("view-notes").classList.add("hidden");
-  $("view-workouts").classList.add("hidden");
+  $("view-workouts").classList.toggle("hidden", !workoutPage);
   $("view-history").classList.toggle("hidden", view !== "history");
   $("view-stats").classList.toggle("hidden", view !== "stats");
   $("view-finance").classList.toggle("hidden", view !== "finance");
   $("view-goals")?.classList.toggle("hidden", view !== "goals");
 
-  if (!taskViews.includes(view) || !currentPanelKind()) hideSectionPanel();
+  if (workoutPage) hideSectionPanel();
+  else if (!taskViews.includes(view) || !currentPanelKind()) hideSectionPanel();
+  $("workspace")?.classList.toggle("hidden", workoutPage);
 
   if (taskViews.includes(view)) $("task-kind").value = "task";
 
@@ -2889,7 +2981,8 @@ function showListError() {
   const v = state.view;
   const taskViews = ["today", "project"];
   let root;
-  if (taskViews.includes(v)) root = $("task-list");
+  if (v === "project" && isWorkoutProject()) root = $("wo-plan-root");
+  else if (taskViews.includes(v)) root = $("task-list");
   else if (v === "history") root = $("history-list");
   else if (v === "stats") root = $("stats-cards");
   else if (v === "finance") root = $("finance-page");
@@ -2908,6 +3001,10 @@ async function refresh() {
   if (["today", "project"].includes(v)) {
     await loadProjectsCache();
     if (leaveEmptyInboxIfNeeded()) return;
+    if (isWorkoutProject()) {
+      await loadWorkoutPage();
+      return;
+    }
     await loadTasks(v);
     await loadSectionPanel();
   } else if (v === "history") await loadHistory();
@@ -3543,45 +3640,323 @@ async function loadNotes() {
   applyListMotion(root, ".note-card");
 }
 
-function addWorkoutSetRow(data = {}) {
-  const wrap = document.createElement("div");
-  wrap.className = "workout-set-row";
-  wrap.innerHTML = `
-    <input type="text" class="wo-ex" placeholder="Упражнение" value="${escapeAttr(data.exercise || "")}" required />
-    <input type="number" class="wo-w" step="0.5" placeholder="Вес" value="${data.weight ?? ""}" />
-    <input type="number" class="wo-r" placeholder="Повт." value="${data.reps ?? ""}" />
-    <button type="button" class="btn ghost small wo-rm">×</button>`;
-  wrap.querySelector(".wo-rm").onclick = () => wrap.remove();
-  $("wo-sets").appendChild(wrap);
+function isWorkoutProject() {
+  if (state.view !== "project" || !state.projectId) return false;
+  const proj = state.projects.find((p) => p.id === state.projectId);
+  return proj?.name === WORKOUT_PROJECT_NAME;
 }
 
-async function loadWorkouts() {
-  const list = await api("/api/workouts");
-  const root = $("workout-list");
-  if (!list.length) {
-    root.innerHTML = '<div class="empty">Тренировок пока нет — запиши первую.</div>';
-    return;
+function revokeWorkoutMediaUrls() {
+  for (const url of state.workoutMediaUrls || []) {
+    try {
+      URL.revokeObjectURL(url);
+    } catch {
+      /* ignore */
+    }
   }
-  root.innerHTML = list
-    .map((w) => {
-      const sets = (w.sets || [])
-        .map(
-          (s) =>
-            `<div class="item-meta">${escapeHtml(s.exercise)} · ${s.weight ?? "—"} кг × ${s.reps ?? "—"}</div>`
-        )
-        .join("");
-      return `
-      <div class="item" style="grid-template-columns:1fr auto">
-        <div>
-          <div class="item-title">${escapeHtml(w.title)}</div>
-          <div class="item-meta">${fmtDate(w.started_at)}</div>
-          ${sets}
-        </div>
-        <button class="btn ghost small btn-del" data-del-wo="${w.id}" aria-label="Удалить">×</button>
-      </div>`;
+  state.workoutMediaUrls = [];
+}
+
+function woMuscleText(muscles) {
+  return (muscles || [])
+    .map((key) => WO_MUSCLE_LABELS[key] || key)
+    .filter(Boolean)
+    .join(" · ");
+}
+
+function woPrescription(item) {
+  const sets = Number(item.sets) || 0;
+  const lo = item.reps_low;
+  const hi = item.reps_high;
+  if (lo != null && hi != null && Number(lo) !== Number(hi)) return `${sets}×${lo}–${hi}`;
+  if (lo != null) return `${sets}×${lo}`;
+  return `${sets} подх.`;
+}
+
+function woLastText(exerciseId, lastSets) {
+  const last = lastSets && lastSets[String(exerciseId)];
+  if (!last || (last.weight == null && last.reps == null)) return "";
+  const w = last.weight ?? "—";
+  const r = last.reps ?? "—";
+  return `прошлый ${w}×${r}`;
+}
+
+function woFindDay(days, code) {
+  return (days || []).find((d) => d.code === code) || null;
+}
+
+function woIsSlotToday(slotWeekdays) {
+  const slots = Array.isArray(slotWeekdays) ? slotWeekdays.map(Number) : [];
+  return slots.includes(new Date().getDay());
+}
+
+function woWeekDates() {
+  const now = new Date();
+  const today = now.getDay();
+  const mondayOffset = today === 0 ? -6 : 1 - today;
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + mondayOffset + i);
+    return d;
+  });
+}
+
+function woCatalogExercises(days) {
+  const seen = new Map();
+  for (const day of days || []) {
+    for (const item of day.items || []) {
+      const ex = item.exercise;
+      if (ex?.id && !seen.has(ex.id)) seen.set(ex.id, ex);
+    }
+  }
+  return [...seen.values()];
+}
+
+function woMediaAccept() {
+  return "image/gif,image/jpeg,image/png,image/webp,video/mp4,video/webm";
+}
+
+function woMediaPlaceholder(exerciseId) {
+  return `
+    <label class="wo-media-add">
+      + медиа
+      <input type="file" hidden accept="${woMediaAccept()}" data-wo-upload="${exerciseId}" />
+    </label>`;
+}
+
+function woExerciseCard(item, { log, lastSets }) {
+  const ex = item.exercise || {};
+  const exId = ex.id;
+  const muscles = woMuscleText(ex.muscles);
+  const last = woLastText(exId, lastSets);
+  const meta = [woPrescription(item), last].filter(Boolean).join(" · ");
+  const setCount = Math.max(1, Number(item.sets) || 1);
+  const lastRow = lastSets && lastSets[String(exId)];
+  const wPref = lastRow?.weight ?? "";
+  const rPref = lastRow?.reps ?? "";
+  const logs = log
+    ? `<div class="wo-set-log">${Array.from({ length: setCount }, (_, i) => `
+        <div class="wo-set-row">
+          <span class="wo-set-n">${i + 1}</span>
+          <input type="number" class="wo-w" inputmode="decimal" step="0.5" min="0" placeholder="кг" value="${escapeAttr(wPref)}" data-wo-weight />
+          <input type="number" class="wo-r" inputmode="numeric" step="1" min="0" placeholder="повт." value="${escapeAttr(rPref)}" data-wo-reps />
+        </div>`).join("")}</div>`
+    : "";
+  const media = ex.has_media
+    ? `<div class="wo-ex-media" data-wo-media="${exId}" data-wo-mime="${escapeAttr(ex.media_mime || "")}"></div>`
+    : `<div class="wo-ex-media">${woMediaPlaceholder(exId)}</div>`;
+  return `
+    <article class="wo-ex-card" data-exercise-id="${exId}" data-exercise-name="${escapeAttr(ex.name || "")}">
+      ${media}
+      <div class="wo-ex-body">
+        <strong>${escapeHtml(ex.name || "")}</strong>
+        ${muscles ? `<div class="wo-muscles">${escapeHtml(muscles)}</div>` : ""}
+        <div class="wo-ex-meta">${escapeHtml(meta)}</div>
+        ${item.notes ? `<div class="wo-ex-notes">${escapeHtml(item.notes)}</div>` : ""}
+        ${logs}
+      </div>
+    </article>`;
+}
+
+function woWeekStripHtml(slotWeekdays) {
+  const slots = new Set((slotWeekdays || []).map(Number));
+  const todayKey = todayIso();
+  return woWeekDates()
+    .map((d) => {
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      const isToday = key === todayKey;
+      const isSlot = slots.has(d.getDay());
+      const cls = ["wo-week-day", isSlot ? "is-slot" : "", isToday ? "is-today" : ""].filter(Boolean).join(" ");
+      return `<div class="${cls}" title="${escapeAttr(key)}">${escapeHtml(WO_WEEKDAY_LABELS[d.getDay()])}<span>${d.getDate()}</span></div>`;
     })
     .join("");
-  applyListMotion(root, ".item");
+}
+
+async function fillWorkoutMedia(root) {
+  const nodes = [...root.querySelectorAll("[data-wo-media]")];
+  await Promise.all(
+    nodes.map(async (el) => {
+      const id = Number(el.dataset.woMedia);
+      if (!id) return;
+      try {
+        const { blob, mime } = await fetchAuthBlob(`/api/workout-exercises/${id}/media`);
+        const url = URL.createObjectURL(blob);
+        state.workoutMediaUrls.push(url);
+        const kind = mime || el.dataset.woMime || blob.type || "";
+        if (kind.startsWith("video/")) {
+          const video = document.createElement("video");
+          video.src = url;
+          video.muted = true;
+          video.defaultMuted = true;
+          video.autoplay = true;
+          video.loop = true;
+          video.playsInline = true;
+          video.setAttribute("muted", "");
+          video.setAttribute("autoplay", "");
+          video.setAttribute("loop", "");
+          video.setAttribute("playsinline", "");
+          video.setAttribute("webkit-playsinline", "");
+          el.replaceChildren(video);
+          video.play().catch(() => {});
+        } else {
+          const img = document.createElement("img");
+          img.src = url;
+          img.alt = "";
+          el.replaceChildren(img);
+        }
+      } catch {
+        el.innerHTML = woMediaPlaceholder(id);
+      }
+    }),
+  );
+}
+
+async function loadWorkoutPage() {
+  const data = await api("/api/workout-plan");
+  renderWorkoutPage(data);
+  await fillWorkoutMedia($("wo-plan-root"));
+}
+
+function renderWorkoutPage(data) {
+  revokeWorkoutMediaUrls();
+  state.workoutPlan = data;
+  const root = $("wo-plan-root");
+  if (!root) return;
+  const nextCode = data?.state?.next_code || "A";
+  const slotWeekdays = data?.state?.slot_weekdays || [1, 3, 5];
+  const days = data?.days || [];
+  const lastSets = data?.last_sets || {};
+  const gymDay = woFindDay(days, nextCode);
+  const homeDay = woFindDay(days, "H");
+  const showHome = !woIsSlotToday(slotWeekdays);
+  const gymTitle = gymDay?.title || `День ${nextCode}`;
+  const gymCards = (gymDay?.items || []).map((item) => woExerciseCard(item, { log: true, lastSets })).join("");
+  const homeCards = (homeDay?.items || []).map((item) => woExerciseCard(item, { log: false, lastSets })).join("");
+  const catalog = woCatalogExercises(days)
+    .map((ex) => {
+      const muscles = woMuscleText(ex.muscles);
+      const media = ex.has_media
+        ? `<div class="wo-ex-media" data-wo-media="${ex.id}" data-wo-mime="${escapeAttr(ex.media_mime || "")}"></div>`
+        : `<div class="wo-ex-media">${woMediaPlaceholder(ex.id)}</div>`;
+      const replace = `<label class="wo-media-file">файл<input type="file" hidden accept="${woMediaAccept()}" data-wo-upload="${ex.id}" /></label>`;
+      return `
+        <article class="wo-cat-row" data-exercise-id="${ex.id}">
+          ${media}
+          <div class="wo-ex-body">
+            <strong>${escapeHtml(ex.name || "")}</strong>
+            ${muscles ? `<div class="wo-muscles">${escapeHtml(muscles)}</div>` : ""}
+            ${replace}
+          </div>
+        </article>`;
+    })
+    .join("");
+  const recent = (data.recent || [])
+    .map(
+      (r) => `
+      <div class="wo-recent-row">
+        <span>${escapeHtml(r.title || "Тренировка")}</span>
+        <span>${escapeHtml((r.started_at || "").slice(0, 10))} · ${r.sets_count || 0} подх.${r.day_code ? ` · ${escapeHtml(r.day_code)}` : ""}</span>
+      </div>`,
+    )
+    .join("");
+  root.innerHTML = `
+    <div class="wo-plan">
+      <header class="wo-header">
+        <div class="wo-next">Следующая: ${escapeHtml(nextCode)}</div>
+        <div class="wo-week" role="list">${woWeekStripHtml(slotWeekdays)}</div>
+        <button type="button" class="btn" data-wo-start="${escapeAttr(nextCode)}">Начать ${escapeHtml(nextCode)}</button>
+      </header>
+      <section class="wo-session" id="wo-session">
+        <h2>${escapeHtml(gymTitle)}</h2>
+        <form id="wo-session-form" data-day-code="${escapeAttr(nextCode)}" data-day-title="${escapeAttr(gymTitle)}">
+          ${gymCards || '<p class="empty">Нет упражнений на этот день.</p>'}
+          <button class="btn warn" type="submit">Записать ${escapeHtml(gymTitle)}</button>
+        </form>
+      </section>
+      ${
+        showHome
+          ? `<section class="wo-home" id="wo-home">
+        <h2>${escapeHtml(homeDay?.title || "Дом")}</h2>
+        <p class="wo-home-note">Справочно. Лог не обязателен.</p>
+        ${homeCards || '<p class="empty">Домашний день пуст.</p>'}
+      </section>`
+          : ""
+      }
+      <section class="wo-catalog">
+        <h2>Каталог</h2>
+        <div class="wo-catalog-list">${catalog || '<p class="empty">Упражнений нет.</p>'}</div>
+      </section>
+      <section class="wo-recent">
+        <h2>Недавние</h2>
+        <div class="wo-recent-list">${recent || '<p class="empty">Пока пусто</p>'}</div>
+      </section>
+    </div>`;
+  bindWorkoutPage();
+}
+
+let workoutPageBound = false;
+
+function bindWorkoutPage() {
+  const root = $("wo-plan-root");
+  if (!root || workoutPageBound) return;
+  workoutPageBound = true;
+  root.addEventListener("click", (e) => {
+    const start = e.target.closest("[data-wo-start]");
+    if (start) {
+      $("wo-session")?.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "start" });
+    }
+  });
+  root.addEventListener("submit", async (e) => {
+    const form = e.target.closest("#wo-session-form");
+    if (!form) return;
+    e.preventDefault();
+    const dayCode = form.dataset.dayCode || "A";
+    const title = form.dataset.dayTitle || `День ${dayCode}`;
+    const sets = [];
+    let index = 0;
+    form.querySelectorAll(".wo-ex-card").forEach((card) => {
+      const exercise = card.dataset.exerciseName || "";
+      const exerciseId = Number(card.dataset.exerciseId) || null;
+      card.querySelectorAll(".wo-set-row").forEach((row) => {
+        const weightRaw = row.querySelector("[data-wo-weight]")?.value;
+        const repsRaw = row.querySelector("[data-wo-reps]")?.value;
+        const weight = weightRaw === "" || weightRaw == null ? null : Number(weightRaw);
+        const reps = repsRaw === "" || repsRaw == null ? null : Number(repsRaw);
+        if (!exercise) return;
+        if (weight == null && reps == null) return;
+        index += 1;
+        sets.push({
+          exercise,
+          exercise_id: exerciseId,
+          weight: Number.isFinite(weight) ? weight : null,
+          reps: Number.isFinite(reps) ? reps : null,
+          set_index: index,
+        });
+      });
+    });
+    if (!sets.length) {
+      alert("Заполни хотя бы один подход.");
+      return;
+    }
+    await api("/api/workouts", {
+      method: "POST",
+      body: JSON.stringify({ title, day_code: dayCode, sets }),
+    });
+    await loadWorkoutPage();
+  });
+  root.addEventListener("change", async (e) => {
+    const input = e.target.closest("[data-wo-upload]");
+    if (!input || input.type !== "file") return;
+    const file = input.files && input.files[0];
+    const id = Number(input.dataset.woUpload);
+    input.value = "";
+    if (!file || !id) return;
+    try {
+      await putWorkoutMedia(id, file);
+      await loadWorkoutPage();
+    } catch (err) {
+      alert(err.message || "Не удалось загрузить медиа");
+    }
+  });
 }
 
 const actionLabels = {
@@ -4168,44 +4543,6 @@ $("note-list").addEventListener("click", async (e) => {
   }
 });
 
-$("wo-add-set").onclick = () => addWorkoutSetRow();
-
-$("workout-form").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const sets = [...$("wo-sets").querySelectorAll(".workout-set-row")].map((row, i) => ({
-    exercise: row.querySelector(".wo-ex").value.trim(),
-    weight: row.querySelector(".wo-w").value ? Number(row.querySelector(".wo-w").value) : null,
-    reps: row.querySelector(".wo-r").value ? Number(row.querySelector(".wo-r").value) : null,
-    set_index: i + 1,
-  })).filter((s) => s.exercise);
-  const started = $("wo-started").value
-    ? new Date($("wo-started").value).toISOString()
-    : null;
-  await api("/api/workouts", {
-    method: "POST",
-    body: JSON.stringify({
-      title: $("wo-title").value.trim() || "Тренировка",
-      notes: $("wo-notes").value,
-      started_at: started,
-      sets,
-    }),
-  });
-  $("wo-notes").value = "";
-  $("wo-sets").innerHTML = "";
-  addWorkoutSetRow();
-  await refresh();
-});
-
-$("workout-list").addEventListener("click", async (e) => {
-  const del = e.target.closest("[data-del-wo]");
-  if (del) {
-    const item = del.closest(".item");
-    await animateLeave(item, "out");
-    await api(`/api/workouts/${del.dataset.delWo}`, { method: "DELETE" });
-    await refresh();
-  }
-});
-
 $("section-panel").addEventListener("submit", async (e) => {
   const payForm = e.target.closest("[data-work-pay-form]");
   if (payForm) {
@@ -4638,8 +4975,6 @@ $("finance-page").addEventListener("keydown", async (e) => {
 async function boot() {
   consumeTokenRestore();
   state.token = localStorage.getItem(TOKEN_KEY) || "";
-  addWorkoutSetRow();
-  $("wo-started").value = localInputValue();
   initTaskMetaChips();
   initTaskTitleHighlight();
   initTaskSortBar();

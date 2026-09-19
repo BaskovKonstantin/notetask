@@ -51,8 +51,8 @@
         });
     })();
   </script>
-  <link rel="stylesheet" href="assets/styles.css?v=60" />
-  <script src="assets/pwa.js?v=15"></script>
+  <link rel="stylesheet" href="assets/styles.css?v=59" />
+  <script src="assets/pwa.js?v=16"></script>
 </head>
 <body>
   <div id="login" class="login-wrap">
@@ -294,19 +294,7 @@
       </section>
 
       <section id="view-workouts" class="panel hidden">
-        <form class="composer" id="workout-form">
-          <div class="field-row">
-            <input type="text" id="wo-title" placeholder="Название тренировки" value="Тренировка" />
-            <input type="datetime-local" id="wo-started" />
-          </div>
-          <div id="wo-sets"></div>
-          <div class="field-row">
-            <button type="button" class="btn ghost" id="wo-add-set">+ подход</button>
-            <button class="btn warn" type="submit">Записать тренировку</button>
-          </div>
-          <textarea id="wo-notes" placeholder="Заметки к сессии"></textarea>
-        </form>
-        <div id="workout-list" class="list"></div>
+        <div id="wo-plan-root"></div>
       </section>
 
       <section id="view-goals" class="panel hidden">
@@ -347,6 +335,6 @@
   <script src="assets/pwa-install.js?v=3"></script>
   <script src="assets/vendor/cytoscape.min.js"></script>
   <script src="assets/goals.js?v=2"></script>
-  <script src="assets/app.js?v=83"></script>
+  <script src="assets/app.js?v=84"></script>
 </body>
 </html>

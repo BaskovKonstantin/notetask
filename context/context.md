@@ -1,6 +1,37 @@
 # NoteTask / todo.baski.pro — context
 
-Updated: 2026-09-19 (~16:00 MSK)
+Updated: 2026-09-19 (~16:20 MSK)
+
+## Task 6: Training page UI (2026-09-19)
+
+- Branch: `feat/workout-plan-section`.
+- `#view-workouts` = `#wo-plan-root`. Project `Тренировки` (exact name) opens full page: hide `#view-tasks`, hide `#workspace` / section panel, **not** `renderWorkoutPanel`. `workout` removed from `SECTION_PANELS`.
+- `isWorkoutProject()`, `loadWorkoutPage()` → `GET /api/workout-plan`, `renderWorkoutPage(data)`.
+- Header `Следующая: {next_code}`, week strip (slots + today), `Начать {code}`. Gym cards always `next_code`. Off-slot (`getDay()` not in `slot_weekdays`) shows day H **reference only**. No PATCH on tasks 161/163.
+- Media: `fetch` + `Authorization` blob URL; `img` or `video muted autoplay loop playsinline`. Empty/catalog: PUT FormData field `file`.
+- Submit: `POST /api/workouts` `{ title, day_code, sets: [{exercise, exercise_id, weight, reps, set_index}] }`.
+- Cache: `styles.css?v=59`, `app.js?v=84`, `pwa.js?v=16`, SW `notetask-v32` / `sw.js?v=32`.
+- Browser: Тренировки page (not task list), Сегодня still 161/163 hourly, Здоровье panel intact. Live `Жим лёжа` has 1×1 gif from QA PUT (id=2).
+- Report: `.superpowers/sdd/task-6-report.md`
+
+## Task 5: Seed sport Goals trees (2026-09-19)
+
+- Branch: `feat/workout-plan-section`. Commit: `c5bfced`.
+- `SPORT_GOAL_CHAINS` + `seed_sport_goals` in `app/workouts.py`; idempotent by live `goals.title`.
+- Chains: Подтягивание прямым хватом, Жим 100 кг, Сушка 88 кг — linear skill trees, `persist_recomputed`.
+- Lifespan: `ensure_goals_tables` → `seed_sport_goals`. «Создать канала на 1к…» не трогаем.
+- Tests: `SeedSportGoalsTests` in `test_workout_plan.py` — 18 ok (`.venv/bin/python`).
+- Report: `.superpowers/sdd/task-5-report.md`
+
+## Task 4: Exercise media PUT/GET/DELETE (2026-09-19)
+
+- Branch: `feat/workout-plan-section`.
+- Helpers: `ext_for_mime`, `check_media_bytes`, `MediaError` (413/415).
+- Routes: `PUT/GET/DELETE /api/workout-exercises/{id}/media` (auth, no public StaticFiles); `PATCH /api/workout-exercises/{id}` `{ name?, muscles? }`.
+- Files: `data/workout-media/{id}.{ext}`. Replace deletes old ext.
+- Tests: `tests/test_workout_media.py` (19) + `test_workout_plan` — 35 ok via `.venv/bin/python`.
+- Manual: PUT gif 200, GET auth 200, GET no token 401, DELETE 200.
+- Report: `.superpowers/sdd/task-4-report.md`
 
 ## Task 3: Log session advances queue (2026-09-19)
 
