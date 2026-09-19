@@ -2426,7 +2426,10 @@ body.nav-open {
 }
 
 @media (max-width: 860px) {
-  .app-shell { grid-template-columns: 1fr; }
+  .app-shell,
+  .app-shell.sidebar-collapsed {
+    grid-template-columns: 1fr;
+  }
   .sidebar-resize-handle { display: none; }
   .sidebar {
     position: fixed;
