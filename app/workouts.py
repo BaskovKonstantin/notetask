@@ -7,7 +7,9 @@ from collections.abc import AsyncGenerator
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import FileResponse
+from pydantic import BaseModel
 
 from .auth import require_auth
 from .config import DATA_DIR
@@ -39,6 +41,14 @@ MUSCLE_LABELS = {
 MUSCLE_KEYS = frozenset(MUSCLE_LABELS)
 IMAGE_MIMES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 VIDEO_MIMES = {"video/mp4", "video/webm"}
+EXT_BY_MIME = {
+    "image/gif": "gif",
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+    "video/mp4": "mp4",
+    "video/webm": "webm",
+}
 IMAGE_MAX = 8_000_000
 VIDEO_MAX = 25_000_000
 DEFAULT_SLOTS = [1, 3, 5]
@@ -115,6 +125,18 @@ SEED_DAYS: list[dict[str, Any]] = [
 router = APIRouter()
 
 
+class MediaError(Exception):
+    def __init__(self, status: int, detail: str = "") -> None:
+        self.status = status
+        self.detail = detail
+        super().__init__(detail)
+
+
+class ExercisePatchIn(BaseModel):
+    name: str | None = None
+    muscles: list[str] | None = None
+
+
 async def _workout_db() -> AsyncGenerator[Any, None]:
     # Lazy: app.deps imports aiosqlite; helper unit tests reload this module without it.
     from .deps import get_db
@@ -170,6 +192,134 @@ def media_max_bytes(mime: str) -> int:
     if kind == "video":
         return VIDEO_MAX
     return IMAGE_MAX
+
+
+def ext_for_mime(mime: str) -> str:
+    ext = EXT_BY_MIME.get(mime)
+    if ext is None:
+        raise MediaError(415, "unsupported mime")
+    return ext
+
+
+def check_media_bytes(mime: str, n: int) -> None:
+    try:
+        media_kind_for_mime(mime)
+    except ValueError as exc:
+        raise MediaError(415, "unsupported mime") from exc
+    if n > media_max_bytes(mime):
+        raise MediaError(413, "too large")
+
+
+def media_file_path(exercise_id: int, ext: str) -> Path:
+    return WORKOUT_MEDIA_DIR / f"{exercise_id}.{ext}"
+
+
+async def _get_live_exercise_row(db: "aiosqlite.Connection", exercise_id: int) -> dict[str, Any]:
+    cur = await db.execute(
+        "SELECT * FROM workout_exercises WHERE id=? AND deleted_at IS NULL",
+        (exercise_id,),
+    )
+    row = await cur.fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Exercise not found")
+    return _row_dict(row)
+
+
+async def patch_exercise_row(
+    db: "aiosqlite.Connection",
+    exercise_id: int,
+    *,
+    name: str | None = None,
+    muscles: list[str] | None = None,
+) -> dict[str, Any]:
+    from .db import utcnow  # lazy: app.db imports aiosqlite at module level
+
+    row = await _get_live_exercise_row(db, exercise_id)
+    updates: list[str] = []
+    params: list[Any] = []
+    if name is not None:
+        cur = await db.execute(
+            """
+            SELECT id FROM workout_exercises
+            WHERE name=? AND deleted_at IS NULL AND id<>?
+            """,
+            (name, exercise_id),
+        )
+        if await cur.fetchone() is not None:
+            raise HTTPException(status_code=409, detail="Duplicate exercise name")
+        updates.append("name=?")
+        params.append(name)
+    if muscles is not None:
+        try:
+            validated = validate_muscles(muscles)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="Unknown muscle") from exc
+        updates.append("muscles_json=?")
+        params.append(json.dumps(validated))
+    if not updates:
+        return row
+    updates.append("updated_at=?")
+    params.append(utcnow())
+    params.append(exercise_id)
+    await db.execute(
+        f"UPDATE workout_exercises SET {', '.join(updates)} WHERE id=?",
+        params,
+    )
+    await db.commit()
+    return await _get_live_exercise_row(db, exercise_id)
+
+
+async def save_exercise_media(
+    db: "aiosqlite.Connection",
+    exercise_id: int,
+    mime: str,
+    data: bytes,
+) -> dict[str, Any]:
+    from .db import utcnow  # lazy: app.db imports aiosqlite at module level
+
+    row = await _get_live_exercise_row(db, exercise_id)
+    check_media_bytes(mime, len(data))
+    ext = ext_for_mime(mime)
+    old_ext = row.get("media_ext")
+    if old_ext and old_ext != ext:
+        old_path = media_file_path(exercise_id, old_ext)
+        if old_path.exists():
+            old_path.unlink()
+    WORKOUT_MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+    media_file_path(exercise_id, ext).write_bytes(data)
+    now = utcnow()
+    await db.execute(
+        """
+        UPDATE workout_exercises
+        SET media_mime=?, media_ext=?, updated_at=?
+        WHERE id=?
+        """,
+        (mime, ext, now, exercise_id),
+    )
+    await db.commit()
+    return await _get_live_exercise_row(db, exercise_id)
+
+
+async def delete_exercise_media(db: "aiosqlite.Connection", exercise_id: int) -> dict[str, Any]:
+    from .db import utcnow  # lazy: app.db imports aiosqlite at module level
+
+    row = await _get_live_exercise_row(db, exercise_id)
+    old_ext = row.get("media_ext")
+    if old_ext:
+        path = media_file_path(exercise_id, old_ext)
+        if path.exists():
+            path.unlink()
+    now = utcnow()
+    await db.execute(
+        """
+        UPDATE workout_exercises
+        SET media_mime=NULL, media_ext=NULL, updated_at=?
+        WHERE id=?
+        """,
+        (now, exercise_id),
+    )
+    await db.commit()
+    return await _get_live_exercise_row(db, exercise_id)
 
 
 def parse_slot_weekdays(raw: str | None) -> list[int]:
@@ -486,3 +636,78 @@ async def get_workout_plan(
     _: dict = Depends(require_auth),
 ) -> dict[str, Any]:
     return await get_plan_payload(db)
+
+
+@router.patch("/api/workout-exercises/{exercise_id}")
+async def patch_workout_exercise(
+    exercise_id: int,
+    body: ExercisePatchIn,
+    db: "aiosqlite.Connection" = Depends(_workout_db),
+    _: dict = Depends(require_auth),
+) -> dict[str, Any]:
+    row = await patch_exercise_row(
+        db,
+        exercise_id,
+        name=body.name,
+        muscles=body.muscles,
+    )
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "muscles": json.loads(row["muscles_json"] or "[]"),
+        "media_mime": row["media_mime"],
+        "media_ext": row["media_ext"],
+        "has_media": row["media_ext"] is not None,
+    }
+
+
+@router.put("/api/workout-exercises/{exercise_id}/media")
+async def put_workout_exercise_media(
+    exercise_id: int,
+    file: UploadFile = File(...),
+    db: "aiosqlite.Connection" = Depends(_workout_db),
+    _: dict = Depends(require_auth),
+) -> dict[str, Any]:
+    mime = file.content_type or ""
+    data = await file.read()
+    try:
+        row = await save_exercise_media(db, exercise_id, mime, data)
+    except MediaError as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
+    return {
+        "id": row["id"],
+        "media_mime": row["media_mime"],
+        "media_ext": row["media_ext"],
+        "has_media": row["media_ext"] is not None,
+    }
+
+
+@router.get("/api/workout-exercises/{exercise_id}/media")
+async def get_workout_exercise_media(
+    exercise_id: int,
+    db: "aiosqlite.Connection" = Depends(_workout_db),
+    _: dict = Depends(require_auth),
+) -> FileResponse:
+    row = await _get_live_exercise_row(db, exercise_id)
+    ext = row.get("media_ext")
+    if not ext:
+        raise HTTPException(status_code=404, detail="No media")
+    path = media_file_path(exercise_id, ext)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="No media")
+    return FileResponse(path, media_type=row["media_mime"] or "application/octet-stream")
+
+
+@router.delete("/api/workout-exercises/{exercise_id}/media")
+async def delete_workout_exercise_media(
+    exercise_id: int,
+    db: "aiosqlite.Connection" = Depends(_workout_db),
+    _: dict = Depends(require_auth),
+) -> dict[str, Any]:
+    row = await delete_exercise_media(db, exercise_id)
+    return {
+        "id": row["id"],
+        "media_mime": row["media_mime"],
+        "media_ext": row["media_ext"],
+        "has_media": False,
+    }
