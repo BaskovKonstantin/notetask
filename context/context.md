@@ -1,6 +1,18 @@
 # NoteTask / todo.baski.pro — context
 
-Updated: 2026-09-19 (~16:20 MSK)
+Updated: 2026-09-19 (~16:35 MSK)
+
+## Task 7: Browser verify + context (2026-09-19)
+
+- Branch: `feat/workout-plan-section` (do not switch).
+- Cache **unchanged** (live HTML matched source): `styles.css?v=59`, `app.js?v=84`, `pwa.js?v=16`, SW `notetask-v32` / `sw.js?v=32`. No bump to 61 — live was not `?v=60`.
+- Docker: `app/` + `static/` bind-mounted; `docker restart notetask`. Browser via `http://192.168.0.6/` (Cursor browser: `127.0.0.1:8100` chrome-error).
+- Тренировки: `#view-workouts` plan page, header `Следующая: A` then `B`, week strip, no `#workspace` / `workout_goals` panel, `#view-tasks` hidden.
+- Deleted 1×1 QA gif on exercise id=2 «Жим лёжа»; PUT 140×140 8-frame gif. Card shows `<img>` blob, no extra click. GIF autoplay (mute N/A for img).
+- Logged light Day A (эскалатор 5×8, жим 20×5). After reload: `next_code=B`, header `Начать B`.
+- Сегодня: #161 Отжиматься / #163 Планка still `hourly` + chip «Каждый час».
+- Цели: 4 tabs — TG «Создать канала на 1к…» + Подтягивание / Жим 100 кг / Сушка 88 кг. Pull-up chain: Вис 20с → Негатив → 1 повтор → 3 чистых → 5×5.
+- Report: `.superpowers/sdd/task-7-report.md`
 
 ## Task 6: Training page UI (2026-09-19)
 
