@@ -375,6 +375,16 @@ class QueueAdvanceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await cur.fetchone())[0], "B")
         await db.close()
 
+    async def test_mismatch_day_code_does_not_advance(self):
+        db = await aiosqlite.connect(":memory:")
+        db.row_factory = aiosqlite.Row
+        await ensure_workout_tables(db)
+        await seed_workout_program(db)
+        await advance_next_code(db, "C")
+        cur = await db.execute("SELECT next_code FROM workout_plan_state WHERE id=1")
+        self.assertEqual((await cur.fetchone())[0], "A")
+        await db.close()
+
 
 if __name__ == "__main__":
     unittest.main()

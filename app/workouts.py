@@ -177,6 +177,8 @@ async def advance_next_code(db: "aiosqlite.Connection", day_code: str | None) ->
     current = row[0] if row else None
     if day_code is None or day_code not in GYM_CODES:
         return current
+    if day_code != current:
+        return current
     new_code = next_letter(day_code)
     await db.execute(
         "UPDATE workout_plan_state SET next_code=?, updated_at=? WHERE id=1",

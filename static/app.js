@@ -3909,6 +3909,8 @@ function bindWorkoutPage() {
     const form = e.target.closest("#wo-session-form");
     if (!form) return;
     e.preventDefault();
+    if (form.dataset.woSubmitting === "1") return;
+    const submitBtn = form.querySelector('button[type="submit"]');
     const dayCode = form.dataset.dayCode || "A";
     const title = form.dataset.dayTitle || `День ${dayCode}`;
     const sets = [];
@@ -3937,11 +3939,20 @@ function bindWorkoutPage() {
       alert("Заполни хотя бы один подход.");
       return;
     }
-    await api("/api/workouts", {
-      method: "POST",
-      body: JSON.stringify({ title, day_code: dayCode, sets }),
-    });
-    await loadWorkoutPage();
+    form.dataset.woSubmitting = "1";
+    if (submitBtn) submitBtn.disabled = true;
+    try {
+      await api("/api/workouts", {
+        method: "POST",
+        body: JSON.stringify({ title, day_code: dayCode, sets }),
+      });
+      await loadWorkoutPage();
+    } catch (err) {
+      alert(err.message || "Не удалось записать тренировку");
+    } finally {
+      form.dataset.woSubmitting = "0";
+      if (submitBtn) submitBtn.disabled = false;
+    }
   });
   root.addEventListener("change", async (e) => {
     const input = e.target.closest("[data-wo-upload]");

@@ -88,7 +88,6 @@ _install_import_stubs()
 import aiosqlite
 
 from app.workouts import (
-    MediaError,
     WORKOUT_MEDIA_DIR,
     check_media_bytes,
     ensure_workout_tables,
@@ -98,6 +97,12 @@ from app.workouts import (
     delete_exercise_media,
     media_file_path,
 )
+
+
+def _media_error_type():
+    import app.workouts
+
+    return app.workouts.MediaError
 
 
 def assert_media_size(mime: str, size: int, *, expect_ok: bool = True) -> None:
@@ -127,29 +132,29 @@ class ExtForMimeTests(unittest.TestCase):
         self.assertEqual(ext_for_mime("video/webm"), "webm")
 
     def test_bad_mime(self):
-        with self.assertRaises(MediaError) as ctx:
+        with self.assertRaises(_media_error_type()) as ctx:
             ext_for_mime("application/pdf")
         self.assertEqual(ctx.exception.status, 415)
 
 
 class CheckMediaBytesTests(unittest.TestCase):
     def test_too_big_gif(self):
-        with self.assertRaises(MediaError) as ctx:
+        with self.assertRaises(_media_error_type()) as ctx:
             check_media_bytes("image/gif", 8_000_001)
         self.assertEqual(ctx.exception.status, 413)
 
     def test_too_big_jpeg(self):
-        with self.assertRaises(MediaError) as ctx:
+        with self.assertRaises(_media_error_type()) as ctx:
             check_media_bytes("image/jpeg", 8_000_001)
         self.assertEqual(ctx.exception.status, 413)
 
     def test_too_big_mp4(self):
-        with self.assertRaises(MediaError) as ctx:
+        with self.assertRaises(_media_error_type()) as ctx:
             check_media_bytes("video/mp4", 25_000_001)
         self.assertEqual(ctx.exception.status, 413)
 
     def test_bad_mime(self):
-        with self.assertRaises(MediaError) as ctx:
+        with self.assertRaises(_media_error_type()) as ctx:
             check_media_bytes("application/pdf", 100)
         self.assertEqual(ctx.exception.status, 415)
 
@@ -159,7 +164,7 @@ class CheckMediaBytesTests(unittest.TestCase):
 
     def test_assert_media_size_helper(self):
         assert_media_size("image/jpeg", 1_000)
-        with self.assertRaises(MediaError):
+        with self.assertRaises(_media_error_type()):
             assert_media_size("image/jpeg", 9_000_000, expect_ok=False)
 
 
