@@ -2440,7 +2440,7 @@ body.nav-open {
     z-index: 80;
     border-right: 1px solid var(--line);
     border-bottom: 0;
-    padding: 22px 16px calc(24px + env(safe-area-inset-bottom, 0px));
+    padding: 72px 16px calc(24px + env(safe-area-inset-bottom, 0px));
     overflow-y: auto;
     opacity: 1;
     pointer-events: auto;
