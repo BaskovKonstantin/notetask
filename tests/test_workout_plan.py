@@ -120,8 +120,28 @@ class SlotParseTests(unittest.TestCase):
     def test_default(self):
         self.assertEqual(parse_slot_weekdays(None), [1, 3, 5])
 
+    def test_blank(self):
+        self.assertEqual(parse_slot_weekdays(""), [1, 3, 5])
+
     def test_json(self):
         self.assertEqual(parse_slot_weekdays("[1,3,5,0]"), [1, 3, 5, 0])
+
+
+class ImportWithoutAiosqliteTests(unittest.TestCase):
+    def test_helpers_import_without_aiosqlite(self):
+        saved = sys.modules.pop("aiosqlite", None)
+        try:
+            import importlib
+
+            import app.workouts as workouts
+
+            importlib.reload(workouts)
+            self.assertEqual(workouts.next_letter("A"), "B")
+        finally:
+            if saved is not None:
+                sys.modules["aiosqlite"] = saved
+            elif "aiosqlite" in sys.modules:
+                del sys.modules["aiosqlite"]
 
 
 if __name__ == "__main__":

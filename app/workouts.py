@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-
-import aiosqlite
+from typing import TYPE_CHECKING
 
 from .config import DATA_DIR
-from .db import ensure_column, utcnow
+
+if TYPE_CHECKING:
+    import aiosqlite
 
 MUSCLE_LABELS = {
     "chest": "грудь",
@@ -95,7 +96,11 @@ def parse_slot_weekdays(raw: str | None) -> list[int]:
     return out
 
 
-async def ensure_workout_tables(db: aiosqlite.Connection) -> None:
+async def ensure_workout_tables(db: "aiosqlite.Connection") -> None:
+    import aiosqlite  # noqa: F401 — lazy import so helpers load without aiosqlite
+
+    from .db import ensure_column
+
     await db.executescript(
         """
         CREATE TABLE IF NOT EXISTS workout_exercises (
