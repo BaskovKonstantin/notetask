@@ -1584,14 +1584,36 @@ function currentSidebarWidth() {
   return clampSidebarWidth(Number.isFinite(raw) ? raw : SIDEBAR_WIDTH_DEFAULT);
 }
 
+function isNarrowNav() {
+  return window.matchMedia("(max-width: 860px)").matches;
+}
+
+function syncMobileNavChrome() {
+  const collapsed = $("app")?.classList.contains("sidebar-collapsed");
+  const open = isNarrowNav() && !collapsed;
+  const scrim = $("sidebar-scrim");
+  if (scrim) {
+    scrim.classList.toggle("hidden", !open);
+    scrim.setAttribute("aria-hidden", open ? "false" : "true");
+  }
+  document.body.classList.toggle("nav-open", open);
+}
+
 function setSidebarCollapsed(collapsed) {
   $("app").classList.toggle("sidebar-collapsed", collapsed);
-  localStorage.setItem(SIDEBAR_KEY, collapsed ? "1" : "0");
+  if (!isNarrowNav()) localStorage.setItem(SIDEBAR_KEY, collapsed ? "1" : "0");
   const btn = $("sidebar-toggle");
-  if (!btn) return;
-  btn.setAttribute("aria-expanded", collapsed ? "false" : "true");
-  btn.setAttribute("aria-label", collapsed ? "Показать меню" : "Скрыть меню");
-  btn.title = collapsed ? "Показать меню" : "Скрыть меню";
+  if (btn) {
+    btn.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    const phone = isNarrowNav();
+    btn.setAttribute("aria-label", collapsed ? "Показать меню" : phone ? "Закрыть меню" : "Скрыть меню");
+    btn.title = collapsed ? "Показать меню" : phone ? "Закрыть меню" : "Скрыть меню";
+  }
+  syncMobileNavChrome();
+}
+
+function closeMobileNav() {
+  if (isNarrowNav()) setSidebarCollapsed(true);
 }
 
 function initSidebarResize() {
@@ -1695,11 +1717,21 @@ function initSidebarResize() {
 function initSidebarToggle() {
   applySidebarWidth(readSidebarWidth(), false);
   initSidebarResize();
-  setSidebarCollapsed(localStorage.getItem(SIDEBAR_KEY) === "1");
+  const mq = window.matchMedia("(max-width: 860px)");
+  const applyForViewport = () => {
+    if (mq.matches) setSidebarCollapsed(true);
+    else setSidebarCollapsed(localStorage.getItem(SIDEBAR_KEY) === "1");
+  };
+  applyForViewport();
+  mq.addEventListener("change", applyForViewport);
   $("sidebar-toggle")?.addEventListener("click", () => {
     const collapsed = !$("app").classList.contains("sidebar-collapsed");
     setSidebarCollapsed(collapsed);
-    track("sidebar_toggle", "ui", null, { collapsed });
+    track("sidebar_toggle", "ui", null, { collapsed, narrow: isNarrowNav() });
+  });
+  $("sidebar-scrim")?.addEventListener("click", () => closeMobileNav());
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeMobileNav();
   });
 }
 
@@ -2749,6 +2781,7 @@ function setView(view, opts = {}) {
     }
   }
   track("view_opened", "ui", null, { view, project_id: state.projectId });
+  closeMobileNav();
   return refresh().catch(showListError);
 }
 

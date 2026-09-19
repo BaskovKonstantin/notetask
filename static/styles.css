@@ -731,6 +731,11 @@ button, input, select, textarea {
   background: #fff;
 }
 
+.toggle-icon-phone,
+.toggle-icon-close {
+  display: none;
+}
+
 .app-shell.sidebar-collapsed .sidebar-toggle svg {
   transform: rotate(180deg);
 }
@@ -1881,6 +1886,14 @@ textarea { min-height: 90px; resize: vertical; }
 .login-card .btn { width: 100%; margin-top: 12px; }
 .login-card .btn:disabled { opacity: 0.7; cursor: wait; }
 .login-wrap .login-download { max-width: 400px; }
+
+body.nav-open {
+  overflow: hidden;
+}
+
+.sidebar-scrim {
+  display: none;
+}
 .download-card .download-list {
   display: grid;
   gap: 8px;
@@ -2414,19 +2427,74 @@ textarea { min-height: 90px; resize: vertical; }
 
 @media (max-width: 860px) {
   .app-shell { grid-template-columns: 1fr; }
-  .app-shell.sidebar-collapsed .sidebar { display: none; }
   .sidebar-resize-handle { display: none; }
   .sidebar {
-    border-right: 0;
-    border-bottom: 1px solid var(--line);
-    padding-bottom: 14px;
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: min(300px, 86vw);
+    z-index: 80;
+    border-right: 1px solid var(--line);
+    border-bottom: 0;
+    padding: 22px 16px calc(24px + env(safe-area-inset-bottom, 0px));
+    overflow-y: auto;
+    opacity: 1;
+    pointer-events: auto;
+    background: color-mix(in srgb, var(--accent) 8%, #fffcf5);
+    box-shadow: 12px 0 40px rgba(26, 34, 24, 0.16);
+    transform: translateX(0);
+    transition: transform 0.22s ease;
   }
-  .nav { flex-direction: row; flex-wrap: wrap; }
+  .app-shell.sidebar-collapsed .sidebar {
+    display: block;
+    opacity: 1;
+    pointer-events: none;
+    transform: translateX(-105%);
+    box-shadow: none;
+  }
+  .sidebar-scrim:not(.hidden) {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 70;
+    border: 0;
+    margin: 0;
+    padding: 0;
+    background: rgba(26, 34, 24, 0.38);
+    cursor: pointer;
+  }
+  .nav { flex-direction: column; flex-wrap: nowrap; }
+  .nav button { min-height: 44px; }
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: color-mix(in srgb, var(--bg) 92%, #fff);
+    margin: -18px -14px 12px;
+    padding: calc(10px + env(safe-area-inset-top, 0px)) 14px 12px;
+  }
+  .topbar h1 { font-size: 1.45rem; }
+  .sidebar-toggle {
+    width: 44px;
+    height: 44px;
+  }
+  .toggle-icon-desk { display: none; }
+  .toggle-icon-phone { display: block; }
+  .app-shell.sidebar-collapsed .sidebar-toggle svg { transform: none; }
+  .app-shell:not(.sidebar-collapsed) .toggle-icon-phone { display: none; }
+  .app-shell:not(.sidebar-collapsed) .toggle-icon-close { display: block; }
+  .task-add-trigger {
+    width: 44px;
+    height: 44px;
+  }
   .stats-grid { grid-template-columns: 1fr 1fr; }
   .stats-grid-finance { grid-template-columns: 1fr; }
   .tl-item { grid-template-columns: 1fr; gap: 4px; }
   .workout-set-row { grid-template-columns: 1fr 1fr; }
-  .main { padding: 18px 14px 48px; }
+  .main {
+    padding: 18px 14px calc(48px + env(safe-area-inset-bottom, 0px));
+  }
   .main.with-section-panel .workspace {
     grid-template-columns: 1fr;
   }
@@ -2440,4 +2508,14 @@ textarea { min-height: 90px; resize: vertical; }
   .sp-totals {
     grid-template-columns: 1fr;
   }
+  .item {
+    padding: 12px 12px 12px 8px;
+  }
+  .check {
+    margin: -8px 0 -8px -6px;
+  }
+}
+
+@media (max-width: 860px) and (prefers-reduced-motion: reduce) {
+  .sidebar { transition: none; }
 }
