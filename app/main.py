@@ -46,7 +46,7 @@ from .finance_task_sync import resolve_finance_category_id
 from .goals import ensure_goals_tables, mark_goal_nodes_for_task, register_goals
 from .notify import configure_complete_helpers, notify_loop, send_telegram
 from .task_complete import complete_task_row
-from .workouts import router as workout_plan_router
+from .workouts import GYM_CODES, advance_next_code, router as workout_plan_router
 
 STATIC = Path(__file__).resolve().parents[1] / "static"
 DOWNLOADS_DIR = DATA_DIR / "downloads"
@@ -261,6 +261,7 @@ class WorkoutSetIn(BaseModel):
     reps: int | None = None
     set_index: int = 1
     notes: str = ""
+    exercise_id: int | None = None
 
 
 class WorkoutIn(BaseModel):
@@ -268,6 +269,7 @@ class WorkoutIn(BaseModel):
     notes: str = ""
     started_at: str | None = None
     sets: list[WorkoutSetIn] = Field(default_factory=list)
+    day_code: str | None = None
 
 
 class EventIn(BaseModel):
@@ -1032,18 +1034,32 @@ async def create_workout(
     now = utcnow()
     started = body.started_at or now
     cur = await db.execute(
-        "INSERT INTO workout_sessions(title, notes, started_at, created_at, updated_at) VALUES(?,?,?,?,?)",
-        (body.title.strip() or "Тренировка", body.notes, started, now, now),
+        "SELECT id FROM workout_programs WHERE status='active' ORDER BY id LIMIT 1"
+    )
+    program_row = await cur.fetchone()
+    program_id = program_row[0] if program_row else None
+    cur = await db.execute(
+        """
+        INSERT INTO workout_sessions(
+            title, notes, started_at, created_at, updated_at, day_code, program_id
+        )
+        VALUES(?,?,?,?,?,?,?)
+        """,
+        (body.title.strip() or "Тренировка", body.notes, started, now, now, body.day_code, program_id),
     )
     sid = cur.lastrowid
     for s in body.sets:
         await db.execute(
             """
-            INSERT INTO workout_sets(session_id, exercise, weight, reps, set_index, notes)
-            VALUES(?,?,?,?,?,?)
+            INSERT INTO workout_sets(
+                session_id, exercise, weight, reps, set_index, notes, exercise_id
+            )
+            VALUES(?,?,?,?,?,?,?)
             """,
-            (sid, s.exercise.strip(), s.weight, s.reps, s.set_index, s.notes),
+            (sid, s.exercise.strip(), s.weight, s.reps, s.set_index, s.notes, s.exercise_id),
         )
+    if body.day_code in GYM_CODES:
+        await advance_next_code(db, body.day_code)
     await bump_workouts(db, started[:10])
     await log_action(
         db,

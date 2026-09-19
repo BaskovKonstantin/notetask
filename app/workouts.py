@@ -132,6 +132,22 @@ def next_letter(code: str) -> str:
     return GYM_CODES[(idx + 1) % len(GYM_CODES)]
 
 
+async def advance_next_code(db: "aiosqlite.Connection", day_code: str | None) -> str | None:
+    from .db import utcnow  # lazy: app.db imports aiosqlite at module level
+
+    cur = await db.execute("SELECT next_code FROM workout_plan_state WHERE id=1")
+    row = await cur.fetchone()
+    current = row[0] if row else None
+    if day_code is None or day_code not in GYM_CODES:
+        return current
+    new_code = next_letter(day_code)
+    await db.execute(
+        "UPDATE workout_plan_state SET next_code=?, updated_at=? WHERE id=1",
+        (new_code, utcnow()),
+    )
+    return new_code
+
+
 def validate_muscles(keys: list[str]) -> list[str]:
     for key in keys:
         if key not in MUSCLE_KEYS:

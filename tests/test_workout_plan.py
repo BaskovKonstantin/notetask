@@ -74,6 +74,7 @@ import aiosqlite
 
 from app.workouts import (
     MUSCLE_KEYS,
+    advance_next_code,
     ensure_workout_tables,
     get_plan_payload,
     media_kind_for_mime,
@@ -255,6 +256,21 @@ class SeedPlanTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(recent["day_code"], "A")
         self.assertEqual(recent["sets_count"], 1)
         self.assertEqual(payload["last_sets"][str(bench_id)], {"weight": 80, "reps": 5})
+        await db.close()
+
+
+class QueueAdvanceTests(unittest.IsolatedAsyncioTestCase):
+    async def test_log_a_goes_to_b(self):
+        db = await aiosqlite.connect(":memory:")
+        db.row_factory = aiosqlite.Row
+        await ensure_workout_tables(db)
+        await seed_workout_program(db)
+        await advance_next_code(db, "A")
+        cur = await db.execute("SELECT next_code FROM workout_plan_state WHERE id=1")
+        self.assertEqual((await cur.fetchone())[0], "B")
+        await advance_next_code(db, None)
+        cur = await db.execute("SELECT next_code FROM workout_plan_state WHERE id=1")
+        self.assertEqual((await cur.fetchone())[0], "B")
         await db.close()
 
 

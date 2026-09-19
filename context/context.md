@@ -1,6 +1,14 @@
 # NoteTask / todo.baski.pro — context
 
-Updated: 2026-09-19 (~15:50 MSK)
+Updated: 2026-09-19 (~16:00 MSK)
+
+## Task 3: Log session advances queue (2026-09-19)
+
+- Branch: `feat/workout-plan-section`.
+- `advance_next_code(db, day_code)`: A/B/C → `next_letter`, persist `workout_plan_state.next_code`; `H`/None → no-op, return current.
+- `WorkoutIn.day_code`, `WorkoutSetIn.exercise_id` optional. `POST /api/workouts` writes `day_code` + active `program_id` on session, `exercise_id` on sets; advances queue only if `day_code` in `GYM_CODES`. Old clients omit `day_code` → no queue move.
+- Tests: `QueueAdvanceTests.test_log_a_goes_to_b`. Out of scope: media, goals seed, frontend, hourly reminds.
+- Report: `.superpowers/sdd/task-3-report.md`
 
 ## Task 2: Seed program + GET /api/workout-plan (2026-09-19)
 
