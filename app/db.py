@@ -452,6 +452,9 @@ async def ensure_project_catalog(db: aiosqlite.Connection) -> None:
 
 async def ensure_defaults(db: aiosqlite.Connection) -> None:
     await ensure_project_catalog(db)
+    from .workouts import ensure_workout_tables
+
+    await ensure_workout_tables(db)
 
 
 def db_file() -> Path:
