@@ -1970,6 +1970,8 @@ body.nav-open {
 #view-finance.panel {
   padding: 0;
   overflow: hidden;
+  min-width: 0;
+  max-width: 100%;
 }
 
 /* --- Goals outline (paper) --- */
@@ -2182,7 +2184,8 @@ body.nav-open {
   display: grid;
   gap: 0;
   width: 100%;
-  max-width: none;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .fin-page-summary {
@@ -2414,8 +2417,8 @@ body.nav-open {
 .fin-budget-table td.amt.pos { color: var(--ok); }
 .fin-budget-table td.amt.neg { color: #b33; }
 
-.fin-ledger-sheet { overflow: visible; }
-.fin-ledger-scroll { overflow-x: auto; }
+.fin-ledger-sheet { overflow: hidden; min-width: 0; max-width: 100%; }
+.fin-ledger-scroll { overflow-x: auto; min-width: 0; max-width: 100%; }
 .fin-ledger-table { width: 100%; border-collapse: collapse; min-width: 720px; }
 .fin-ledger-table th,
 .fin-ledger-table td {
