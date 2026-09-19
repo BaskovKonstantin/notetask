@@ -2188,10 +2188,17 @@ body.nav-open {
   min-width: 0;
 }
 
+.fin-page > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
 .fin-page-summary {
   display: grid;
   gap: 18px;
   padding: 18px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .fin-compare {
@@ -2199,6 +2206,8 @@ body.nav-open {
   grid-template-columns: 1fr 1fr;
   gap: 12px;
   align-items: start;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .fin-compare-card {
