@@ -98,9 +98,13 @@ const state = {
   motion: { enterId: null, completeId: null, pulseId: null },
   financeYm: null,
   financeSheet: null,
-  financeSelectedCatId: null,
-  financeDrawerCatId: null,
+  financeLedger: null,
+  financeLedgerFilters: {},
+  financeDrafts: [],
+  financeFilterOpenCol: null,
+  financeSelectedRowKey: null,
   taskSort: loadTaskSort(),
+  expandedTaskAttrs: new Set(),
 };
 
 const SECTION_PANELS = {
@@ -289,12 +293,16 @@ function logout(reload = true) {
 
 function showLogin() {
   $("login").classList.remove("hidden");
+  $("login").removeAttribute("aria-hidden");
   $("app").classList.add("hidden");
+  $("app").setAttribute("aria-hidden", "true");
 }
 
 function showApp() {
   $("login").classList.add("hidden");
+  $("login").setAttribute("aria-hidden", "true");
   $("app").classList.remove("hidden");
+  $("app").removeAttribute("aria-hidden");
 }
 
 const CLIENT_KEY = "notetask_client";
@@ -1790,6 +1798,94 @@ function moneyPlain(amount) {
   return `${n.toLocaleString("ru-RU", { maximumFractionDigits: 2 })} ₽`;
 }
 
+function ledgerStatusLabel(status) {
+  return status === "confirmed" ? "Подтверждено" : "План";
+}
+
+function ledgerDayKey(day) {
+  if (!day) return "(пусто)";
+  return String(day).slice(0, 10);
+}
+
+function ledgerRowFilterVals(row) {
+  return {
+    project: row.project_name || "Без раздела",
+    title: row.title || "",
+    amount: String(row.amount ?? ""),
+    day: ledgerDayKey(row.day),
+    status: ledgerStatusLabel(row.status),
+  };
+}
+
+function ledgerVisibleRows() {
+  const rows = [...(state.financeLedger?.rows || []), ...(state.financeDrafts || [])];
+  const filters = state.financeLedgerFilters || {};
+  return rows.filter((row) => {
+    const vals = ledgerRowFilterVals(row);
+    for (const [col, allowed] of Object.entries(filters)) {
+      if (!allowed) continue;
+      if (!allowed.has(vals[col])) return false;
+    }
+    return true;
+  });
+}
+
+function ledgerHeroTotals(rows) {
+  let income = 0;
+  let expense = 0;
+  for (const row of rows) {
+    const n = Number(row.amount) || 0;
+    if (n > 0) income += n;
+    else expense += -n;
+  }
+  return { income, expense, balance: income - expense };
+}
+
+function ledgerRowAttr(row) {
+  if (row.source === "draft") return `draft:${row.id}`;
+  return `${row.source}:${row.id}`;
+}
+
+function ledgerAllFilterRows() {
+  return [...(state.financeLedger?.rows || []), ...(state.financeDrafts || [])];
+}
+
+function ledgerUniqueFilterValues(col) {
+  const seen = new Set();
+  for (const row of ledgerAllFilterRows()) {
+    seen.add(ledgerRowFilterVals(row)[col]);
+  }
+  return [...seen].sort((a, b) => String(a).localeCompare(String(b), "ru"));
+}
+
+function positionLedgerFilterMenu(menu, btn) {
+  const rect = btn.getBoundingClientRect();
+  menu.style.top = `${rect.bottom}px`;
+  menu.style.left = `${Math.max(8, rect.right - 180)}px`;
+}
+
+function closeLedgerFilterMenus() {
+  document.querySelectorAll("#finance-page .fin-filter-menu").forEach((menu) => {
+    menu.classList.add("hidden");
+    menu.style.top = "";
+    menu.style.left = "";
+  });
+  state.financeFilterOpenCol = null;
+}
+
+function ledgerFilterMenuHtml(col) {
+  const values = ledgerUniqueFilterValues(col);
+  const allowed = state.financeLedgerFilters?.[col];
+  const hiddenClass = state.financeFilterOpenCol === col ? "" : " hidden";
+  const items = values
+    .map((value) => {
+      const checked = !allowed || allowed.has(value);
+      return `<label><input type="checkbox" data-fin-filter-val="${escapeAttr(value)}"${checked ? " checked" : ""}>${escapeHtml(value)}</label>`;
+    })
+    .join("");
+  return `<div class="fin-filter-menu${hiddenClass}" data-fin-filter-menu="${escapeAttr(col)}">${items}</div>`;
+}
+
 async function loadSectionPanel() {
   const kind = currentPanelKind();
   const panel = $("section-panel");
@@ -1888,271 +1984,318 @@ async function renderFinancePanel() {
   `;
 }
 
-function financeSourceLabel(source) {
-  if (source === "task") return "задача";
-  if (source === "work") return "работа";
-  if (source === "sheet") return "запись";
-  return "";
+function ledgerAmountInputValue(amount) {
+  const n = Number(amount) || 0;
+  const body = Math.abs(n).toLocaleString("ru-RU", { maximumFractionDigits: 2 });
+  return n < 0 ? `−${body}` : String(body);
 }
 
-function groupFinanceCategories(categories) {
-  const groups = new Map();
-  for (const cat of categories || []) {
-    const key = cat.group_name || (cat.kind === "income" ? "Доходы" : "Расходы");
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(cat);
+function liveLedgerProjects() {
+  return (state.projects || []).filter((p) => !p.deleted_at);
+}
+
+function ledgerProjectCell(row) {
+  if (row.source === "work") {
+    return `<select class="fin-cell-select" data-fin-field="project_id" data-fin-col="project" disabled><option value="${escapeAttr(row.project_id || "")}" selected>Работа</option></select>`;
   }
-  return groups;
+  const options = liveLedgerProjects()
+    .map((p) => {
+      const sel = String(p.id) === String(row.project_id) ? " selected" : "";
+      return `<option value="${escapeAttr(p.id)}"${sel}>${escapeHtml(p.name)}</option>`;
+    })
+    .join("");
+  return `<select class="fin-cell-select" data-fin-field="project_id" data-fin-col="project">${options}</select>`;
 }
 
-function financeCatById(id) {
-  return (state.financeSheet?.categories || []).find((c) => Number(c.id) === Number(id)) || null;
+function ledgerTitleCell(row) {
+  if (row.source === "work") {
+    const wps = state.financeLedger?.work_projects || [];
+    const options = wps
+      .map((w) => {
+        const sel = String(w.id) === String(row.work_project_id) ? " selected" : "";
+        return `<option value="${escapeAttr(w.id)}"${sel}>${escapeHtml(w.title || "")}</option>`;
+      })
+      .join("");
+    return `<select class="fin-cell-select" data-fin-field="work_project_id" data-fin-col="title">${options}</select>`;
+  }
+  return `<input class="fin-cell-input" data-fin-field="title" data-fin-col="title" value="${escapeAttr(row.title || "")}">`;
 }
 
-function uniqueFinanceCategoryName(kind) {
-  const live = new Set(
-    (state.financeSheet?.categories || [])
-      .filter((c) => c.kind === kind)
-      .map((c) => String(c.name || "").trim()),
-  );
-  const base = "Новая статья";
-  if (!live.has(base)) return base;
-  let n = 2;
-  while (live.has(`${base} ${n}`)) n += 1;
-  return `${base} ${n}`;
+function ledgerAmountCell(row) {
+  return `<input class="fin-cell-input" type="text" inputmode="decimal" data-fin-field="amount" data-fin-col="amount" value="${escapeAttr(ledgerAmountInputValue(row.amount))}">`;
 }
 
-function financeGridNavTarget(el) {
-  const catRow = el?.closest?.("tr[data-fin-cat]");
-  if (!catRow) return false;
-  if (el.closest("[data-fin-name], [data-fin-plan]")) return true;
-  return Number(catRow.dataset.finCat) === Number(state.financeSelectedCatId);
+function ledgerDayCell(row) {
+  const v = row.day ? String(row.day).slice(0, 10) : "";
+  return `<input class="fin-cell-input" type="date" data-fin-field="day" data-fin-col="day" value="${escapeAttr(v)}">`;
 }
 
-function financeCatRows() {
-  return [...document.querySelectorAll("#finance-page tr[data-fin-cat]")];
+function ledgerStatusCell(row) {
+  const planSel = row.status === "plan" ? " selected" : "";
+  const confSel = row.status === "confirmed" ? " selected" : "";
+  return `<select class="fin-cell-select" data-fin-field="status" data-fin-col="status"><option value="plan"${planSel}>План</option><option value="confirmed"${confSel}>Подтверждено</option></select>`;
 }
 
-function selectFinanceRow(id) {
-  state.financeSelectedCatId = id ? Number(id) : null;
-  financeCatRows().forEach((tr) => {
-    tr.classList.toggle("is-selected", Number(tr.dataset.finCat) === Number(id));
+function findLedgerRowByKey(key) {
+  if (!key) return null;
+  return ledgerAllFilterRows().find((r) => ledgerRowAttr(r) === key) || null;
+}
+
+function findLedgerRowFromEl(el) {
+  const tr = el?.closest?.("tr[data-fin-row]");
+  if (!tr) return null;
+  return findLedgerRowByKey(tr.dataset.finRow);
+}
+
+function financeLedgerRowEls() {
+  return [...document.querySelectorAll("#finance-page tr[data-fin-row]")];
+}
+
+function selectLedgerRow(row) {
+  state.financeSelectedRowKey = row ? ledgerRowAttr(row) : null;
+  financeLedgerRowEls().forEach((tr) => {
+    tr.classList.toggle("is-selected", tr.dataset.finRow === state.financeSelectedRowKey);
   });
 }
 
-function currentFinanceCol(el) {
-  if (el?.closest?.("[data-fin-plan]")) return "plan";
-  return "name";
+function ledgerFieldsInRow(tr) {
+  return [...(tr?.querySelectorAll("[data-fin-field]") || [])].filter((el) => !el.disabled);
 }
 
-function focusFinanceCell(row, col) {
-  if (!row) return;
-  if (col === "plan") {
-    const input = row.querySelector("[data-fin-plan]");
-    if (!input) return;
-    input.focus();
-    input.select();
+function focusLedgerField(tr, col) {
+  if (!tr) return;
+  const el = tr.querySelector(`[data-fin-col="${col}"]`);
+  if (!el || el.disabled) {
+    ledgerFieldsInRow(tr)[0]?.focus();
     return;
   }
-  const name = row.querySelector("[data-fin-name]");
-  if (!name) return;
-  name.focus();
-  const range = document.createRange();
-  range.selectNodeContents(name);
-  const sel = window.getSelection();
-  sel.removeAllRanges();
-  sel.addRange(range);
+  el.focus();
+  if (typeof el.select === "function") el.select();
 }
 
-function closeFinanceDrawer() {
-  state.financeDrawerCatId = null;
-  const el = $("fin-fact-drawer");
-  if (!el) return;
-  el.classList.add("hidden");
-  el.setAttribute("hidden", "");
-  el.innerHTML = "";
-}
-
-function openFinanceDrawer(catId) {
-  const cat = financeCatById(catId);
-  const el = $("fin-fact-drawer");
-  if (!el || !cat) {
-    closeFinanceDrawer();
-    return;
-  }
-  state.financeDrawerCatId = Number(cat.id);
-  selectFinanceRow(cat.id);
-  el.classList.remove("hidden");
-  el.removeAttribute("hidden");
-  const entries = cat.fact_entries || [];
-  const kind = cat.kind === "income" ? "income" : "expense";
-  const list = entries.length
-    ? entries
-        .map((entry) => {
-          const taskId = entry.task_id || (entry.source === "task" ? entry.id : null);
-          const src = financeSourceLabel(entry.source);
-          const day = entry.day ? fmtShortDay(entry.day) : "";
-          const delBtn =
-            entry.source === "sheet"
-              ? `<button type="button" class="btn ghost small btn-del" data-fin-tx-del="${entry.id}" title="Удалить">×</button>`
-              : "";
-          const taskAttr = taskId
-            ? ` data-fin-open-task="${taskId}" data-finance-task="${taskId}"`
-            : "";
-          const tag = taskId ? "button" : "div";
-          const typeAttr = taskId ? ` type="button"` : "";
-          return `
-            <${tag} class="fin-op fin-op-row"${typeAttr}${taskAttr}>
-              <div class="fin-op-main">
-                <span class="fin-op-title">${escapeHtml(entry.title || "Без названия")}</span>
-                <span class="fin-op-day">${escapeHtml(day)}${src ? ` · ${src}` : ""}</span>
-              </div>
-              <span class="fin-op-amount ${kind}">${escapeHtml(moneySigned(entry.amount, kind))}</span>
-              ${delBtn}
-            </${tag}>`;
-        })
-        .join("")
-    : `<p class="fin-empty">Нет записей</p>`;
-  el.innerHTML = `
-    <div class="fin-drawer-head">
-      <h3>Факт · ${escapeHtml(cat.name)}</h3>
-      <button type="button" class="btn ghost small" data-fin-drawer-close aria-label="Закрыть">×</button>
-    </div>
-    <div class="fin-ops">${list}</div>
-    <button type="button" class="btn" data-fin-new-task="${cat.id}" data-fin-kind="${escapeAttr(cat.kind)}">+ задача</button>
-  `;
-}
-
-function financeDueForSheetMonth() {
-  const ym = state.financeYm || currentYearMonth();
-  return ym === currentYearMonth() ? todayIso() : `${ym}-01`;
-}
-
-async function createTaskFromFinanceCategory(catId) {
-  const cat = financeCatById(catId);
-  if (!cat) return;
-  const title = window.prompt("Название задачи");
-  if (title == null || !String(title).trim()) return;
-  const amountRaw = window.prompt("Сумма, ₽");
-  if (amountRaw == null) return;
-  const amount = Number(String(amountRaw).replace(/\s/g, "").replace(",", "."));
-  if (!Number.isFinite(amount) || amount <= 0) return;
-  const project = (state.projects || []).find((p) => p.name === cat.name);
-  const kind = cat.kind === "income" ? "income" : "expense";
-  await api("/api/tasks", {
-    method: "POST",
-    body: JSON.stringify({
-      title: String(title).trim(),
-      cost: amount,
-      cost_type: kind,
-      finance_category_id: cat.id,
-      project_id: project ? project.id : null,
-      due_at: financeDueForSheetMonth(),
-    }),
-  });
-  await loadFinancePage();
-}
-
-async function deleteFinanceCategoryRow(id) {
-  if (!id) return;
-  try {
-    await api(`/api/finance/categories/${id}`, { method: "DELETE" });
-    if (state.financeSelectedCatId === Number(id)) state.financeSelectedCatId = null;
-    if (state.financeDrawerCatId === Number(id)) closeFinanceDrawer();
-    await loadFinancePage();
-  } catch (err) {
-    alert(err.message || "Нельзя удалить");
-  }
-}
-
-function cycleFinanceEdit(back) {
-  const rows = financeCatRows();
+function cycleLedgerField(back) {
+  const rows = financeLedgerRowEls();
   if (!rows.length) return;
-  let idx = rows.findIndex((r) => r.classList.contains("is-selected"));
-  if (idx < 0) idx = 0;
-  const col = currentFinanceCol(document.activeElement);
-  if (!back) {
-    if (col === "name") {
-      focusFinanceCell(rows[idx], "plan");
+  let rowIdx = rows.findIndex((r) => r.classList.contains("is-selected"));
+  if (rowIdx < 0) rowIdx = 0;
+  const fields = ledgerFieldsInRow(rows[rowIdx]);
+  const fieldIdx = fields.indexOf(document.activeElement);
+  if (back) {
+    if (fieldIdx > 0) {
+      fields[fieldIdx - 1].focus();
       return;
     }
-    const next = rows[idx + 1] || rows[0];
-    selectFinanceRow(Number(next.dataset.finCat));
-    focusFinanceCell(next, "name");
+    const prev = rows[rowIdx - 1] || rows[rows.length - 1];
+    selectLedgerRow(findLedgerRowFromEl(prev));
+    const prevFields = ledgerFieldsInRow(prev);
+    prevFields[prevFields.length - 1]?.focus();
     return;
   }
-  if (col === "plan") {
-    focusFinanceCell(rows[idx], "name");
+  if (fieldIdx >= 0 && fieldIdx < fields.length - 1) {
+    fields[fieldIdx + 1].focus();
     return;
   }
-  const prev = rows[idx - 1] || rows[rows.length - 1];
-  selectFinanceRow(Number(prev.dataset.finCat));
-  focusFinanceCell(prev, "plan");
+  const next = rows[rowIdx + 1] || rows[0];
+  selectLedgerRow(findLedgerRowFromEl(next));
+  ledgerFieldsInRow(next)[0]?.focus();
 }
 
-function moveFinanceEdit(delta) {
-  const rows = financeCatRows();
+function moveLedgerFieldDown() {
+  const rows = financeLedgerRowEls();
   if (!rows.length) return;
-  const col = currentFinanceCol(document.activeElement);
-  let idx = rows.findIndex((r) => r.classList.contains("is-selected"));
-  if (idx < 0) idx = 0;
-  const nextIdx = idx + delta;
-  if (nextIdx < 0 || nextIdx >= rows.length) {
-    document.activeElement?.blur?.();
-    return;
-  }
-  const next = rows[nextIdx];
-  selectFinanceRow(Number(next.dataset.finCat));
-  focusFinanceCell(next, col);
+  let rowIdx = rows.findIndex((r) => r.classList.contains("is-selected"));
+  if (rowIdx < 0) rowIdx = 0;
+  const col = document.activeElement?.dataset?.finCol || "title";
+  const next = rows[rowIdx + 1] || rows[0];
+  selectLedgerRow(findLedgerRowFromEl(next));
+  focusLedgerField(next, col);
 }
 
-function moveFinanceSelection(delta, keepColumn) {
-  const rows = financeCatRows();
+function moveLedgerSelection(delta) {
+  const rows = financeLedgerRowEls();
   if (!rows.length) return;
   let idx = rows.findIndex((r) => r.classList.contains("is-selected"));
   if (idx < 0) idx = delta > 0 ? -1 : 0;
   const nextIdx = Math.min(rows.length - 1, Math.max(0, idx + delta));
-  const row = rows[nextIdx];
-  selectFinanceRow(Number(row.dataset.finCat));
-  if (keepColumn) focusFinanceCell(row, currentFinanceCol(document.activeElement));
+  selectLedgerRow(findLedgerRowFromEl(rows[nextIdx]));
 }
 
-async function openFinanceTask(taskId) {
-  if (!taskId) return;
-  state.motion.pulseId = taskId;
-  await setView("today");
-  const item = findTaskItem(taskId) || document.querySelector(`.item[data-id="${taskId}"]`);
-  if (!item) return;
-  item.classList.add("anim-pulse");
-  item.scrollIntoView({
-    behavior: prefersReducedMotion() ? "auto" : "smooth",
-    block: "center",
+function parseLedgerAmount(raw) {
+  const t = String(raw || "").replace(/\s/g, "").replace(",", ".").replace("−", "-").replace("–", "-");
+  const n = Number(t);
+  return Number.isFinite(n) ? n : null;
+}
+
+function uniqueLedgerDraftTitle() {
+  const used = new Set(
+    [...(state.financeLedger?.rows || []), ...(state.financeDrafts || [])].map((r) => r.title)
+  );
+  const base = "Новая строка";
+  if (!used.has(base)) return base;
+  let i = 2;
+  while (used.has(`${base} ${i}`)) i += 1;
+  return `${base} ${i}`;
+}
+
+async function commitLedgerDraft(row) {
+  const n = Number(row.amount) || 0;
+  if (n === 0) return;
+  const personal = (state.projects || []).find((p) => p.name === "Личные дела");
+  const title = (row.title || "").trim() || uniqueLedgerDraftTitle();
+  await api("/api/tasks", {
+    method: "POST",
+    body: JSON.stringify({
+      title,
+      project_id: row.project_id || personal?.id || null,
+      cost: Math.abs(n),
+      cost_type: n >= 0 ? "income" : "expense",
+      due_at: row.day || null,
+    }),
   });
+  state.financeDrafts = (state.financeDrafts || []).filter((d) => d.id !== row.id);
+  await loadFinancePage();
+}
+
+async function saveLedgerField(row, field, value) {
+  try {
+    if (row.source === "draft") {
+      row[field] = value;
+      if (field === "project_id") {
+        const p = (state.projects || []).find((x) => String(x.id) === String(value));
+        row.project_name = p ? p.name : row.project_name;
+      }
+      if (field === "amount" && Number(row.amount) !== 0) {
+        await commitLedgerDraft(row);
+      }
+      return;
+    }
+    if (row.source === "task") {
+      if (field === "title") {
+        await api(`/api/tasks/${row.id}`, { method: "PATCH", body: JSON.stringify({ title: value }) });
+      } else if (field === "project_id") {
+        await api(`/api/tasks/${row.id}`, { method: "PATCH", body: JSON.stringify({ project_id: Number(value) || null }) });
+      } else if (field === "amount") {
+        const n = Number(value);
+        await api(`/api/tasks/${row.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ cost: Math.abs(n), cost_type: n >= 0 ? "income" : "expense" }),
+        });
+      } else if (field === "day") {
+        await api(`/api/tasks/${row.id}`, { method: "PATCH", body: JSON.stringify({ due_at: value || null }) });
+      } else if (field === "status") {
+        if (value === "confirmed") await api(`/api/tasks/${row.id}/complete`, { method: "POST" });
+        else await api(`/api/tasks/${row.id}`, { method: "PATCH", body: JSON.stringify({ status: "open" }) });
+      }
+      await loadFinancePage();
+      return;
+    }
+    if (row.source === "work") {
+      const wid = row.work_project_id;
+      if (field === "amount") {
+        const n = Number(value);
+        if (!(n > 0)) {
+          alert("Сумма платежа работы должна быть больше 0");
+          renderFinancePage();
+          return;
+        }
+        await api(`/api/work-projects/${wid}/payments/${row.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ amount: n }),
+        });
+      } else if (field === "day") {
+        await api(`/api/work-projects/${wid}/payments/${row.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ paid_at: value }),
+        });
+      } else if (field === "status") {
+        await api(`/api/work-projects/${wid}/payments/${row.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ status: value === "plan" ? "planned" : "received" }),
+        });
+      } else if (field === "work_project_id") {
+        const nextId = Number(value);
+        if (nextId === wid) return;
+        await api(`/api/work-projects/${wid}/payments/${row.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ work_project_id: nextId }),
+        });
+      }
+      await loadFinancePage();
+    }
+  } catch (err) {
+    alert(err.message || "Ошибка");
+    await loadFinancePage();
+  }
+}
+
+async function deleteLedgerRow(row) {
+  if (!row) return;
+  if (!confirm("Удалить строку?")) return;
+  try {
+    if (row.source === "draft") {
+      state.financeDrafts = (state.financeDrafts || []).filter((d) => d.id !== row.id);
+      if (state.financeSelectedRowKey === ledgerRowAttr(row)) state.financeSelectedRowKey = null;
+      renderFinancePage();
+      return;
+    }
+    if (row.source === "task") {
+      await api(`/api/tasks/${row.id}`, { method: "DELETE" });
+    } else if (row.source === "work") {
+      await api(`/api/work-projects/${row.work_project_id}/payments/${row.id}`, { method: "DELETE" });
+    } else {
+      return;
+    }
+    if (state.financeSelectedRowKey === ledgerRowAttr(row)) state.financeSelectedRowKey = null;
+    await loadFinancePage();
+  } catch (err) {
+    alert(err.message || "Ошибка");
+    await loadFinancePage();
+  }
+}
+
+function addLedgerDraft() {
+  const personal = (state.projects || []).find((p) => p.name === "Личные дела");
+  const draft = {
+    source: "draft",
+    id: -Date.now(),
+    project_id: personal?.id || null,
+    project_name: "Личные дела",
+    title: uniqueLedgerDraftTitle(),
+    amount: 0,
+    day: todayIso(),
+    status: "plan",
+  };
+  state.financeDrafts = [...(state.financeDrafts || []), draft];
+  state.financeSelectedRowKey = ledgerRowAttr(draft);
+  renderFinancePage();
+  const tr = financeLedgerRowEls().find((el) => el.dataset.finRow === ledgerRowAttr(draft));
+  tr?.querySelector('[data-fin-field="title"]')?.focus();
 }
 
 async function loadFinancePage() {
-  if (!state.financeYm) state.financeYm = currentYearMonth();
   $("finance-page").innerHTML = `<p class="sp-sub">Загрузка…</p>`;
   try {
-    const data = await api(`/api/finance/sheet?year_month=${encodeURIComponent(state.financeYm)}`);
-    renderFinancePage(data);
+    const ym = currentYearMonth();
+    const [ledger, sheet] = await Promise.all([
+      api("/api/finance/ledger"),
+      api(`/api/finance/sheet?year_month=${encodeURIComponent(ym)}`),
+    ]);
+    state.financeLedger = ledger;
+    state.financeSheet = sheet;
+    renderFinancePage();
   } catch (err) {
     $("finance-page").innerHTML = `<p class="error">${escapeHtml(err.message || "Ошибка")}</p>`;
   }
 }
 
-function renderFinancePage(data) {
-  state.financeSheet = data;
-  const ym = data.year_month || state.financeYm || currentYearMonth();
-  state.financeYm = ym;
-  const s = data.summary || {};
-  const income = Number(s.income) || 0;
-  const expense = Number(s.expense) || 0;
-  const bal = Number(s.balance) || 0;
+function renderFinancePage() {
+  if (!Array.isArray(state.financeDrafts)) state.financeDrafts = [];
+  if (!state.financeLedgerFilters) state.financeLedgerFilters = {};
+  const visible = ledgerVisibleRows();
+  const { income, expense, balance: bal } = ledgerHeroTotals(visible);
   const pct = financeBarPct(income, expense);
   const balClass = bal > 0 ? "pos" : bal < 0 ? "neg" : "";
-  const accounts = data.accounts || [];
-  const groups = groupFinanceCategories(data.categories || []);
+  const accounts = state.financeSheet?.accounts || [];
 
   const accountHtml = accounts.length
     ? accounts
@@ -2166,71 +2309,39 @@ function renderFinancePage(data) {
         .join("")
     : `<p class="fin-empty">Нет счетов</p>`;
 
-  let budgetHtml = "";
-  for (const [groupName, cats] of groups) {
-    const firstCat = cats[0];
-    budgetHtml += `
-      <div class="fin-budget-group">
-        <div class="fin-budget-group-title">${escapeHtml(groupName)}</div>
-        <table class="fin-budget-table">
-          <colgroup>
-            <col class="col-name" />
-            <col class="col-num" span="3" />
-            <col class="col-plus" />
-          </colgroup>
-          <thead>
-            <tr>
-              <th>Статья</th>
-              <th>План</th>
-              <th>Факт</th>
-              <th>Δ</th>
-              <th class="col-plus">+</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${cats
-              .map((cat) => {
-                const delta = Number(cat.delta) || 0;
-                const deltaClass = cat.kind === "expense" ? (delta >= 0 ? "pos" : "neg") : delta >= 0 ? "pos" : "neg";
-                return `
-              <tr data-fin-cat="${cat.id}">
-                <td class="cat-name" contenteditable="true" data-fin-name="${cat.id}" data-fin-kind="${escapeAttr(cat.kind)}" spellcheck="false">${escapeHtml(cat.name)}</td>
-                <td>
-                  <input type="number" class="fin-plan-input" data-fin-plan="${cat.id}"
-                    value="${Number(cat.planned) || ""}" min="0" step="100" placeholder="0" />
-                </td>
-                <td class="amt ${cat.kind} is-fact" data-fin-fact="${cat.id}">${escapeHtml(moneySigned(cat.actual, cat.kind))}</td>
-                <td class="amt ${deltaClass}">${escapeHtml(moneyPlain(Math.abs(delta)))}${delta < 0 ? " −" : cat.kind === "expense" && delta > 0 ? " +" : ""}</td>
-                <td class="col-plus">
-                  <button type="button" class="btn ghost small" data-fin-new-task="${cat.id}" data-fin-kind="${escapeAttr(cat.kind)}">+</button>
-                  <button type="button" class="btn ghost small fin-row-del" data-fin-del-cat="${cat.id}" title="Удалить">×</button>
-                </td>
+  const cols = [
+    { col: "project", label: "Проект" },
+    { col: "title", label: "Направление" },
+    { col: "amount", label: "Цена" },
+    { col: "day", label: "Месяц" },
+    { col: "status", label: "Статус" },
+  ];
+  const headHtml = cols
+    .map(
+      (c) => `
+              <th>${escapeHtml(c.label)}<button type="button" class="fin-col-filter" data-fin-filter-col="${c.col}">▾</button>${ledgerFilterMenuHtml(c.col)}</th>`,
+    )
+    .join("");
+
+  const bodyHtml = visible
+    .map((row) => {
+      const selectedClass = state.financeSelectedRowKey === ledgerRowAttr(row) ? ` class="is-selected"` : "";
+      return `
+              <tr${selectedClass} data-fin-row="${escapeAttr(ledgerRowAttr(row))}" tabindex="-1">
+                <td>${ledgerProjectCell(row)}</td>
+                <td>${ledgerTitleCell(row)}</td>
+                <td>${ledgerAmountCell(row)}</td>
+                <td>${ledgerDayCell(row)}</td>
+                <td>${ledgerStatusCell(row)}</td>
               </tr>`;
-              })
-              .join("")}
-          </tbody>
-        </table>
-        ${
-          firstCat
-            ? `<button type="button" class="btn ghost small fin-row-add" data-fin-add-row data-fin-kind="${escapeAttr(firstCat.kind)}" data-fin-group="${escapeAttr(groupName)}">+ строка</button>`
-            : ""
-        }
-      </div>`;
-  }
+    })
+    .join("");
 
   $("finance-page").innerHTML = `
     <div class="fin-page">
       <div class="fin-page-summary">
-        <div class="fin-top">
-          <div class="fin-month-nav" role="group" aria-label="Месяц">
-            <button type="button" class="btn ghost small fin-nav-btn" data-finance-page-shift="-1" aria-label="Предыдущий месяц">‹</button>
-            <span class="fin-month-label">${escapeHtml(monthLabel(ym))}</span>
-            <button type="button" class="btn ghost small fin-nav-btn" data-finance-page-shift="1" aria-label="Следующий месяц">›</button>
-          </div>
-        </div>
-
         <div class="fin-hero">
-          <span class="fin-hero-label">Баланс месяца</span>
+          <span class="fin-hero-label">Баланс</span>
           <div class="fin-hero-value ${balClass}">${escapeHtml(moneyPlain(bal))}</div>
         </div>
 
@@ -2238,12 +2349,10 @@ function renderFinancePage(data) {
           <div class="fin-split-card income">
             <span class="label">Доход</span>
             <span class="value">${escapeHtml(moneySigned(income, "income"))}</span>
-            <span class="fin-subhint">задачи ${escapeHtml(moneyPlain(s.task_income))} · работа ${escapeHtml(moneyPlain(s.work_income))}</span>
           </div>
           <div class="fin-split-card expense">
             <span class="label">Расход</span>
             <span class="value">${escapeHtml(moneySigned(expense, "expense"))}</span>
-            <span class="fin-subhint">задачи ${escapeHtml(moneyPlain(s.task_expense))} · записи ${escapeHtml(moneyPlain(s.transaction_expense))}</span>
           </div>
         </div>
 
@@ -2260,19 +2369,31 @@ function renderFinancePage(data) {
         </section>
       </div>
 
-      <section class="fin-section fin-budget-section">
-        <h3>Бюджет по статьям</h3>
-        <div class="fin-budget-sheet">
-          ${budgetHtml || `<p class="fin-empty">Нет категорий</p>`}
+      <section class="fin-section">
+        <div class="fin-ledger-sheet">
+          <div class="fin-ledger-scroll">
+            <table class="fin-ledger-table">
+              <thead>
+                <tr>
+                  ${headHtml}
+                </tr>
+              </thead>
+              <tbody>
+                ${bodyHtml}
+              </tbody>
+            </table>
+          </div>
+          <button type="button" class="btn ghost small fin-row-add" data-fin-add-ledger>+ строка</button>
         </div>
       </section>
-
-      <div id="fin-fact-drawer" class="fin-drawer hidden" hidden></div>
     </div>
   `;
-
-  if (state.financeSelectedCatId) selectFinanceRow(state.financeSelectedCatId);
-  if (state.financeDrawerCatId) openFinanceDrawer(state.financeDrawerCatId);
+  const openCol = state.financeFilterOpenCol;
+  if (openCol) {
+    const btn = document.querySelector(`#finance-page [data-fin-filter-col="${openCol}"]`);
+    const menu = document.querySelector(`#finance-page [data-fin-filter-menu="${openCol}"]`);
+    if (btn && menu) positionLedgerFilterMenu(menu, btn);
+  }
 }
 
 function workPayBlock(p) {
@@ -2738,6 +2859,15 @@ function renderTaskAttrs(t, projectMap) {
   const showWork = isWorkSectionId(t.project_id) || t.work_project_id != null;
   const workTitle = workProjectTitle(t.work_project_id);
   const hasWork = !!t.work_project_id;
+  const hasHiddenChips =
+    !hasProject ||
+    (showWork && !hasWork) ||
+    !hasPriority ||
+    !(hasDue || hasRepeat) ||
+    !hasRemind ||
+    !hasLocation ||
+    !hasCost;
+  const expanded = state.expandedTaskAttrs.has(t.id);
 
   const projects = [...state.projects].sort((a, b) => a.sort - b.sort || a.id - b.id);
   const projectOptions = [
@@ -2761,7 +2891,7 @@ function renderTaskAttrs(t, projectMap) {
   ].join("");
 
   return `
-    <div class="task-attrs" data-task-id="${t.id}">
+    <div class="task-attrs${expanded ? " is-expanded" : ""}" data-task-id="${t.id}">
       <div class="chip-popover">
         <button type="button" class="chip-btn${hasProject ? " has-value" : ""}" aria-expanded="false">
           <span class="chip-icon">${CHIP_ICON.project}</span>
@@ -2849,6 +2979,11 @@ function renderTaskAttrs(t, projectMap) {
           <button type="button" class="chip-clear" data-task-clear-cost>Без суммы</button>
         </div>
       </div>
+      ${
+        hasHiddenChips || expanded
+          ? `<button type="button" class="chip-more" data-task-more aria-label="Ещё поля" aria-expanded="${expanded ? "true" : "false"}">⋯</button>`
+          : ""
+      }
     </div>`;
 }
 
@@ -3679,6 +3814,17 @@ $("task-list").addEventListener("click", async (e) => {
   }
   const attrsRoot = e.target.closest(".task-attrs");
   if (attrsRoot) {
+    const moreBtn = e.target.closest("[data-task-more]");
+    if (moreBtn) {
+      e.stopPropagation();
+      const taskId = Number(attrsRoot.dataset.taskId);
+      const next = !attrsRoot.classList.contains("is-expanded");
+      attrsRoot.classList.toggle("is-expanded", next);
+      moreBtn.setAttribute("aria-expanded", next ? "true" : "false");
+      if (next) state.expandedTaskAttrs.add(taskId);
+      else state.expandedTaskAttrs.delete(taskId);
+      return;
+    }
     const patchBtn = e.target.closest("[data-task-patch]");
     if (patchBtn) {
       e.stopPropagation();
@@ -4216,180 +4362,128 @@ function initNotificationPoll() {
   pollNotifications();
 }
 
-$("finance-page").addEventListener("click", async (e) => {
-  const shiftBtn = e.target.closest("[data-finance-page-shift]");
-  if (shiftBtn) {
-    e.preventDefault();
-    const delta = Number(shiftBtn.dataset.financePageShift) || 0;
-    state.financeYm = shiftYearMonth(state.financeYm || currentYearMonth(), delta);
-    await loadFinancePage();
-    return;
-  }
-  const drawerClose = e.target.closest("[data-fin-drawer-close]");
-  if (drawerClose) {
-    e.preventDefault();
-    closeFinanceDrawer();
-    return;
-  }
-  const delCat = e.target.closest("[data-fin-del-cat]");
-  if (delCat) {
-    e.preventDefault();
-    await deleteFinanceCategoryRow(Number(delCat.dataset.finDelCat));
-    return;
-  }
-  const delBtn = e.target.closest("[data-fin-tx-del]");
-  if (delBtn) {
+$("finance-page").addEventListener("click", (e) => {
+  const filterBtn = e.target.closest("[data-fin-filter-col]");
+  if (filterBtn) {
     e.preventDefault();
     e.stopPropagation();
-    const id = Number(delBtn.dataset.finTxDel);
-    if (!id) return;
-    await api(`/api/finance/transactions/${id}`, { method: "DELETE" });
-    await loadFinancePage();
-    return;
-  }
-  const finTask = e.target.closest("[data-finance-task], [data-fin-open-task]");
-  if (finTask) {
-    e.preventDefault();
-    const taskId = Number(finTask.dataset.finOpenTask || finTask.dataset.financeTask);
-    await openFinanceTask(taskId);
-    return;
-  }
-  const newTask = e.target.closest("[data-fin-new-task]");
-  if (newTask) {
-    e.preventDefault();
-    const row = newTask.closest("tr[data-fin-cat]");
-    if (row) selectFinanceRow(Number(row.dataset.finCat));
-    await createTaskFromFinanceCategory(Number(newTask.dataset.finNewTask));
-    return;
-  }
-  const addRow = e.target.closest("[data-fin-add-row]");
-  if (addRow) {
-    e.preventDefault();
-    try {
-      const kind = addRow.dataset.finKind === "income" ? "income" : "expense";
-      const created = await api("/api/finance/categories", {
-        method: "POST",
-        body: JSON.stringify({
-          name: uniqueFinanceCategoryName(kind),
-          kind,
-          group_name: addRow.dataset.finGroup || "",
-        }),
-      });
-      state.financeSelectedCatId = created?.id || null;
-      await loadFinancePage();
-      const row = document.querySelector(`#finance-page tr[data-fin-cat="${created?.id}"]`);
-      if (row) focusFinanceCell(row, "name");
-    } catch (err) {
-      alert(err.message || "Не удалось добавить");
+    const col = filterBtn.dataset.finFilterCol;
+    const menu = filterBtn.closest("th")?.querySelector(".fin-filter-menu");
+    if (!menu) return;
+    const willOpen = menu.classList.contains("hidden");
+    document.querySelectorAll("#finance-page .fin-filter-menu").forEach((el) => {
+      el.classList.add("hidden");
+    });
+    if (willOpen) {
+      menu.classList.remove("hidden");
+      positionLedgerFilterMenu(menu, filterBtn);
+      state.financeFilterOpenCol = col;
+    } else {
+      state.financeFilterOpenCol = null;
     }
     return;
   }
-  const factCell = e.target.closest("[data-fin-fact]");
-  if (factCell) {
-    e.preventDefault();
-    openFinanceDrawer(Number(factCell.dataset.finFact));
+  if (e.target.closest(".fin-filter-menu")) {
+    e.stopPropagation();
     return;
   }
-  const row = e.target.closest("tr[data-fin-cat]");
-  if (row) selectFinanceRow(Number(row.dataset.finCat));
+  const addLedger = e.target.closest("[data-fin-add-ledger]");
+  if (addLedger) {
+    e.preventDefault();
+    addLedgerDraft();
+    return;
+  }
+  const row = findLedgerRowFromEl(e.target);
+  if (row) selectLedgerRow(row);
+});
+
+document.addEventListener("click", (e) => {
+  if (e.target.closest(".fin-filter-menu, [data-fin-filter-col]")) return;
+  closeLedgerFilterMenus();
 });
 
 $("finance-page").addEventListener("change", async (e) => {
-  const planInput = e.target.closest("[data-fin-plan]");
-  if (!planInput) return;
-  const categoryId = Number(planInput.dataset.finPlan);
-  const planned = Number(planInput.value) || 0;
-  const ym = state.financeYm || currentYearMonth();
-  await api(`/api/finance/budget/${encodeURIComponent(ym)}/${categoryId}`, {
-    method: "PUT",
-    body: JSON.stringify({ planned }),
-  });
-  await loadFinancePage();
+  const filterMenu = e.target.closest(".fin-filter-menu");
+  if (filterMenu) {
+    const col = filterMenu.dataset.finFilterMenu;
+    const boxes = [...filterMenu.querySelectorAll("input[type=checkbox]")];
+    const checked = boxes.filter((box) => box.checked).map((box) => box.dataset.finFilterVal ?? "");
+    if (!state.financeLedgerFilters) state.financeLedgerFilters = {};
+    state.financeLedgerFilters[col] = checked.length === boxes.length ? null : new Set(checked);
+    renderFinancePage();
+    return;
+  }
+  const fieldEl = e.target.closest("[data-fin-field]");
+  if (!fieldEl) return;
+  const row = findLedgerRowFromEl(fieldEl);
+  if (!row) return;
+  const field = fieldEl.dataset.finField;
+  let value = fieldEl.value;
+  if (field === "amount") {
+    const parsed = parseLedgerAmount(value);
+    if (parsed === null) {
+      alert("Ошибка");
+      await loadFinancePage();
+      return;
+    }
+    value = parsed;
+  }
+  await saveLedgerField(row, field, value);
 });
 
 $("finance-page").addEventListener("focusin", (e) => {
-  const row = e.target.closest("tr[data-fin-cat]");
-  if (row) selectFinanceRow(Number(row.dataset.finCat));
-});
-
-$("finance-page").addEventListener("focusout", async (e) => {
-  const nameEl = e.target.closest("[data-fin-name]");
-  if (!nameEl || nameEl !== e.target) return;
-  const id = Number(nameEl.dataset.finName);
-  const cat = financeCatById(id);
-  if (!cat) return;
-  const name = String(nameEl.textContent || "").replace(/\u00a0/g, " ").trim();
-  if (!name) {
-    nameEl.textContent = cat.name;
-    return;
-  }
-  if (name === cat.name) return;
-  try {
-    await api(`/api/finance/categories/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify({
-        name,
-        kind: cat.kind,
-        group_name: cat.group_name || "",
-        sort: Number(cat.sort) || 0,
-      }),
-    });
-    cat.name = name;
-  } catch (err) {
-    nameEl.textContent = cat.name;
-    alert(err.message || "Не удалось переименовать");
-  }
+  const row = findLedgerRowFromEl(e.target);
+  if (row) selectLedgerRow(row);
 });
 
 $("finance-page").addEventListener("keydown", async (e) => {
-  const drawer = e.target.closest("#fin-fact-drawer");
-  const inEdit = e.target.closest("[data-fin-name], [data-fin-plan]");
-  const inField = e.target.closest("input, textarea, select, [contenteditable]");
-  const inGridNav = financeGridNavTarget(e.target);
+  const inTable = Boolean(e.target.closest(".fin-ledger-table"));
+  const menuOpen = Boolean(state.financeFilterOpenCol);
+  const inField = Boolean(e.target.closest("input, textarea, select"));
+
+  if (menuOpen && e.key !== "Escape") return;
 
   if (e.key === "Escape") {
-    if (state.financeDrawerCatId) {
+    if (menuOpen) {
       e.preventDefault();
-      closeFinanceDrawer();
+      closeLedgerFilterMenus();
+      return;
     }
-    if (inEdit) e.target.blur();
+    if (inTable) {
+      e.preventDefault();
+      const tr = e.target.closest("tr[data-fin-row]") || document.querySelector("#finance-page tr[data-fin-row].is-selected");
+      e.target.blur?.();
+      tr?.focus();
+    }
     return;
   }
 
-  if (drawer && !inEdit) return;
+  if (!inTable) return;
 
   if (e.key === "Tab") {
-    if (!inGridNav) return;
     e.preventDefault();
-    cycleFinanceEdit(e.shiftKey);
+    cycleLedgerField(e.shiftKey);
     return;
   }
 
-  if (e.key === "Enter" && inEdit) {
+  if (e.key === "Enter" && inField) {
     e.preventDefault();
-    moveFinanceEdit(1);
+    moveLedgerFieldDown();
     return;
   }
 
-  if (e.key === "ArrowUp" || e.key === "ArrowDown") {
-    if (!inGridNav) return;
+  if (!inField && (e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "ArrowLeft" || e.key === "ArrowRight")) {
     e.preventDefault();
-    moveFinanceSelection(e.key === "ArrowDown" ? 1 : -1, !!inEdit);
+    moveLedgerSelection(e.key === "ArrowDown" || e.key === "ArrowRight" ? 1 : -1);
     return;
   }
 
-  if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && inEdit) {
-    e.preventDefault();
-    const row = e.target.closest("tr[data-fin-cat]");
+  if (!inField && (e.key === "Delete" || e.key === "Backspace")) {
+    const row = findLedgerRowFromEl(document.querySelector("#finance-page tr[data-fin-row].is-selected"))
+      || findLedgerRowByKey(state.financeSelectedRowKey);
     if (!row) return;
-    focusFinanceCell(row, e.key === "ArrowRight" ? "plan" : "name");
-    return;
-  }
-
-  if ((e.key === "Delete" || e.key === "Backspace") && !inField) {
-    if (!state.financeSelectedCatId) return;
     e.preventDefault();
-    await deleteFinanceCategoryRow(state.financeSelectedCatId);
+    await deleteLedgerRow(row);
   }
 });
 

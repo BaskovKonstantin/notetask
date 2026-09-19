@@ -51,15 +51,16 @@
         });
     })();
   </script>
-  <link rel="stylesheet" href="assets/styles.css?v=51" />
-  <script src="assets/pwa.js?v=14"></script>
+  <link rel="stylesheet" href="assets/styles.css?v=53" />
+  <script src="assets/pwa.js?v=15"></script>
 </head>
 <body>
   <div id="login" class="login-wrap">
     <form class="login-card" id="login-form" action="#" method="post" autocomplete="on">
       <h1>NoteTask</h1>
       <p>Задачи, идеи, тренировки и история — всё на todo.baski.pro</p>
-      <input type="password" id="password" name="password" placeholder="Пароль" autocomplete="current-password" />
+      <label class="login-label" for="password">Пароль</label>
+      <input type="password" id="password" name="password" autocomplete="current-password" />
       <button class="btn" type="submit" id="login-btn">Войти</button>
       <div class="error hidden" id="login-error" role="alert">Неверный пароль</div>
     </form>
@@ -72,7 +73,7 @@
   </div>
   <script src="assets/login.js?v=13"></script>
 
-  <div id="app" class="app-shell hidden">
+  <div id="app" class="app-shell hidden" aria-hidden="true">
     <aside class="sidebar">
       <h2 class="brand">Note<span>Task</span></h2>
       <p class="tagline">личное · с историей</p>
@@ -342,6 +343,6 @@
   <script src="assets/pwa-install.js?v=3"></script>
   <script src="assets/vendor/cytoscape.min.js"></script>
   <script src="assets/goals.js?v=1"></script>
-  <script src="assets/app.js?v=78"></script>
+  <script src="assets/app.js?v=80"></script>
 </body>
 </html>

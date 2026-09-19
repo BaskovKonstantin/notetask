@@ -19,6 +19,7 @@ from .finance_helpers import (
     work_payment_received_filter,
     work_payments_has_status,
 )
+from .finance_ledger import list_finance_ledger_rows
 from .finance_task_sync import (
     WORK_CATEGORY_NAME,
     backfill_task_categories,
@@ -509,6 +510,23 @@ async def get_finance_sheet(
         "entries": entries,
         "notes": notes,
     }
+
+
+@router.get("/ledger")
+async def get_finance_ledger(
+    db: aiosqlite.Connection = Depends(get_db),
+    _: dict = Depends(require_auth),
+):
+    rows = await list_finance_ledger_rows(db)
+    cur = await db.execute(
+        """
+        SELECT id, title FROM work_projects
+        WHERE deleted_at IS NULL
+        ORDER BY title COLLATE NOCASE, id
+        """
+    )
+    work_projects = [{"id": int(r["id"]), "title": r["title"]} for r in await cur.fetchall()]
+    return {"rows": rows, "work_projects": work_projects}
 
 
 @router.get("/categories")

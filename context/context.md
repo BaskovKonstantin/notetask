@@ -1,6 +1,33 @@
 # NoteTask / todo.baski.pro — context
 
-Updated: 2026-09-15 (~18:20 MSK)
+Updated: 2026-09-15 (~19:15 MSK)
+
+## Review Important fixes: finance ledger (2026-09-15 ~19:15)
+
+- Branch: `feat/finance-ledger-table`. Do not switch. No `git config`.
+- Work payment project change: PATCH `{ work_project_id }` on same row (`reassign_work_payment_project`). No POST+DELETE. Keeps id/amount/paid_at/note/status. Target must be live work project.
+- `WorkPaymentPatch.work_project_id` optional. Frontend `saveLedgerField` single PATCH.
+- `deleteLedgerRow`: `confirm("Удалить строку?")` for task/work/draft. Cancel = no-op.
+- Cache: `styles.css?v=52`, `app.js?v=79`, `pwa.js?v=15`, SW `notetask-v31`, `sw.js?v=31`.
+- Test: `WorkPaymentReassignTests.test_move_to_another_live_project_keeps_row`.
+- Report: `.superpowers/sdd/final-fix-report.md`
+
+## Task 4: Cache bump + browser verify (2026-09-15 ~19:05)
+
+- Branch: `feat/finance-ledger-table`. Cache already at brief targets from Goals `c8c7d83`: `styles.css?v=51`, `app.js?v=78`, `pwa.js?v=14`, SW `notetask-v30`, `sw.js?v=30`. No file diff, no cache commit.
+- `docker restart notetask`. Ledger API 19 rows (16 task + 3 work).
+- Browser: Playwright `http://127.0.0.1:8100/` (cursor-ide-browser: no tab). Checklist 1–7 PASS. No live POST amounts. Draft «Новая строка» amount 0, Tab, Delete.
+- Report: `.superpowers/sdd/task-4-report.md`
+
+## Task 3: Inline ledger edit + draft + keyboard (2026-09-15 ~18:45)
+
+- Branch: `feat/finance-ledger-table`. Files: `static/app.js`, `static/styles.css`. Cache **not** bumped (Task 4).
+- Cells: project `<select data-fin-field="project_id">` (work: disabled «Работа»); title input or work_projects select; amount text+inputmode decimal (ru grouping); day `type=date` empty ok; status План/Подтверждено.
+- Draft: `+ строка` local `{source:draft, id:-Date.now(), project Личные дела, title unique «Новая строка», amount:0, day:today, status:plan}`. POST `/api/tasks` only when amount ≠ 0. Never fake 0.01.
+- Save: task PATCH title/project_id/cost+cost_type/due_at; complete POST / reopen PATCH open. Work PATCH amount (gt 0) / paid_at / planned|received; work_project_id = POST new + DELETE old.
+- Delete selected: draft drop; task DELETE; work payment DELETE. Esc focuses `tr[tabindex=-1]` so Delete stays in table.
+- Keyboard steal only inside `.fin-ledger-table` on `#finance-page`. Filters from Task 2 still work. Old `data-fin-cat` / drawer / month-shift handlers removed.
+- Report: `.superpowers/sdd/task-3-report.md`
 
 ## Goals skill-tree shipped (2026-09-15 ~18:15)
 

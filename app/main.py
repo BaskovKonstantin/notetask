@@ -36,6 +36,7 @@ from .due_utils import (
 )
 from .remind_utils import next_hour_boundary_iso, normalize_remind_rule as _normalize_remind_rule
 from .finance_helpers import (
+    reassign_work_payment_project,
     sum_work_payment_income,
     work_payment_received_filter,
     work_payments_has_status,
@@ -303,6 +304,7 @@ class WorkPaymentPatch(BaseModel):
     paid_at: str | None = None
     note: str | None = None
     status: Literal["received", "planned"] | None = None
+    work_project_id: int | None = None
 
 
 class HealthProfileIn(BaseModel):
@@ -1655,19 +1657,30 @@ async def patch_work_payment(
     paid_at = (body.paid_at or old["paid_at"] or "")[:32].strip() or utcnow()[:10]
     note = (body.note if body.note is not None else old.get("note") or "").strip()[:500]
     status = body.status if body.status in WORK_PAYMENT_STATUSES else old.get("status") or "received"
+    next_work_project_id = item_id
+    if body.work_project_id is not None and body.work_project_id != item_id:
+        moved = await reassign_work_payment_project(
+            db,
+            payment_id=payment_id,
+            from_work_project_id=item_id,
+            to_work_project_id=body.work_project_id,
+        )
+        if not moved:
+            raise HTTPException(404, "Work project not found")
+        next_work_project_id = body.work_project_id
     await db.execute(
         """
         UPDATE work_project_payments SET amount=?, paid_at=?, note=?, status=?
         WHERE id=? AND work_project_id=?
         """,
-        (amount, paid_at, note, status, payment_id, item_id),
+        (amount, paid_at, note, status, payment_id, next_work_project_id),
     )
     await log_action(
         db,
         "updated",
         "work_payment",
         payment_id,
-        {"work_project_id": item_id, "amount": amount, "status": status},
+        {"work_project_id": next_work_project_id, "amount": amount, "status": status},
     )
     await db.commit()
     cur = await db.execute("SELECT * FROM work_project_payments WHERE id=?", (payment_id,))

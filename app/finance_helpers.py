@@ -5,6 +5,33 @@ import aiosqlite
 WORK_PAYMENT_PLANNED_STATUSES = ("planned", "future")
 
 
+async def reassign_work_payment_project(
+    db: aiosqlite.Connection,
+    *,
+    payment_id: int,
+    from_work_project_id: int,
+    to_work_project_id: int,
+) -> bool:
+    """Move a payment to another live work project. Keeps id, amount, paid_at, note, status."""
+    if to_work_project_id == from_work_project_id:
+        return True
+    cur = await db.execute(
+        "SELECT id FROM work_projects WHERE id=? AND deleted_at IS NULL",
+        (to_work_project_id,),
+    )
+    if not await cur.fetchone():
+        return False
+    await db.execute(
+        """
+        UPDATE work_project_payments
+        SET work_project_id=?
+        WHERE id=? AND work_project_id=?
+        """,
+        (to_work_project_id, payment_id, from_work_project_id),
+    )
+    return True
+
+
 async def work_payments_has_status(db: aiosqlite.Connection) -> bool:
     cur = await db.execute("PRAGMA table_info(work_project_payments)")
     return any(row[1] == "status" for row in await cur.fetchall())
