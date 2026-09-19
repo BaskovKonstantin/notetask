@@ -160,11 +160,53 @@
       `<button type="button" class="goals-tab goals-tab-add" id="goals-add" title="Новая цель">+</button>`;
   }
 
+  function statusLabel(status) {
+    if (status === "done") return "Пройден";
+    if (status === "open") return "Открыт";
+    return "Закрыт";
+  }
+
+  function buildForest(tree) {
+    const nodes = tree?.nodes || [];
+    const byId = Object.fromEntries(nodes.map((n) => [Number(n.id), { ...n, children: [] }]));
+    const childIds = new Set();
+    for (const e of tree?.edges || []) {
+      const parent = byId[Number(e.parent_node_id)];
+      const child = byId[Number(e.child_node_id)];
+      if (parent && child) {
+        parent.children.push(child);
+        childIds.add(Number(child.id));
+      }
+    }
+    return nodes.filter((n) => !childIds.has(Number(n.id))).map((n) => byId[Number(n.id)]).filter(Boolean);
+  }
+
+  function renderOutline() {
+    const root = $("goals-outline");
+    if (!root) return;
+    if (!treeCache || !(treeCache.nodes || []).length) {
+      root.innerHTML = "";
+      return;
+    }
+    const walk = (node, depth) => {
+      const selected = Number(node.id) === Number(selectedNodeId);
+      const kids = (node.children || []).map((c) => walk(c, depth + 1)).join("");
+      return `
+        <button type="button" class="goal-node goal-node-${escapeHtml(node.status)}${selected ? " is-selected" : ""}" data-goal-node="${node.id}" style="padding-left:${12 + depth * 18}px">
+          <span class="goal-node-mark" aria-hidden="true"></span>
+          <span class="goal-node-title">${escapeHtml(node.title)}</span>
+          <span class="goal-node-status">${statusLabel(node.status)}</span>
+        </button>
+        ${kids}`;
+    };
+    root.innerHTML = buildForest(treeCache).map((n) => walk(n, 0)).join("");
+  }
+
   function renderPanel() {
     const panel = $("goals-panel");
     if (!panel) return;
     if (!selectedNodeId || !treeCache) {
-      panel.innerHTML = `<p class="goals-panel-empty">Выбери узел на дереве</p>`;
+      panel.innerHTML = `<p class="goals-panel-empty">Выбери шаг в списке</p>`;
       return;
     }
     const node = (treeCache.nodes || []).find((n) => Number(n.id) === selectedNodeId);
@@ -172,12 +214,11 @@
       panel.innerHTML = `<p class="goals-panel-empty">Узел не найден</p>`;
       return;
     }
-    const statusLabel =
-      node.status === "done" ? "Пройден" : node.status === "open" ? "Открыт" : "Закрыт";
+    const statusLabelText = statusLabel(node.status);
     panel.innerHTML = `
       <div class="goals-panel-head">
         <strong>${escapeHtml(node.title)}</strong>
-        <span class="goals-status goals-status-${escapeHtml(node.status)}">${statusLabel}</span>
+        <span class="goals-status goals-status-${escapeHtml(node.status)}">${statusLabelText}</span>
       </div>
       <p class="goals-panel-meta">${node.task_id ? `Задача #${node.task_id}` : "Без задачи"}</p>
       <div class="goals-panel-actions">
@@ -214,30 +255,23 @@
   }
 
   async function loadTree() {
-    const graph = ensureCy();
     if (!activeGoalId) {
       treeCache = null;
-      if (graph) {
-        graph.elements().remove();
-      }
+      selectedNodeId = null;
       $("goals-empty")?.classList.remove("hidden");
+      renderOutline();
       renderPanel();
       return;
     }
     $("goals-empty")?.classList.add("hidden");
     treeCache = await api()(`/api/goals/${activeGoalId}/tree`);
-    if (!graph) return;
     const prev = selectedNodeId;
-    graph.elements().remove();
-    graph.add(toElements(treeCache));
-    graph.layout({ name: "breadthfirst", directed: true, padding: 40, spacingFactor: 1.35 }).run();
-    graph.fit(undefined, 40);
-    if (prev && graph.$id(String(prev)).nonempty()) {
+    if (prev && (treeCache.nodes || []).some((n) => Number(n.id) === Number(prev))) {
       selectedNodeId = prev;
-      graph.$id(String(prev)).select();
     } else {
       selectedNodeId = null;
     }
+    renderOutline();
     renderPanel();
   }
 
@@ -278,6 +312,13 @@
     }
     if (e.target.closest?.("#goals-delete")) {
       await onDeleteGoal();
+      return;
+    }
+    const nodeBtn = e.target.closest?.("[data-goal-node]");
+    if (nodeBtn) {
+      selectedNodeId = Number(nodeBtn.dataset.goalNode);
+      renderOutline();
+      renderPanel();
       return;
     }
     if (!e.target.closest?.("#goals-panel")) return;
