@@ -1,3 +1,4 @@
+import json
 import sys
 import types
 import unittest
@@ -69,12 +70,17 @@ def _install_import_stubs() -> None:
 
 _install_import_stubs()
 
+import aiosqlite
+
 from app.workouts import (
     MUSCLE_KEYS,
+    ensure_workout_tables,
+    get_plan_payload,
     media_kind_for_mime,
     media_max_bytes,
     next_letter,
     parse_slot_weekdays,
+    seed_workout_program,
     validate_muscles,
 )
 
@@ -142,6 +148,114 @@ class ImportWithoutAiosqliteTests(unittest.TestCase):
                 sys.modules["aiosqlite"] = saved
             elif "aiosqlite" in sys.modules:
                 del sys.modules["aiosqlite"]
+
+
+class SeedPlanTests(unittest.IsolatedAsyncioTestCase):
+    async def test_seed_idempotent_abc_h(self):
+        db = await aiosqlite.connect(":memory:")
+        db.row_factory = aiosqlite.Row
+        await ensure_workout_tables(db)
+        await seed_workout_program(db)
+        await seed_workout_program(db)
+        cur = await db.execute("SELECT code FROM workout_days ORDER BY sort")
+        codes = [r[0] for r in await cur.fetchall()]
+        self.assertEqual(codes, ["A", "B", "C", "H"])
+        cur = await db.execute("SELECT next_code, slot_weekdays_json FROM workout_plan_state WHERE id=1")
+        row = await cur.fetchone()
+        self.assertEqual(row["next_code"], "A")
+        self.assertEqual(json.loads(row["slot_weekdays_json"]), [1, 3, 5])
+        cur = await db.execute("SELECT COUNT(*) FROM workout_programs")
+        self.assertEqual((await cur.fetchone())[0], 1)
+        cur = await db.execute(
+            """
+            SELECT COUNT(*) FROM workout_day_items i
+            JOIN workout_days d ON d.id = i.day_id
+            WHERE d.code = 'A'
+            """
+        )
+        self.assertEqual((await cur.fetchone())[0], 5)
+        cur = await db.execute(
+            """
+            SELECT e.name FROM workout_day_items i
+            JOIN workout_days d ON d.id = i.day_id
+            JOIN workout_exercises e ON e.id = i.exercise_id
+            WHERE d.code = 'A'
+            ORDER BY i.sort, i.id
+            """
+        )
+        names = [r[0] for r in await cur.fetchall()]
+        self.assertEqual(names[0], "Эскалатор 15 мин")
+        await db.close()
+
+    async def test_plan_payload_after_seed(self):
+        db = await aiosqlite.connect(":memory:")
+        db.row_factory = aiosqlite.Row
+        await ensure_workout_tables(db)
+        await seed_workout_program(db)
+        payload = await get_plan_payload(db)
+        self.assertIsInstance(payload["program"], dict)
+        self.assertEqual(payload["state"]["next_code"], "A")
+        self.assertEqual(payload["state"]["slot_weekdays"], [1, 3, 5])
+        self.assertEqual([d["code"] for d in payload["days"]], ["A", "B", "C", "H"])
+        self.assertEqual(payload["days"][0]["title"], "День A")
+        day_a = payload["days"][0]["items"]
+        self.assertEqual(len(day_a), 5)
+        first = day_a[0]
+        self.assertEqual(first["exercise"]["name"], "Эскалатор 15 мин")
+        self.assertEqual(first["sets"], 1)
+        self.assertEqual(first["reps_low"], 15)
+        self.assertEqual(first["reps_high"], 15)
+        self.assertEqual(first["notes"], "скорость 6–7")
+        self.assertEqual(first["exercise"]["muscles"], ["cardio"])
+        self.assertIsNone(first["exercise"]["media_mime"])
+        self.assertIsNone(first["exercise"]["media_ext"])
+        self.assertFalse(first["exercise"]["has_media"])
+        bench = day_a[1]
+        self.assertEqual(bench["exercise"]["name"], "Жим лёжа")
+        self.assertEqual(bench["sets"], 3)
+        self.assertEqual(bench["reps_low"], 5)
+        self.assertEqual(bench["reps_high"], 8)
+        self.assertEqual(bench["exercise"]["muscles"], ["chest", "triceps", "front_delt"])
+        squat = day_a[2]
+        self.assertEqual(squat["notes"], "старт 80 кг")
+        self.assertEqual(payload["recent"], [])
+        self.assertEqual(payload["last_sets"], {})
+        await db.close()
+
+    async def test_last_sets_and_recent(self):
+        db = await aiosqlite.connect(":memory:")
+        db.row_factory = aiosqlite.Row
+        await ensure_workout_tables(db)
+        await seed_workout_program(db)
+        cur = await db.execute(
+            "SELECT id FROM workout_exercises WHERE name=? AND deleted_at IS NULL",
+            ("Жим лёжа",),
+        )
+        bench_id = (await cur.fetchone())[0]
+        cur = await db.execute(
+            """
+            INSERT INTO workout_sessions(title, notes, started_at, created_at, updated_at, day_code)
+            VALUES(?, ?, ?, ?, ?, ?)
+            """,
+            ("День A", "", "2026-09-18T10:00:00", "2026-09-18T10:00:00", "2026-09-18T10:00:00", "A"),
+        )
+        sid = cur.lastrowid
+        await db.execute(
+            """
+            INSERT INTO workout_sets(session_id, exercise, weight, reps, set_index, notes, exercise_id)
+            VALUES(?, ?, ?, ?, ?, ?, ?)
+            """,
+            (sid, "Жим лёжа", 80, 5, 1, "", bench_id),
+        )
+        await db.commit()
+        payload = await get_plan_payload(db)
+        self.assertEqual(len(payload["recent"]), 1)
+        recent = payload["recent"][0]
+        self.assertEqual(recent["title"], "День A")
+        self.assertEqual(recent["day_code"], "A")
+        self.assertEqual(recent["sets_count"], 1)
+        self.assertEqual(payload["last_sets"][str(bench_id)], {"weight": 80, "reps": 5})
+        await db.close()
 
 
 if __name__ == "__main__":

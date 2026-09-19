@@ -1,6 +1,16 @@
 # NoteTask / todo.baski.pro — context
 
-Updated: 2026-09-15 (~19:15 MSK)
+Updated: 2026-09-19 (~15:50 MSK)
+
+## Task 2: Seed program + GET /api/workout-plan (2026-09-19)
+
+- Branch: `feat/workout-plan-section` (do not switch to finance).
+- `seed_workout_program` idempotent: A/B/C/H, `next_code=A`, slots `[1,3,5]`, one program titled `Силовой план`.
+- Exercises created only if no live row with same `name`. Day A = 5 items, first `Эскалатор 15 мин`.
+- `GET /api/workout-plan` via `get_plan_payload`: program, state, days+items+exercise (muscles list, `has_media`), recent last 8, `last_sets` by exercise_id.
+- Seed runs from `ensure_workout_tables` after CREATE; router registered in `app/main.py`.
+- Tests: `tests/test_workout_plan.py` SeedPlanTests (`.venv/bin/python`). Host `python3` has no aiosqlite.
+- Out of scope still: media upload, queue advance, goals seed, frontend, hourly reminds.
 
 ## Review Important fixes: finance ledger (2026-09-15 ~19:15)
 

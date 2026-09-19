@@ -46,6 +46,7 @@ from .finance_task_sync import resolve_finance_category_id
 from .goals import ensure_goals_tables, mark_goal_nodes_for_task, register_goals
 from .notify import configure_complete_helpers, notify_loop, send_telegram
 from .task_complete import complete_task_row
+from .workouts import router as workout_plan_router
 
 STATIC = Path(__file__).resolve().parents[1] / "static"
 DOWNLOADS_DIR = DATA_DIR / "downloads"
@@ -93,6 +94,7 @@ app = FastAPI(title="NoteTask", lifespan=lifespan)
 app.mount("/assets", StaticFiles(directory=STATIC), name="assets")
 register_finance_sheet(app)
 register_goals(app)
+app.include_router(workout_plan_router)
 
 
 @app.exception_handler(Exception)
