@@ -32,8 +32,21 @@ def _install_import_stubs() -> None:
     fastapi.APIRouter = _Router
     fastapi.Depends = lambda *a, **k: None
     fastapi.HTTPException = HTTPException
+    fastapi.UploadFile = object
+    fastapi.File = lambda *a, **k: None
     fastapi.status = types.SimpleNamespace(HTTP_401_UNAUTHORIZED=401)
     sys.modules["fastapi"] = fastapi
+
+    responses = types.ModuleType("fastapi.responses")
+
+    class FileResponse:
+        def __init__(self, path: object, media_type: str | None = None) -> None:
+            self.path = path
+            self.media_type = media_type
+
+    responses.FileResponse = FileResponse
+    sys.modules["fastapi.responses"] = responses
+    fastapi.responses = responses
 
     security = types.ModuleType("fastapi.security")
 
@@ -72,8 +85,10 @@ _install_import_stubs()
 
 import aiosqlite
 
+from app.goals import ensure_goals_tables
 from app.workouts import (
     MUSCLE_KEYS,
+    SPORT_GOAL_CHAINS,
     advance_next_code,
     ensure_workout_tables,
     get_plan_payload,
@@ -81,6 +96,7 @@ from app.workouts import (
     media_max_bytes,
     next_letter,
     parse_slot_weekdays,
+    seed_sport_goals,
     seed_workout_program,
     validate_muscles,
 )
@@ -256,6 +272,92 @@ class SeedPlanTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(recent["day_code"], "A")
         self.assertEqual(recent["sets_count"], 1)
         self.assertEqual(payload["last_sets"][str(bench_id)], {"weight": 80, "reps": 5})
+        await db.close()
+
+
+class SeedSportGoalsTests(unittest.IsolatedAsyncioTestCase):
+    TG_DUMMY_TITLE = "Создать канала на 1к подписчиков в ТГ"
+    SPORT_TITLES = [title for title, _ in SPORT_GOAL_CHAINS]
+
+    async def _insert_dummy_tg_goal(self, db: aiosqlite.Connection) -> int:
+        from app.db import utcnow
+
+        now = utcnow()
+        cur = await db.execute(
+            "INSERT INTO goals(title, sort, created_at, updated_at) VALUES(?,?,?,?)",
+            (self.TG_DUMMY_TITLE, 0, now, now),
+        )
+        goal_id = int(cur.lastrowid)
+        await db.execute(
+            """
+            INSERT INTO goal_nodes(goal_id, title, status, sort, created_at, updated_at)
+            VALUES(?,?,?,?,?,?)
+            """,
+            (goal_id, self.TG_DUMMY_TITLE, "open", 0, now, now),
+        )
+        await db.commit()
+        return goal_id
+
+    async def test_seed_idempotent_three_sport_trees(self):
+        db = await aiosqlite.connect(":memory:")
+        db.row_factory = aiosqlite.Row
+        await ensure_goals_tables(db)
+        await self._insert_dummy_tg_goal(db)
+        cur = await db.execute(
+            """
+            SELECT COUNT(*) FROM goal_nodes n
+            JOIN goals g ON g.id = n.goal_id
+            WHERE g.title=? AND g.deleted_at IS NULL AND n.deleted_at IS NULL
+            """,
+            (self.TG_DUMMY_TITLE,),
+        )
+        dummy_nodes_before = int((await cur.fetchone())[0])
+
+        await seed_sport_goals(db)
+        await seed_sport_goals(db)
+
+        placeholders = ",".join("?" * len(self.SPORT_TITLES))
+        cur = await db.execute(
+            f"""
+            SELECT COUNT(*) FROM goals
+            WHERE deleted_at IS NULL AND title IN ({placeholders})
+            """,
+            self.SPORT_TITLES,
+        )
+        self.assertEqual(int((await cur.fetchone())[0]), 3)
+
+        cur = await db.execute(
+            """
+            SELECT COUNT(*) FROM goal_nodes n
+            JOIN goals g ON g.id = n.goal_id
+            WHERE g.title=? AND g.deleted_at IS NULL AND n.deleted_at IS NULL
+            """,
+            (self.TG_DUMMY_TITLE,),
+        )
+        self.assertEqual(int((await cur.fetchone())[0]), dummy_nodes_before)
+
+        for goal_title, steps in SPORT_GOAL_CHAINS:
+            cur = await db.execute(
+                "SELECT id FROM goals WHERE title=? AND deleted_at IS NULL",
+                (goal_title,),
+            )
+            goal_id = int((await cur.fetchone())[0])
+            cur = await db.execute(
+                """
+                SELECT COUNT(*) FROM goal_nodes
+                WHERE goal_id=? AND deleted_at IS NULL
+                """,
+                (goal_id,),
+            )
+            self.assertEqual(int((await cur.fetchone())[0]), 1 + len(steps))
+            cur = await db.execute(
+                """
+                SELECT COUNT(*) FROM goal_edges WHERE goal_id=?
+                """,
+                (goal_id,),
+            )
+            self.assertEqual(int((await cur.fetchone())[0]), len(steps))
+
         await db.close()
 
 

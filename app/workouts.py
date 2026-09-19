@@ -57,6 +57,21 @@ GYM_CODES = ("A", "B", "C")
 WORKOUT_MEDIA_DIR: Path = DATA_DIR / "workout-media"
 PROGRAM_TITLE = "Силовой план"
 
+SPORT_GOAL_CHAINS: list[tuple[str, list[str]]] = [
+    (
+        "Подтягивание прямым хватом",
+        ["Вис 20с", "Негатив 5с × 3", "1 повтор", "3 чистых", "5×5"],
+    ),
+    (
+        "Жим 100 кг",
+        ["Первая сессия жима", "40 кг × 8", "60 кг × 5", "80 кг × 5", "90 кг × 3", "100 кг × 1"],
+    ),
+    (
+        "Сушка 88 кг",
+        ["4 недели по 3 зала", "Планка 90с", "Вес 88 кг"],
+    ),
+]
+
 SEED_EXERCISES: list[tuple[str, list[str]]] = [
     ("Эскалатор 15 мин", ["cardio"]),
     ("Жим лёжа", ["chest", "triceps", "front_delt"]),
@@ -424,6 +439,56 @@ def _row_dict(row: Any) -> dict[str, Any]:
 async def _lastrowid(db: "aiosqlite.Connection") -> int:
     cur = await db.execute("SELECT last_insert_rowid()")
     return int((await cur.fetchone())[0])
+
+
+async def seed_sport_goals(db: "aiosqlite.Connection") -> None:
+    from .db import utcnow
+    from .goals import persist_recomputed
+
+    now = utcnow()
+    for goal_title, steps in SPORT_GOAL_CHAINS:
+        cur = await db.execute(
+            "SELECT id FROM goals WHERE title=? AND deleted_at IS NULL",
+            (goal_title,),
+        )
+        if await cur.fetchone():
+            continue
+        cur = await db.execute(
+            "SELECT COALESCE(MAX(sort), 0) + 1 AS s FROM goals WHERE deleted_at IS NULL"
+        )
+        sort = int((await cur.fetchone())["s"])
+        cur = await db.execute(
+            "INSERT INTO goals(title, sort, created_at, updated_at) VALUES(?,?,?,?)",
+            (goal_title, sort, now, now),
+        )
+        goal_id = int(cur.lastrowid)
+        cur = await db.execute(
+            """
+            INSERT INTO goal_nodes(goal_id, title, status, sort, created_at, updated_at)
+            VALUES(?,?,?,?,?,?)
+            """,
+            (goal_id, goal_title, "open", 0, now, now),
+        )
+        parent_id = int(cur.lastrowid)
+        for step_sort, step_title in enumerate(steps, start=1):
+            cur = await db.execute(
+                """
+                INSERT INTO goal_nodes(goal_id, title, status, sort, created_at, updated_at)
+                VALUES(?,?,?,?,?,?)
+                """,
+                (goal_id, step_title, "locked", step_sort, now, now),
+            )
+            child_id = int(cur.lastrowid)
+            await db.execute(
+                """
+                INSERT INTO goal_edges(goal_id, parent_node_id, child_node_id)
+                VALUES(?,?,?)
+                """,
+                (goal_id, parent_id, child_id),
+            )
+            parent_id = child_id
+        await db.commit()
+        await persist_recomputed(db, goal_id)
 
 
 async def seed_workout_program(db: "aiosqlite.Connection") -> None:

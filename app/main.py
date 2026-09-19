@@ -46,7 +46,7 @@ from .finance_task_sync import resolve_finance_category_id
 from .goals import ensure_goals_tables, mark_goal_nodes_for_task, register_goals
 from .notify import configure_complete_helpers, notify_loop, send_telegram
 from .task_complete import complete_task_row
-from .workouts import GYM_CODES, advance_next_code, router as workout_plan_router
+from .workouts import GYM_CODES, advance_next_code, router as workout_plan_router, seed_sport_goals
 
 STATIC = Path(__file__).resolve().parents[1] / "static"
 DOWNLOADS_DIR = DATA_DIR / "downloads"
@@ -76,6 +76,7 @@ async def lifespan(app: FastAPI):
     await ensure_defaults(db)
     await ensure_finance_sheet_defaults(db)
     await ensure_goals_tables(db)
+    await seed_sport_goals(db)
     cutoff = (datetime.now(timezone.utc).date() - timedelta(days=180)).isoformat()
     await db.execute("DELETE FROM action_log WHERE at < ?", (cutoff,))
     await db.commit()
