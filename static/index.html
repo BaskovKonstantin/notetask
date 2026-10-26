@@ -88,6 +88,7 @@
         <button data-view="finance">Финансы</button>
         <button data-view="history">История</button>
         <button data-view="stats">Статистика</button>
+        <button data-view="integrations">Интеграции</button>
       </nav>
       <p class="nav-label">Разделы</p>
       <nav class="nav nav-projects" id="project-nav"></nav>
@@ -334,12 +335,16 @@
         <div class="stats-grid stats-grid-finance" id="finance-cards"></div>
         <div class="finance-list" id="finance-list"></div>
       </section>
+
+      <section id="view-integrations" class="panel hidden">
+        <div id="integrations-root"></div>
+      </section>
     </main>
   </div>
 
   <script src="assets/pwa-install.js?v=4"></script>
   <script src="assets/vendor/cytoscape.min.js"></script>
   <script src="assets/goals.js?v=2"></script>
-  <script src="assets/app.js?v=88"></script>
+  <script src="assets/app.js?v=89"></script>
 </body>
 </html>

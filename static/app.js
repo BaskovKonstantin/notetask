@@ -5,7 +5,7 @@ const SIDEBAR_WIDTH_MIN = 180;
 const SIDEBAR_WIDTH_MAX = 400;
 const SIDEBAR_WIDTH_DEFAULT = 240;
 const SORT_KEY = "notetask_task_sort";
-const VALID_VIEWS = new Set(["today", "goals", "finance", "history", "stats", "project"]);
+const VALID_VIEWS = new Set(["today", "goals", "finance", "history", "stats", "project", "integrations"]);
 const LAN_ORIGIN = "http://192.168.0.6";
 const BASE = window.NOTETASK_BASE ?? (() => {
   const path = window.location.pathname;
@@ -234,6 +234,7 @@ const titles = {
   history: "История",
   stats: "Статистика",
   project: "Раздел",
+  integrations: "Интеграции",
 };
 
 const emptyHints = {
@@ -2953,6 +2954,8 @@ function setView(view, opts = {}) {
   $("view-stats").classList.toggle("hidden", view !== "stats");
   $("view-finance").classList.toggle("hidden", view !== "finance");
   $("view-goals")?.classList.toggle("hidden", view !== "goals");
+  $("view-integrations")?.classList.toggle("hidden", view !== "integrations");
+  if (view === "integrations") renderIntegrations();
 
   if (workoutPage) hideSectionPanel();
   else if (!taskViews.includes(view) || !currentPanelKind()) hideSectionPanel();
@@ -3019,6 +3022,81 @@ async function refresh() {
   else if (v === "stats") await loadStats();
   else if (v === "finance") await loadFinancePage();
   else if (v === "goals") await window.notetaskGoals?.load?.();
+}
+
+async function renderIntegrations() {
+  const root = $("integrations-root");
+  if (!root) return;
+  root.innerHTML = '<p class="empty">Загружаю…</p>';
+  let s;
+  try {
+    s = await api("/api/integrations/status");
+  } catch (e) {
+    root.innerHTML = `<p class="empty">Не удалось загрузить: ${escapeHtml(e?.message || e)}</p>`;
+    return;
+  }
+  const ok = (on) =>
+    on
+      ? '<span class="badge" style="background:rgba(22,163,74,.15);color:#15803d">подключено</span>'
+      : '<span class="badge">не настроено</span>';
+  const row = (name, desc, statusHtml, extra = "") => `
+    <div class="integration-card">
+      <div class="integration-head">
+        <strong>${name}</strong> ${statusHtml}
+      </div>
+      <p class="integration-desc">${desc}</p>
+      ${extra}
+    </div>`;
+  const pre = (code) =>
+    `<pre class="integration-code"><button type="button" class="btn ghost integration-copy" data-copy>копировать</button><code>${escapeHtml(code)}</code></pre>`;
+
+  const inboxCurl = `curl -X POST "${s.inbox.url}" \\
+  -H "Authorization: Bearer ТОКЕН" \\
+  -H "Content-Type: application/json" \\
+  -d '{"text": "оплатить интернет завтра в 10", "source": "n8n"}'`;
+
+  root.innerHTML = `
+    <div class="integrations-grid">
+      ${row(
+        "Telegram-бот",
+        "Пишите боту любую фразу — станет задачей. Если бот не поймёт фразу, сохранит заметку в Inbox. Кнопка «Выполнить» в напоминаниях работает.",
+        ok(s.telegram.inbound),
+      )}
+      ${row(
+        "Алиса",
+        "Навык Яндекс.Диалогов: одна сказанная фраза — одна задача с распознаванием сроков и повторов.",
+        ok(s.alice.configured),
+        pre(`POST ${s.alice.url}?token=ТОКЕН`),
+      )}
+      ${row(
+        "HTTP-inbox (универсальный)",
+        "Один endpoint для n8n, cron, Kimi-автоматизаций, скриптов и шорткатов. Токен — в .env (INBOX_API_TOKEN).",
+        ok(s.inbox.configured),
+        pre(inboxCurl),
+      )}
+      ${row(
+        "Страница захвата",
+        `Минималистичная страница для быстрой записи: <a href="${s.capture_url}" target="_blank" rel="noopener">${s.capture_url}</a>`,
+        '<span class="badge" style="background:rgba(22,163,74,.15);color:#15803d">всегда доступно</span>',
+      )}
+      ${row(
+        "Виджет «Сегодня»",
+        `Лёгкая страница на день без лишнего: <a href="${s.widget_url}" target="_blank" rel="noopener">${s.widget_url}</a>`,
+        '<span class="badge" style="background:rgba(22,163,74,.15);color:#15803d">всегда доступно</span>',
+      )}
+    </div>
+    <p class="empty" style="margin-top:12px">Любая фраза понимается парсером: «завтра», «в 10 вечера», «каждый день», «через неделю» и т.п. Нераспознанное не теряется — падает в Inbox как заметка.</p>
+  `;
+  root.querySelectorAll("pre.integration-code").forEach((preEl) => {
+    const btn = preEl.querySelector("[data-copy]");
+    btn?.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(preEl.querySelector("code").textContent);
+        btn.textContent = "скопировано";
+        setTimeout(() => (btn.textContent = "копировать"), 1500);
+      } catch {}
+    });
+  });
 }
 
 function priorityBadge(p) {

@@ -48,6 +48,7 @@ from .notify import configure_complete_helpers, notify_loop, send_telegram
 from .task_complete import complete_task_row
 from .workouts import GYM_CODES, advance_next_code, router as workout_plan_router, seed_sport_goals
 from .alice import router as alice_router
+from .inbox_api import router as inbox_router
 
 STATIC = Path(__file__).resolve().parents[1] / "static"
 DOWNLOADS_DIR = DATA_DIR / "downloads"
@@ -98,6 +99,7 @@ register_finance_sheet(app)
 register_goals(app)
 app.include_router(workout_plan_router)
 app.include_router(alice_router)
+app.include_router(inbox_router)
 
 
 @app.exception_handler(Exception)

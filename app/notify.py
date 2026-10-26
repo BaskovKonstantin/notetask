@@ -21,6 +21,7 @@ from .config import (
     TELEGRAM_PROXY,
 )
 from .db import utcnow
+from .inbox_core import create_item_from_text
 from .due_utils import due_at_present, is_task_overdue, parse_task_dt
 from .remind_utils import hourly_dedupe_key, hourly_ready, in_hour_fire_window, next_hour_boundary_iso
 from .task_complete import complete_task_row
@@ -234,8 +235,43 @@ async def handle_callback_query(update: dict[str, Any]) -> None:
         edit_message_text(chat_id, int(msg["message_id"]), note)
 
 
+async def handle_incoming_message(update: dict[str, Any]) -> None:
+    """Any text message from the owner chat becomes a NoteTask item."""
+    msg = update.get("message") or {}
+    text = str(msg.get("text") or "").strip()
+    if not text:
+        return
+    from_user = msg.get("from") or {}
+    chat = msg.get("chat") or {}
+    if str(chat.get("id")) != str(TELEGRAM_CHAT_ID) and str(from_user.get("id")) != str(TELEGRAM_CHAT_ID):
+        return
+    if text.startswith("/"):
+        # Bot commands: keep it minimal for now.
+        if text.split(maxsplit=1)[0] in ("/start", "/help"):
+            send_telegram(
+                "Пришлите любую фразу — станет задачей. "
+                "Если не разберу — сохраню как заметку в Inbox."
+            )
+        return
+
+    db = await aiosqlite.connect(DB_PATH)
+    db.row_factory = aiosqlite.Row
+    try:
+        result = await create_item_from_text(db, text, source="telegram")
+    finally:
+        await db.close()
+
+    if result.get("type") == "task":
+        reply = f"✅ Задача #{result.get('id')}: {result.get('title')}"
+    elif result.get("type") == "note":
+        reply = f"📝 Заметка в Inbox: {result.get('title')}"
+    else:
+        reply = result.get("reply") or "Не удалось сохранить"
+    send_telegram(reply)
+
+
 def poll_telegram_updates(offset: int | None) -> tuple[list[dict[str, Any]], int | None]:
-    payload: dict[str, Any] = {"timeout": 20, "allowed_updates": ["callback_query"]}
+    payload: dict[str, Any] = {"timeout": 20, "allowed_updates": ["callback_query", "message"]}
     if offset is not None:
         payload["offset"] = offset
     result = tg_api("getUpdates", payload, timeout=25)
@@ -402,9 +438,12 @@ async def notify_loop(stop: asyncio.Event) -> None:
                 updates, tg_offset = await asyncio.to_thread(poll_telegram_updates, tg_offset)
                 for upd in updates:
                     try:
-                        await handle_callback_query(upd)
+                        if upd.get("callback_query"):
+                            await handle_callback_query(upd)
+                        elif upd.get("message"):
+                            await handle_incoming_message(upd)
                     except Exception:
-                        log.exception("Telegram callback failed")
+                        log.exception("Telegram update failed")
             except Exception:
                 log.exception("Telegram poll failed")
                 try:
