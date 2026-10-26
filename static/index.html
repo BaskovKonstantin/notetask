@@ -19,6 +19,11 @@
       var LAN = "http://192.168.0.6";
       if (/^(192\.168\.0\.6|127\.0\.0\.1)$/.test(location.hostname)) return;
       var ua = navigator.userAgent || "";
+      var android = /NoteTaskAndroid/i.test(ua);
+      if (android) {
+        try { sessionStorage.removeItem("notetask_client"); } catch (e) {}
+        document.documentElement.classList.add("nt-android");
+      }
       var desk =
         /[?&]client=desktop\b/i.test(location.search) ||
         /NoteTaskDesktop|Photino/i.test(ua) ||
@@ -46,13 +51,13 @@
             tok = localStorage.getItem("notetask_token") || "";
           } catch (e) {}
           var q = location.search || "";
-          if (desk && q.indexOf("client=desktop") < 0) q += (q ? "&" : "?") + "client=desktop";
+          if (desk && !android && q.indexOf("client=desktop") < 0) q += (q ? "&" : "?") + "client=desktop";
           location.replace(LAN + "/" + q + (tok ? "#restore=" + encodeURIComponent(tok) : ""));
         });
     })();
   </script>
-  <link rel="stylesheet" href="assets/styles.css?v=59" />
-  <script src="assets/pwa.js?v=16"></script>
+  <link rel="stylesheet" href="assets/styles.css?v=60" />
+  <script src="assets/pwa.js?v=19"></script>
 </head>
 <body>
   <div id="login" class="login-wrap">
@@ -71,7 +76,7 @@
       style="width:100%;max-width:400px;margin:12px auto 0;display:block;text-align:center;text-decoration:none;box-sizing:border-box"
     >Скачать для Windows / Android</a>
   </div>
-  <script src="assets/login.js?v=13"></script>
+  <script src="assets/login.js?v=15"></script>
 
   <div id="app" class="app-shell hidden" aria-hidden="true">
     <aside class="sidebar">
@@ -211,7 +216,7 @@
                     <input type="datetime-local" id="task-remind" title="Напоминание" />
                     <input type="hidden" id="task-remind-rule" value="" />
                     <div class="due-quick">
-                      <button type="button" class="chip-option" data-composer-remind-preset="hourly">Каждый час</button>
+                      <button type="button" class="chip-option" data-composer-remind-preset="hourly">Каждые 3 часа</button>
                       <button type="button" class="chip-option" data-composer-remind-preset="15m">Через 15 мин</button>
                       <button type="button" class="chip-option" data-composer-remind-preset="1h">Через 1 час</button>
                       <button type="button" class="chip-option" data-composer-remind-preset="before_1h">За 1 час до срока</button>
@@ -332,9 +337,9 @@
     </main>
   </div>
 
-  <script src="assets/pwa-install.js?v=3"></script>
+  <script src="assets/pwa-install.js?v=4"></script>
   <script src="assets/vendor/cytoscape.min.js"></script>
   <script src="assets/goals.js?v=2"></script>
-  <script src="assets/app.js?v=85"></script>
+  <script src="assets/app.js?v=88"></script>
 </body>
 </html>

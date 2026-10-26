@@ -18,7 +18,7 @@ TZ = ZoneInfo(NOTIFY_TZ)
 
 
 def _hourly_resume_at(new_due: str | None) -> str:
-    """Next hourly nag: morning of next due day (or tomorrow)."""
+    """Next 3-hour nag: morning of next due day (or tomorrow)."""
     try:
         day = date.fromisoformat((new_due or "")[:10])
     except ValueError:
@@ -47,8 +47,8 @@ async def complete_task_row(
 ) -> dict[str, Any] | None:
     """Mark done or roll recurring due.
 
-    One-shot complete clears remind. Recurring + hourly keeps hourly but
-    pauses until morning of the next due day (no more nags the same day).
+    One-shot complete clears remind. Recurring + hourly keeps the 3-hour nag
+    but pauses until morning of the next due day (no more nags the same day).
     """
     old = await fetch_task_row(db, task_id)
     if not old:

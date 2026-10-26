@@ -31,20 +31,34 @@ class NormalizeRemindRuleTests(unittest.TestCase):
 
 
 class NextHourBoundaryTests(unittest.TestCase):
-    def test_mid_hour(self):
+    def test_mid_slot(self):
         now = datetime(2026, 9, 9, 12, 34, 0, tzinfo=TZ)
-        self.assertEqual(next_hour_boundary(now), datetime(2026, 9, 9, 13, 0, 0, tzinfo=TZ))
+        self.assertEqual(next_hour_boundary(now), datetime(2026, 9, 9, 15, 0, 0, tzinfo=TZ))
 
-    def test_exact_hour(self):
+    def test_off_slot_exact_hour(self):
         now = datetime(2026, 9, 9, 13, 0, 0, tzinfo=TZ)
-        self.assertEqual(next_hour_boundary(now), datetime(2026, 9, 9, 13, 0, 0, tzinfo=TZ))
+        self.assertEqual(next_hour_boundary(now), datetime(2026, 9, 9, 15, 0, 0, tzinfo=TZ))
+
+    def test_exact_three_hour_slot(self):
+        now = datetime(2026, 9, 9, 15, 0, 0, tzinfo=TZ)
+        self.assertEqual(next_hour_boundary(now), datetime(2026, 9, 9, 15, 0, 0, tzinfo=TZ))
+
+    def test_just_after_slot(self):
+        now = datetime(2026, 9, 9, 15, 1, 0, tzinfo=TZ)
+        self.assertEqual(next_hour_boundary(now), datetime(2026, 9, 9, 18, 0, 0, tzinfo=TZ))
+
+    def test_wraps_midnight(self):
+        now = datetime(2026, 9, 9, 21, 1, 0, tzinfo=TZ)
+        self.assertEqual(next_hour_boundary(now), datetime(2026, 9, 10, 0, 0, 0, tzinfo=TZ))
 
 
 class HourlyWindowTests(unittest.TestCase):
-    def test_window(self):
-        self.assertTrue(in_hour_fire_window(datetime(2026, 9, 9, 13, 0, 10, tzinfo=TZ)))
-        self.assertTrue(in_hour_fire_window(datetime(2026, 9, 9, 13, 4, 59, tzinfo=TZ)))
-        self.assertFalse(in_hour_fire_window(datetime(2026, 9, 9, 13, 5, 0, tzinfo=TZ)))
+    def test_window_only_on_three_hour_slots(self):
+        self.assertTrue(in_hour_fire_window(datetime(2026, 9, 9, 15, 0, 10, tzinfo=TZ)))
+        self.assertTrue(in_hour_fire_window(datetime(2026, 9, 9, 15, 4, 59, tzinfo=TZ)))
+        self.assertFalse(in_hour_fire_window(datetime(2026, 9, 9, 15, 5, 0, tzinfo=TZ)))
+        self.assertFalse(in_hour_fire_window(datetime(2026, 9, 9, 13, 0, 10, tzinfo=TZ)))
+        self.assertFalse(in_hour_fire_window(datetime(2026, 9, 9, 16, 1, 0, tzinfo=TZ)))
 
     def test_dedupe_key(self):
         key = hourly_dedupe_key(16, datetime(2026, 9, 9, 13, 2, 0, tzinfo=TZ))

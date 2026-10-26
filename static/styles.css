@@ -2858,6 +2858,84 @@ body.nav-open {
     flex: 1;
     width: auto;
   }
+
+  html, body {
+    overflow-x: hidden;
+    -webkit-text-size-adjust: 100%;
+  }
+  .login-wrap {
+    min-height: 100dvh;
+    padding: calc(20px + env(safe-area-inset-top, 0px)) 16px calc(24px + env(safe-area-inset-bottom, 0px));
+    place-items: stretch;
+    align-content: center;
+  }
+  .login-card {
+    width: 100%;
+    max-width: none;
+    padding: 22px 18px;
+  }
+  .login-card h1 { font-size: 1.7rem; }
+  .login-card input,
+  .login-card button {
+    min-height: 48px;
+    font-size: 16px;
+  }
+  .composer.row,
+  .task-composer {
+    grid-template-columns: 1fr;
+  }
+  .task-composer .btn,
+  .composer.row > .btn {
+    width: 100%;
+    min-height: 48px;
+  }
+  .task-title-wrap textarea,
+  .task-title-wrap input,
+  #task-title,
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+  .chip-btn,
+  .task-attrs .chip-btn {
+    min-height: 36px;
+    padding: 8px 12px;
+    font-size: 0.85rem;
+  }
+  .chip-more {
+    width: 36px;
+    height: 36px;
+  }
+  .task-sort-bar {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+  }
+  .task-sort-bar button {
+    min-height: 40px;
+    white-space: nowrap;
+  }
+  .chip-menu {
+    max-width: min(320px, calc(100vw - 24px));
+  }
+  .topbar {
+    align-items: center;
+  }
+  .topbar p { display: none; }
+  .item {
+    grid-template-columns: auto 1fr;
+    gap: 8px;
+  }
+  .item > :last-child {
+    grid-column: 1 / -1;
+  }
+  .check {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .fin-compare {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 860px) and (prefers-reduced-motion: reduce) {

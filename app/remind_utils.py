@@ -1,4 +1,4 @@
-"""Hourly nag reminders until task is done / remind cleared."""
+"""Recurring nag reminders (every 3 hours) until task is done / remind cleared."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from .config import NOTIFY_TZ
 
 TZ = ZoneInfo(NOTIFY_TZ)
 REMIND_RULES = frozenset({"hourly"})
+NAG_INTERVAL_HOURS = 3
 
 
 def normalize_remind_rule(rule: str | None) -> str | None:
@@ -21,14 +22,16 @@ def normalize_remind_rule(rule: str | None) -> str | None:
 
 
 def next_hour_boundary(now: datetime | None = None) -> datetime:
-    """Next local :00. If now is exactly on the hour, return that instant."""
+    """Next local 3-hour slot (:00 of 0, 3, 6, 9, 12, 15, 18, 21)."""
     current = now.astimezone(TZ) if now and now.tzinfo else (now or datetime.now(TZ))
     if current.tzinfo is None:
         current = current.replace(tzinfo=TZ)
     floored = current.replace(minute=0, second=0, microsecond=0)
-    if current > floored:
-        return floored + timedelta(hours=1)
-    return floored
+    remainder = floored.hour % NAG_INTERVAL_HOURS
+    if remainder == 0 and current <= floored:
+        return floored
+    add = NAG_INTERVAL_HOURS - remainder if remainder else NAG_INTERVAL_HOURS
+    return floored + timedelta(hours=add)
 
 
 def next_hour_boundary_iso(now: datetime | None = None) -> str:
@@ -42,11 +45,11 @@ def hourly_dedupe_key(task_id: int, when: datetime) -> str:
 
 def in_hour_fire_window(now: datetime, window_minutes: int = 5) -> bool:
     local = now.astimezone(TZ) if now.tzinfo else now.replace(tzinfo=TZ)
-    return local.minute < window_minutes
+    return local.minute < window_minutes and local.hour % NAG_INTERVAL_HOURS == 0
 
 
 def hourly_ready(now: datetime, resume_at: str | None) -> bool:
-    """True when hourly nag may fire (pause until remind_at reached)."""
+    """True when the 3-hour nag may fire (pause until remind_at reached)."""
     if resume_at is None or not str(resume_at).strip():
         return True
     text = str(resume_at).strip()

@@ -63,7 +63,7 @@ DOWNLOAD_CATALOG = (
         "id": "android",
         "label": "Android",
         "filename": "NoteTask.apk",
-        "hint": "APK. После установки: виджет «NoteTask · Сегодня» на рабочий стол.",
+        "hint": "APK (сайт todo.baski.pro + виджет «NoteTask · Сегодня» на рабочий стол).",
     },
 )
 
@@ -2043,9 +2043,37 @@ def _download_entries() -> list[dict[str, Any]]:
     return out
 
 
+def android_update_payload() -> dict[str, Any]:
+    DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    meta_path = DOWNLOADS_DIR / "android-version.json"
+    apk_path = DOWNLOADS_DIR / "NoteTask.apk"
+    version_code = 0
+    version_name = ""
+    if meta_path.is_file():
+        try:
+            data = json.loads(meta_path.read_text(encoding="utf-8"))
+            version_code = int(data.get("versionCode") or 0)
+            version_name = str(data.get("versionName") or "")
+        except (OSError, ValueError, json.JSONDecodeError):
+            version_code = 0
+    available = apk_path.is_file() and apk_path.stat().st_size > 0
+    return {
+        "versionCode": version_code,
+        "versionName": version_name,
+        "available": available,
+        "url": "/downloads/NoteTask.apk" if available else None,
+        "size": apk_path.stat().st_size if available else 0,
+    }
+
+
 @app.get("/api/downloads")
 async def list_downloads():
     return {"items": _download_entries()}
+
+
+@app.get("/api/android-update")
+async def android_update():
+    return android_update_payload()
 
 
 @app.api_route("/downloads/{filename}", methods=["GET", "HEAD"])

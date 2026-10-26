@@ -12,7 +12,13 @@ $names = @(
   "baski.pro",
   "www.baski.pro",
   "treck.baski.pro",
-  "gendoc.baski.pro"
+  "gendoc.baski.pro",
+  "radar.baski.pro",
+  "tgwatch.baski.pro",
+  "planex.baski.pro",
+  "gitlab.baski.pro",
+  "search.baski.pro",
+  "tz.baski.pro"
 )
 
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(

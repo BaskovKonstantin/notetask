@@ -10,7 +10,12 @@
   const btn = document.getElementById("login-btn");
   const base = window.NOTETASK_BASE || "";
 
+  function isAndroidClient() {
+    return /NoteTaskAndroid/i.test(navigator.userAgent || "");
+  }
+
   function isDesktopClient() {
+    if (isAndroidClient()) return false;
     try {
       if (sessionStorage.getItem(CLIENT_KEY) === "desktop") return true;
     } catch {
@@ -58,7 +63,7 @@
   }
 
   function hideDesktopDownloads() {
-    if (!isDesktopClient()) return;
+    if (!isDesktopClient() && !isAndroidClient()) return;
     ["login-download", "download-apps-btn"].forEach((id) => {
       const el = document.getElementById(id);
       if (!el) return;

@@ -52,6 +52,14 @@ class AliceParseTests(unittest.TestCase):
         self.assertTrue(draft.ok)
         self.assertEqual(draft.title, "пить воду")
         self.assertEqual(draft.remind_rule, "hourly")
+        self.assertIn("каждые 3 часа", draft.reply)
+
+    def test_every_3_hours(self):
+        draft = parse_alice("напомни каждые 3 часа пить воду", NOW)
+        self.assertTrue(draft.ok)
+        self.assertEqual(draft.title, "пить воду")
+        self.assertEqual(draft.remind_rule, "hourly")
+        self.assertIn("каждые 3 часа", draft.reply)
 
     def test_help(self):
         draft = parse_alice("помощь", NOW)

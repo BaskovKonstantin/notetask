@@ -1,6 +1,48 @@
 # NoteTask / todo.baski.pro — context
 
-Updated: 2026-09-19 (~16:50 MSK)
+Updated: 2026-10-05 (~00:20 MSK)
+
+## In-app Android updates (2026-10-05)
+
+- User: update natively, not via /download every time. Chose server APK, not Play.
+- `GET /api/android-update` → versionCode/versionName/url from `data/downloads/android-version.json` (written by `publish-downloads.sh` via aapt).
+- APK **0.3.0 / versionCode 4**: banner «Обновить», download + FileProvider install, REQUEST_INSTALL_PACKAGES. «Позже» skips that code.
+- This 0.3.0 is the last manual download; later publishes prompt inside the app. Live API: versionCode 4, apk ~1.6 MB.
+
+## Mobile layout (2026-10-05)
+
+- Cause: APK v0.2.0 loaded `?client=desktop` + default WebView layout ~980px, so `@media (max-width: 860px)` almost never fired. sessionStorage `notetask_client=desktop` stuck after first open.
+- Fix: WebView `useWideViewPort`, load site **without** desktop query; UA `NoteTaskAndroid` is not desktop. CSS 860px: full-width login, 16px inputs, 44px taps, composer column, chips, sort-bar scroll. Cache `styles.css?v=60`, `app.js?v=88`, `login.js?v=15`, `pwa.js?v=19`, SW `notetask-v36`.
+- APK **0.2.1 / versionCode 3** published. Must reinstall (or update) APK — CSS alone не чинит ширину WebView.
+
+## Android APK crash → WebView shell (2026-10-04)
+
+- Symptom: old Flutter APK (2026-08-12, 50.9 MB, debug-signed) icon installed, tap → instant close. Flutter SDK `/home/kon/flutter` missing, so no Flutter rebuild.
+- New client: `mobile-android/` Kotlin WebView of `https://todo.baski.pro/?client=desktop` + UA `NoteTaskAndroid` + widget «Сегодня» (`applicationId` same `pro.baski.notetask_mobile`, versionCode **2**). Same URL = full web app; widget reads JWT from `localStorage.notetask_token`.
+- Build: `cd mobile-android && ./gradlew assembleRelease`. Published `data/downloads/NoteTask.apk`.
+- Web: hide download/PWA banner for `NoteTaskAndroid`. Cache `app.js?v=87`, `login.js?v=14`, `pwa.js?v=18`, `pwa-install.js?v=4`, SW `notetask-v35`.
+- Disk: journal vacuum ~3.7G so Gradle could build (root was 100% full).
+- User must **удалить старый NoteTask и поставить новый APK** с https://todo.baski.pro/download (или обновить поверх — тот же id).
+
+## Habit ignore (2026-10-04)
+
+- User: notifications arrive, daily tasks not done, app not opened. Not fake-complete — just ignore the stream. Asked for motivation science + Duolingo + KB, possibly AI tactic engine later.
+- Cause (product): 3h TG nags (#16 зубы, #161 отжимания, #163 планка) trained habituation. Cheap «Выполнить» in TG; no home-screen loop.
+- Phone: APK live `https://todo.baski.pro/download` → `NoteTask.apk` (50.9 MB, 2026-08-12) + PWA «На экран Домой». LAN hairpin: DNS `192.168.0.6` or `http://192.168.0.6/`.
+- Strategy (proposed, not coded): Phase 0 phone install; Phase 1 kill 3h stream + one evening saver; Phase 2 micro-day ring + streak/freeze; Phase 3 session timer on workouts (can't TG-complete); Phase 4 AI picks tactic from KB. User asked to explain strategy before building.
+
+## Hourly nag → every 3 hours (2026-09-21)
+
+## Hourly nag → every 3 hours (2026-09-21)
+
+- `remind_rule=hourly` kept in DB/API so #16/#161/#163 keep working; interval is now 3h.
+- Fire window: first 5 min of 00/03/06/09/12/15/18/21. After fire, `remind_at` = next 3h slot.
+- UI preset/chip: **Каждые 3 часа**. One-shot «Через 1 час» unchanged.
+- NLP/Alice: `каждые 3 часа` / `каждые 3ч` / `каждый час` / `hourly` → same rule.
+- TG title: «Напоминание · каждые 3 часа». Complete still pauses until next due morning 09:00.
+- Cache: `app.js?v=86`, `pwa.js?v=17`, SW `notetask-v34` / `sw.js?v=34`.
+- Tests: `tests.test_hourly_remind` + Alice 3h phrases OK. Live: chips on #161/#163 «Каждые 3 часа».
+- Docker restarted. Live via bind-mount `app/` + `static/`.
 
 ## Workout plan section — shipped (2026-09-19)
 

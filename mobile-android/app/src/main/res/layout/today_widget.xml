@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="12dp"
+    android:background="#FFF5F1E8">
+
+    <TextView
+        android:id="@+id/widget_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Сегодня"
+        android:textStyle="bold"
+        android:textSize="16sp"
+        android:textColor="#FF1A1A1A"
+        android:paddingBottom="6dp" />
+
+    <TextView
+        android:id="@+id/widget_lines"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Открой NoteTask"
+        android:textSize="13sp"
+        android:textColor="#FF333333"
+        android:lineSpacingExtra="2dp" />
+</LinearLayout>

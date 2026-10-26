@@ -110,7 +110,9 @@ def parse_alice(text: str, now: datetime | None = None) -> AliceDraft:
         return _fail(_help())
 
     remind = bool(re.search(r"\bнапомн", raw))
-    hourly = "каждый час" in raw or "ежечасно" in raw
+    hourly = bool(
+        re.search(r"кажд(?:ый час|ые\s*3\s*час|ые\s*три\s*час)|ежечасно", raw)
+    )
     work = raw
     repeat: str | None = None
     weekday: int | None = None
@@ -184,7 +186,11 @@ def parse_alice(text: str, now: datetime | None = None) -> AliceDraft:
     if numeric_day:
         work = work.replace(numeric_day.group(0), " ", 1)
     if hourly:
-        work = work.replace("каждый час", " ").replace("ежечасно", " ")
+        work = re.sub(
+            r"кажд(?:ый час|ые\s*3\s*час(?:а|ов)?|ые\s*три\s*час(?:а|ов)?)|ежечасно",
+            " ",
+            work,
+        )
 
     for prefix in PREFIXES:
         while work.startswith(prefix):
@@ -338,7 +344,7 @@ def _speak(
 ) -> str:
     parts = [f"Записала: {title}."]
     if remind_rule == "hourly":
-        parts.append("Напоминание каждый час, пока не закроешь.")
+        parts.append("Напоминание каждые 3 часа, пока не закроешь.")
     elif remind_at:
         parts.append("Напомню " + _human(remind_at, moment) + ".")
     if due_at and due_at != (remind_at or "")[:10]:

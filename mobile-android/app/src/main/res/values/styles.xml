@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">NoteTask</string>
+    <style name="Theme.NoteTask" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">#FF1F6B4E</item>
+        <item name="android:navigationBarColor">#FFF5F1E8</item>
+        <item name="android:windowBackground">#FFF5F1E8</item>
+    </style>
+</resources>

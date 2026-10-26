@@ -268,7 +268,7 @@ async def tick_once() -> None:
             if (task.get("remind_rule") or "").strip().lower() == "hourly":
                 if hourly_ready(now, task.get("remind_at")) and in_hour_fire_window(now):
                     key = hourly_dedupe_key(task["id"], now)
-                    title = "Напоминание · каждый час"
+                    title = "Напоминание · каждые 3 часа"
                     body = task["title"]
                     await _deliver(
                         db,

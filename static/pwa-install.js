@@ -9,7 +9,8 @@
   function isStandalone() {
     return (
       window.matchMedia("(display-mode: standalone)").matches ||
-      window.navigator.standalone === true
+      window.navigator.standalone === true ||
+      /NoteTaskAndroid|NoteTaskDesktop|Photino/i.test(navigator.userAgent || "")
     );
   }
 

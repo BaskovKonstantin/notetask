@@ -24,10 +24,18 @@ flutter run --dart-define=API_BASE=http://192.168.0.6:8100
 After install: long-press home screen → widgets → **NoteTask · Сегодня**.  
 Data refreshes when you open the app / pull-to-refresh.
 
-## Build APK
+## Build APK (WebView of todo.baski.pro + widget)
+
+Flutter SDK is not required. From repo root:
 
 ```bash
-flutter build apk --release --dart-define=API_BASE=https://todo.baski.pro
+cd mobile-android
+./gradlew assembleRelease
+../scripts/publish-downloads.sh
 ```
 
-Output: `build/app/outputs/flutter-apk/app-release.apk`
+Output: `mobile-android/app/build/outputs/apk/release/app-release.apk` → `data/downloads/NoteTask.apk`.
+
+Same `applicationId` as the old Flutter APK (`pro.baski.notetask_mobile`) so Android can upgrade in place.
+
+In-app updates: on launch the app calls `GET /api/android-update` and, if `versionCode` is newer, shows **Обновить**. First install of 0.3.0+ still comes from `/download`; later APKs install from inside the app. `publish-downloads.sh` writes `data/downloads/android-version.json`.

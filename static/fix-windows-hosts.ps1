@@ -12,7 +12,13 @@ $names = @(
   "baski.pro",
   "www.baski.pro",
   "treck.baski.pro",
-  "gendoc.baski.pro"
+  "gendoc.baski.pro",
+  "radar.baski.pro",
+  "tgwatch.baski.pro",
+  "planex.baski.pro",
+  "gitlab.baski.pro",
+  "search.baski.pro",
+  "tz.baski.pro"
 )
 
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
@@ -40,18 +46,11 @@ foreach ($n in $names) { $block += "$ip`t$n" }
 
 Clear-DnsClientCache -ErrorAction SilentlyContinue
 Write-Host "OK. hosts обновлён → $ip" -ForegroundColor Green
-Write-Host "Проверка: https://todo.baski.pro/  и  https://treck.baski.pro/" -ForegroundColor Cyan
+Write-Host "Проверка: https://todo.baski.pro/" -ForegroundColor Cyan
 try {
   $r = Invoke-WebRequest -Uri "https://todo.baski.pro/api/health" -UseBasicParsing -TimeoutSec 8
-  Write-Host "todo health: $($r.StatusCode) $($r.Content)" -ForegroundColor Green
+  Write-Host "health: $($r.StatusCode) $($r.Content)" -ForegroundColor Green
 } catch {
-  Write-Host "todo health FAIL: $_" -ForegroundColor Yellow
-  Write-Host "Если FAIL — отключи Secure DNS / DoH, либо открой http://192.168.0.6/" -ForegroundColor Yellow
-}
-try {
-  $t = Invoke-WebRequest -Uri "https://treck.baski.pro/health" -UseBasicParsing -TimeoutSec 8
-  Write-Host "treck health: $($t.StatusCode) $($t.Content)" -ForegroundColor Green
-} catch {
-  Write-Host "treck health FAIL: $_" -ForegroundColor Yellow
-  Write-Host "Обход LAN: http://192.168.0.6:8000/app" -ForegroundColor Yellow
+  Write-Host "health FAIL: $_" -ForegroundColor Yellow
+  Write-Host "Если FAIL — отключи в Firefox: Настройки → Параметры сети → DNS через HTTPS" -ForegroundColor Yellow
 }

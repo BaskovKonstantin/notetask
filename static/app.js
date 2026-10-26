@@ -13,7 +13,12 @@ const BASE = window.NOTETASK_BASE ?? (() => {
   return "";
 })();
 
+function isAndroidClient() {
+  return /NoteTaskAndroid/i.test(navigator.userAgent || "");
+}
+
 function isDesktopClient() {
+  if (isAndroidClient()) return false;
   try {
     if (sessionStorage.getItem("notetask_client") === "desktop") return true;
   } catch {
@@ -446,6 +451,7 @@ function showApp() {
 const CLIENT_KEY = "notetask_client";
 
 function isDesktopClient() {
+  if (isAndroidClient()) return false;
   try {
     if (sessionStorage.getItem(CLIENT_KEY) === "desktop") return true;
   } catch {
@@ -471,7 +477,7 @@ function isDesktopClient() {
 }
 
 function hideDesktopDownloads() {
-  if (!isDesktopClient()) return;
+  if (!isDesktopClient() && !isAndroidClient()) return;
   ["login-download", "download-apps-btn"].forEach((id) => {
     const el = $(id);
     if (!el) return;
@@ -645,7 +651,9 @@ function taskRemindInputValue(task) {
 function nextHourBoundaryLocal(from = new Date()) {
   const d = new Date(from);
   d.setMinutes(0, 0, 0);
-  if (from.getTime() > d.getTime()) d.setHours(d.getHours() + 1);
+  const remainder = d.getHours() % 3;
+  if (remainder === 0 && from.getTime() <= d.getTime()) return d;
+  d.setHours(d.getHours() + (remainder ? 3 - remainder : 3));
   return d;
 }
 
@@ -656,11 +664,11 @@ function formatRemindChipLabel(task) {
         const d = new Date(task.remind_at);
         if (!Number.isNaN(d.getTime())) {
           const pad = (n) => String(n).padStart(2, "0");
-          return `Каждый час · ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+          return `Каждые 3 часа · ${pad(d.getHours())}:${pad(d.getMinutes())}`;
         }
       } catch (_) {}
     }
-    return "Каждый час";
+    return "Каждые 3 часа";
   }
   if (!task?.remind_at) return "";
   try {
@@ -707,7 +715,7 @@ function remindPresetButtonsHtml(attrName, selectedRule = "") {
   const hourlySel = selectedRule === "hourly" ? " selected" : "";
   return `
     <div class="due-quick">
-      <button type="button" class="chip-option${hourlySel}" ${attrName}="hourly">Каждый час</button>
+      <button type="button" class="chip-option${hourlySel}" ${attrName}="hourly">Каждые 3 часа</button>
       <button type="button" class="chip-option" ${attrName}="15m">Через 15 мин</button>
       <button type="button" class="chip-option" ${attrName}="1h">Через 1 час</button>
       <button type="button" class="chip-option" ${attrName}="before_1h">За 1 час до срока</button>
@@ -890,7 +898,7 @@ function collectTaskTokens(text) {
     {
       type: "remind",
       re: ruTokenRe(
-        "(?:напоминай|напомни|долби)\\s+каждый\\s+час|каждый\\s+час|hourly",
+        "(?:напоминай|напомни|долби)\\s+(?:каждый\\s+час|каждые\\s+(?:3|три)\\s*ч(?:ас(?:а|ов)?)?)|каждый\\s+час|каждые\\s+(?:3|три)\\s*ч(?:ас(?:а|ов)?)?|hourly",
       ),
       meta: () => ({ remindHourly: true }),
     },
@@ -1521,8 +1529,8 @@ function updateTaskChips() {
   const remindRule = $("task-remind-rule")?.value || "";
   if (remindRule === "hourly") {
     $("chip-remind-label").textContent = remind
-      ? `Каждый час · ${String(new Date(remind).getHours()).padStart(2, "0")}:${String(new Date(remind).getMinutes()).padStart(2, "0")}`
-      : "Каждый час";
+      ? `Каждые 3 часа · ${String(new Date(remind).getHours()).padStart(2, "0")}:${String(new Date(remind).getMinutes()).padStart(2, "0")}`
+      : "Каждые 3 часа";
   } else {
     $("chip-remind-label").textContent = remind ? fmtShortDateTime(remind) : "Напомн.";
   }
